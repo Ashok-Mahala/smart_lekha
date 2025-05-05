@@ -1,0 +1,447 @@
+paths:
+  /api/payments:
+    get:
+      tags:
+        - Payments
+      summary: Get all payments
+      description: Retrieve a list of all payments with optional filtering and pagination
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Number of items per page
+        - in: query
+          name: student
+          schema:
+            type: string
+          description: Filter by student ID
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, completed, cancelled]
+          description: Filter by payment status
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [tuition, seat, other]
+          description: Filter by payment type
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          description: Filter by start date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          description: Filter by end date
+      responses:
+        '200':
+          description: List of payments retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  currentPage:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+    post:
+      tags:
+        - Payments
+      summary: Create a new payment
+      description: Create a new payment for a student
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - student
+                - amount
+                - type
+                - description
+                - paymentMethod
+              properties:
+                student:
+                  type: string
+                  description: ID of the student
+                amount:
+                  type: number
+                  minimum: 0
+                  description: Payment amount
+                type:
+                  type: string
+                  enum: [tuition, seat, other]
+                  description: Type of payment
+                description:
+                  type: string
+                  description: Payment description
+                paymentMethod:
+                  type: string
+                  enum: [cash, card, bank_transfer, other]
+                  description: Payment method
+      responses:
+        '201':
+          description: Payment created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Payment'
+
+  /api/payments/{id}:
+    get:
+      tags:
+        - Payments
+      summary: Get a payment by ID
+      description: Retrieve a specific payment by its ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      responses:
+        '200':
+          description: Payment retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Payment'
+    put:
+      tags:
+        - Payments
+      summary: Update a payment
+      description: Update an existing payment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  minimum: 0
+                type:
+                  type: string
+                  enum: [tuition, seat, other]
+                description:
+                  type: string
+                paymentMethod:
+                  type: string
+                  enum: [cash, card, bank_transfer, other]
+      responses:
+        '200':
+          description: Payment updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Payment'
+    delete:
+      tags:
+        - Payments
+      summary: Delete a payment
+      description: Delete a payment (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      responses:
+        '200':
+          description: Payment deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+
+  /api/payments/{id}/complete:
+    put:
+      tags:
+        - Payments
+      summary: Complete a payment
+      description: Mark a payment as completed
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                  description: Completion notes
+      responses:
+        '200':
+          description: Payment completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Payment'
+
+  /api/payments/{id}/cancel:
+    put:
+      tags:
+        - Payments
+      summary: Cancel a payment
+      description: Cancel a pending payment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  description: Cancellation reason
+      responses:
+        '200':
+          description: Payment cancelled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Payment'
+
+  /api/payments/stats:
+    get:
+      tags:
+        - Payments
+      summary: Get payment statistics
+      description: Get statistics about payments (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          description: Start date for statistics
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          description: End date for statistics
+      responses:
+        '200':
+          description: Payment statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      stats:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            count:
+                              type: integer
+                            totalAmount:
+                              type: number
+                      totalPayments:
+                        type: integer
+                      totalAmount:
+                        type: number
+
+  /api/payments/student/{studentId}:
+    get:
+      tags:
+        - Payments
+      summary: Get student payment history
+      description: Get payment history for a specific student
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: studentId
+          required: true
+          schema:
+            type: string
+          description: Student ID
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          description: Start date for history
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          description: End date for history
+      responses:
+        '200':
+          description: Student payment history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      payments:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Payment'
+                      stats:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            count:
+                              type: integer
+                            totalAmount:
+                              type: number
+
+components:
+  schemas:
+    Payment:
+      type: object
+      properties:
+        _id:
+          type: string
+        student:
+          type: string
+        amount:
+          type: number
+        type:
+          type: string
+          enum: [tuition, seat, other]
+        description:
+          type: string
+        paymentMethod:
+          type: string
+          enum: [cash, card, bank_transfer, other]
+        status:
+          type: string
+          enum: [pending, completed, cancelled]
+        createdBy:
+          type: string
+        completedBy:
+          type: string
+        completionNotes:
+          type: string
+        completedAt:
+          type: string
+          format: date-time
+        cancelledBy:
+          type: string
+        cancellationReason:
+          type: string
+        cancelledAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time 

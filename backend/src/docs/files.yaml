@@ -1,0 +1,272 @@
+paths:
+  /api/files/upload:
+    post:
+      tags:
+        - Files
+      summary: Upload a single file
+      description: Upload a single file with optional metadata
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to upload
+                entityId:
+                  type: string
+                  description: ID of the related entity (e.g., student ID)
+                entityType:
+                  type: string
+                  description: Type of the related entity (e.g., student, seat)
+                purpose:
+                  type: string
+                  description: Purpose of the file (e.g., profile, id_proof)
+                description:
+                  type: string
+                  description: Description of the file
+      responses:
+        '200':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/File'
+
+  /api/files/upload-multiple:
+    post:
+      tags:
+        - Files
+      summary: Upload multiple files
+      description: Upload multiple files with shared metadata
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - files
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Array of files to upload
+                entityId:
+                  type: string
+                  description: ID of the related entity
+                entityType:
+                  type: string
+                  description: Type of the related entity
+                purpose:
+                  type: string
+                  description: Purpose of the files
+                description:
+                  type: string
+                  description: General description for all files
+      responses:
+        '200':
+          description: Files uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/File'
+
+  /api/files/{id}:
+    get:
+      tags:
+        - Files
+      summary: Get file by ID
+      description: Retrieve file metadata by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: File ID
+      responses:
+        '200':
+          description: File metadata retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/File'
+
+  /api/files/delete:
+    post:
+      tags:
+        - Files
+      summary: Delete file by ID
+      description: Delete a file by its ID
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: string
+                  description: File ID to delete
+      responses:
+        '200':
+          description: File deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
+  /api/files/delete-by-url:
+    post:
+      tags:
+        - Files
+      summary: Delete file by URL
+      description: Delete a file by its URL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  description: URL of the file to delete
+      responses:
+        '200':
+          description: File deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
+  /api/files/entity/{entityType}/{entityId}:
+    get:
+      tags:
+        - Files
+      summary: Get files by entity
+      description: Retrieve all files related to a specific entity
+      parameters:
+        - in: path
+          name: entityType
+          required: true
+          schema:
+            type: string
+          description: Type of the entity (e.g., student, seat)
+        - in: path
+          name: entityId
+          required: true
+          schema:
+            type: string
+          description: ID of the entity
+        - in: query
+          name: purpose
+          schema:
+            type: string
+          description: Filter by purpose
+      responses:
+        '200':
+          description: Files retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/File'
+
+components:
+  schemas:
+    File:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the file
+        originalName:
+          type: string
+          description: Original filename
+        filename:
+          type: string
+          description: Storage filename
+        path:
+          type: string
+          description: File storage path
+        url:
+          type: string
+          description: Public URL to access the file
+        mimetype:
+          type: string
+          description: MIME type of the file
+        size:
+          type: integer
+          description: File size in bytes
+        entityId:
+          type: string
+          description: ID of the related entity
+        entityType:
+          type: string
+          description: Type of the related entity
+        purpose:
+          type: string
+          description: Purpose of the file
+        description:
+          type: string
+          description: Description of the file
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time 

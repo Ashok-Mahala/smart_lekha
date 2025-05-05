@@ -1,0 +1,392 @@
+paths:
+  /api/operations:
+    get:
+      tags:
+        - Operations
+      summary: Get all operations
+      description: Retrieve a list of all operations with optional filtering and pagination
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Number of items per page
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [maintenance, cleaning, inspection, repair, other]
+          description: Filter by operation type
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, in_progress, completed, cancelled]
+          description: Filter by operation status
+        - in: query
+          name: priority
+          schema:
+            type: string
+            enum: [low, medium, high, urgent]
+          description: Filter by operation priority
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          description: Start date for filtering
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          description: End date for filtering
+      responses:
+        '200':
+          description: List of operations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  currentPage:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Operation'
+    post:
+      tags:
+        - Operations
+      summary: Create a new operation
+      description: Create a new operation record
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - title
+                - description
+                - priority
+              properties:
+                type:
+                  type: string
+                  enum: [maintenance, cleaning, inspection, repair, other]
+                  description: Type of operation
+                title:
+                  type: string
+                  description: Operation title
+                description:
+                  type: string
+                  description: Detailed description
+                priority:
+                  type: string
+                  enum: [low, medium, high, urgent]
+                  description: Operation priority
+                assignedTo:
+                  type: string
+                  description: ID of the assigned user
+                startDate:
+                  type: string
+                  format: date
+                  description: Planned start date
+                endDate:
+                  type: string
+                  format: date
+                  description: Planned end date
+                notes:
+                  type: string
+                  description: Additional notes
+      responses:
+        '201':
+          description: Operation created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Operation'
+
+  /api/operations/{id}:
+    get:
+      tags:
+        - Operations
+      summary: Get an operation by ID
+      description: Retrieve a specific operation by its ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Operation ID
+      responses:
+        '200':
+          description: Operation retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Operation'
+    put:
+      tags:
+        - Operations
+      summary: Update an operation
+      description: Update an existing operation record
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Operation ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [maintenance, cleaning, inspection, repair, other]
+                title:
+                  type: string
+                description:
+                  type: string
+                priority:
+                  type: string
+                  enum: [low, medium, high, urgent]
+                assignedTo:
+                  type: string
+                startDate:
+                  type: string
+                  format: date
+                endDate:
+                  type: string
+                  format: date
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Operation updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Operation'
+    delete:
+      tags:
+        - Operations
+      summary: Delete an operation
+      description: Delete an operation record (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Operation ID
+      responses:
+        '200':
+          description: Operation deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+
+  /api/operations/{id}/status:
+    put:
+      tags:
+        - Operations
+      summary: Update operation status
+      description: Update the status of an operation
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Operation ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [pending, in_progress, completed, cancelled]
+                notes:
+                  type: string
+                  description: Status update notes
+      responses:
+        '200':
+          description: Operation status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Operation'
+
+  /api/operations/stats:
+    get:
+      tags:
+        - Operations
+      summary: Get operation statistics
+      description: Get statistics about operations
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          description: Start date for statistics
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          description: End date for statistics
+      responses:
+        '200':
+          description: Operation statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalOperations:
+                        type: integer
+                      byStatus:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            count:
+                              type: integer
+                      byType:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            count:
+                              type: integer
+                      byPriority:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            count:
+                              type: integer
+                      completionRate:
+                        type: number
+                      averageCompletionTime:
+                        type: number
+
+components:
+  schemas:
+    Operation:
+      type: object
+      properties:
+        _id:
+          type: string
+        type:
+          type: string
+          enum: [maintenance, cleaning, inspection, repair, other]
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        status:
+          type: string
+          enum: [pending, in_progress, completed, cancelled]
+        assignedTo:
+          type: string
+          description: ID of the assigned user
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        notes:
+          type: string
+        createdBy:
+          type: string
+          description: ID of the user who created the operation
+        updatedBy:
+          type: string
+          description: ID of the user who last updated the operation
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time 

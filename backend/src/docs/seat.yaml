@@ -1,0 +1,358 @@
+paths:
+  /api/seats:
+    get:
+      tags:
+        - Seats
+      summary: Get all seats
+      description: Retrieve a list of all seats with optional filtering and pagination
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Number of items per page
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [available, occupied, reserved, maintenance]
+          description: Filter by seat status
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [standard, premium, vip]
+          description: Filter by seat type
+        - in: query
+          name: features
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [power_outlet, wifi, table, window]
+          description: Filter by seat features
+      responses:
+        '200':
+          description: List of seats retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  currentPage:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Seat'
+    post:
+      tags:
+        - Seats
+      summary: Create a new seat
+      description: Create a new seat record (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - seatNumber
+                - row
+                - column
+                - type
+              properties:
+                seatNumber:
+                  type: string
+                  description: Unique seat number
+                row:
+                  type: string
+                  description: Row identifier
+                column:
+                  type: string
+                  description: Column identifier
+                type:
+                  type: string
+                  enum: [standard, premium, vip]
+                  description: Seat type
+                features:
+                  type: array
+                  items:
+                    type: string
+                    enum: [power_outlet, wifi, table, window]
+                  description: Available features
+                status:
+                  type: string
+                  enum: [available, occupied, reserved, maintenance]
+                  description: Current status
+                notes:
+                  type: string
+                  description: Additional notes
+      responses:
+        '201':
+          description: Seat created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Seat'
+
+  /api/seats/{id}:
+    get:
+      tags:
+        - Seats
+      summary: Get a seat by ID
+      description: Retrieve a specific seat by its ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Seat ID
+      responses:
+        '200':
+          description: Seat retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Seat'
+    put:
+      tags:
+        - Seats
+      summary: Update a seat
+      description: Update an existing seat record (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Seat ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seatNumber:
+                  type: string
+                row:
+                  type: string
+                column:
+                  type: string
+                type:
+                  type: string
+                  enum: [standard, premium, vip]
+                features:
+                  type: array
+                  items:
+                    type: string
+                    enum: [power_outlet, wifi, table, window]
+                status:
+                  type: string
+                  enum: [available, occupied, reserved, maintenance]
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Seat updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Seat'
+    delete:
+      tags:
+        - Seats
+      summary: Delete a seat
+      description: Delete a seat record (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Seat ID
+      responses:
+        '200':
+          description: Seat deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/seats/availability:
+    get:
+      tags:
+        - Seats
+      summary: Get seat availability
+      description: Check seat availability for a specific date
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: Date to check availability
+      responses:
+        '200':
+          description: Available seats retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Seat'
+
+  /api/seats/{id}/assign:
+    post:
+      tags:
+        - Seats
+      summary: Assign student to seat
+      description: Assign a student to a specific seat (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Seat ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - studentId
+              properties:
+                studentId:
+                  type: string
+                  description: ID of the student to assign
+      responses:
+        '200':
+          description: Student assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Seat'
+
+  /api/seats/{id}/release:
+    post:
+      tags:
+        - Seats
+      summary: Release seat
+      description: Release a seat from student assignment (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Seat ID
+      responses:
+        '200':
+          description: Seat released successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Seat'
+
+  /api/seats/stats:
+    get:
+      tags:
+        - Seats
+      summary: Get seat statistics
+      description: Get statistics about seats
+      responses:
+        '200':
+          description: Seat statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    _id:
+                      type: string
+                    count:
+                      type: integer
+
+components:
+  schemas:
+    Seat:
+      type: object
+      properties:
+        _id:
+          type: string
+        seatNumber:
+          type: string
+        row:
+          type: string
+        column:
+          type: integer
+        type:
+          type: string
+          enum: [standard, premium, handicap, other]
+        features:
+          type: array
+          items:
+            type: string
+            enum: [power_outlet, table, extra_space, window, aisle]
+        status:
+          type: string
+          enum: [available, occupied, reserved, maintenance]
+        assignedTo:
+          type: string
+          description: ID of the assigned student
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time 

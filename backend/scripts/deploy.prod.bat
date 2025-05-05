@@ -1,0 +1,23 @@
+@echo off
+echo 🚀 Starting production deployment process...
+
+echo 📝 Loading environment variables...
+for /f "tokens=*" %%a in (.env.production) do set %%a
+
+echo 📦 Building Docker image...
+docker build -t seatflow-backend:prod .
+
+echo 🛑 Stopping existing containers...
+docker-compose -f docker-compose.prod.yml down
+
+echo 🚀 Starting containers...
+docker-compose -f docker-compose.prod.yml up -d
+
+echo ⏳ Waiting for MongoDB to be ready...
+timeout /t 10
+
+echo 📝 Running database migrations...
+docker-compose -f docker-compose.prod.yml exec app npm run migrate
+
+echo ✅ Production deployment completed successfully!
+echo 🌐 API is available at https://your-api-domain.com 

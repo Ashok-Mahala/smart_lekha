@@ -1,0 +1,358 @@
+paths:
+  /api/bookings:
+    get:
+      tags:
+        - Bookings
+      summary: Get all bookings
+      description: Retrieve a list of all bookings with optional filtering and pagination
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Number of items per page
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, completed, cancelled]
+          description: Filter by booking status
+        - in: query
+          name: student
+          schema:
+            type: string
+          description: Filter by student ID
+        - in: query
+          name: seat
+          schema:
+            type: string
+          description: Filter by seat ID
+      responses:
+        '200':
+          description: List of bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  currentPage:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Booking'
+    post:
+      tags:
+        - Bookings
+      summary: Create a new booking
+      description: Create a new booking for a student and seat
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - student
+                - seat
+                - startDate
+                - endDate
+              properties:
+                student:
+                  type: string
+                  description: ID of the student making the booking
+                seat:
+                  type: string
+                  description: ID of the seat being booked
+                startDate:
+                  type: string
+                  format: date-time
+                  description: Start date and time of the booking
+                endDate:
+                  type: string
+                  format: date-time
+                  description: End date and time of the booking
+                purpose:
+                  type: string
+                  description: Purpose of the booking
+      responses:
+        '201':
+          description: Booking created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+
+  /api/bookings/{id}:
+    get:
+      tags:
+        - Bookings
+      summary: Get a booking by ID
+      description: Retrieve a specific booking by its ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Booking ID
+      responses:
+        '200':
+          description: Booking retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+    put:
+      tags:
+        - Bookings
+      summary: Update a booking
+      description: Update an existing booking
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Booking ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                startDate:
+                  type: string
+                  format: date-time
+                endDate:
+                  type: string
+                  format: date-time
+                purpose:
+                  type: string
+      responses:
+        '200':
+          description: Booking updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+    delete:
+      tags:
+        - Bookings
+      summary: Delete a booking
+      description: Delete a booking (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Booking ID
+      responses:
+        '200':
+          description: Booking deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+
+  /api/bookings/{id}/cancel:
+    put:
+      tags:
+        - Bookings
+      summary: Cancel a booking
+      description: Cancel an active booking
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Booking ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  description: Reason for cancellation
+      responses:
+        '200':
+          description: Booking cancelled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+
+  /api/bookings/{id}/complete:
+    put:
+      tags:
+        - Bookings
+      summary: Complete a booking
+      description: Mark a booking as completed
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Booking ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                  description: Completion notes
+      responses:
+        '200':
+          description: Booking completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+
+  /api/bookings/stats:
+    get:
+      tags:
+        - Bookings
+      summary: Get booking statistics
+      description: Get statistics about bookings (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Booking statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      stats:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            count:
+                              type: integer
+                            totalDuration:
+                              type: number
+                      totalBookings:
+                        type: integer
+                      activeBookings:
+                        type: integer
+                      completedBookings:
+                        type: integer
+                      cancelledBookings:
+                        type: integer
+
+components:
+  schemas:
+    Booking:
+      type: object
+      properties:
+        _id:
+          type: string
+        student:
+          type: string
+        seat:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, completed, cancelled]
+        purpose:
+          type: string
+        createdBy:
+          type: string
+        cancelledBy:
+          type: string
+        cancellationReason:
+          type: string
+        completedBy:
+          type: string
+        completionNotes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time 

@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: seatflow-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: MONGODB_URI
+        value: mongodb://localhost:27017/seatflow
+      - key: JWT_SECRET
+        value: c8cd99ef58d7a981f996a471b9b20f602188aa5dc2e469472c9f33504c97fff3
+      - key: JWT_EXPIRATION
+        value: 1d
+      - key: CORS_ORIGIN
+        value: https://seatflow-frontend.vercel.app
+      - key: CLOUDINARY_CLOUD_NAME
+        value: your_cloud_name
+      - key: CLOUDINARY_API_KEY
+        value: your_api_key
+      - key: CLOUDINARY_API_SECRET
+        value: your_api_secret 

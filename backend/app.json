@@ -1,0 +1,28 @@
+{
+  "name": "SeatFlow Backend",
+  "description": "Backend API for SeatFlow seat management system",
+  "repository": "https://github.com/your-username/seatflow",
+  "logo": "https://your-logo-url.com/logo.png",
+  "keywords": ["node", "express", "typescript", "mongodb"],
+  "addons": [
+    "mongolab:sandbox"
+  ],
+  "env": {
+    "NODE_ENV": {
+      "value": "production"
+    },
+    "JWT_SECRET": {
+      "description": "Secret key for JWT token generation",
+      "generator": "secret"
+    },
+    "CORS_ORIGIN": {
+      "description": "Allowed CORS origin",
+      "value": "https://your-frontend-domain.com"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ]
+} 

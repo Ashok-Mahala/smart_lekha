@@ -1,0 +1,118 @@
+components:
+  schemas:
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          description: Current page number
+          example: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Number of items per page
+          example: 10
+        total:
+          type: integer
+          description: Total number of items
+          example: 100
+        totalPages:
+          type: integer
+          description: Total number of pages
+          example: 10
+    
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Indicates if the operation was successful
+          default: true
+        message:
+          type: string
+          description: A human-readable message about the result
+    
+    PaginatedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Indicates if the operation was successful
+          default: true
+        data:
+          type: array
+          description: The list of items
+          items:
+            type: object
+        count:
+          type: integer
+          description: Count of items in the current page
+        total:
+          type: integer
+          description: Total number of items matching query
+        totalPages:
+          type: integer
+          description: Total number of pages
+        currentPage:
+          type: integer
+          description: Current page number
+
+  parameters:
+    PageParam:
+      in: query
+      name: page
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number for pagination
+    
+    LimitParam:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+      description: Number of items per page
+    
+    SearchParam:
+      in: query
+      name: search
+      schema:
+        type: string
+      description: Search query for filtering results
+    
+    SortParam:
+      in: query
+      name: sort
+      schema:
+        type: string
+      description: Field to sort by (prefix with - for descending order)
+      example: -createdAt
+    
+    DateFromParam:
+      in: query
+      name: dateFrom
+      schema:
+        type: string
+        format: date
+      description: Start date for filtering (YYYY-MM-DD)
+    
+    DateToParam:
+      in: query
+      name: dateTo
+      schema:
+        type: string
+        format: date
+      description: End date for filtering (YYYY-MM-DD)
+    
+    StatusParam:
+      in: query
+      name: status
+      schema:
+        type: string
+      description: Filter by status 

@@ -1,0 +1,543 @@
+paths:
+  /api/shifts:
+    get:
+      tags:
+        - Shifts
+      summary: Get all shifts
+      description: Retrieve a list of all shifts with optional filtering and pagination
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Number of items per page
+        - in: query
+          name: zone
+          schema:
+            type: string
+            enum: [full-day, half-day, reading-area, computer-zone, quiet-study, group-study]
+          description: Filter by zone
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: Filter by date
+      responses:
+        '200':
+          description: List of shifts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  currentPage:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Shift'
+    post:
+      tags:
+        - Shifts
+      summary: Create a new shift
+      description: Create a new shift record (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - startTime
+                - endTime
+                - zone
+                - capacity
+              properties:
+                name:
+                  type: string
+                  description: Name of the shift
+                startTime:
+                  type: string
+                  format: date-time
+                  description: Start time of the shift
+                endTime:
+                  type: string
+                  format: date-time
+                  description: End time of the shift
+                date:
+                  type: string
+                  format: date
+                  description: Date of the shift
+                capacity:
+                  type: integer
+                  description: Maximum capacity of the shift
+                zone:
+                  type: string
+                  enum: [full-day, half-day, reading-area, computer-zone, quiet-study, group-study]
+                  description: Zone for the shift
+                staffAssigned:
+                  type: array
+                  items:
+                    type: string
+                  description: Staff assigned to the shift
+                isActive:
+                  type: boolean
+                  description: Whether the shift is active
+      responses:
+        '201':
+          description: Shift created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Shift'
+
+  /api/shifts/{id}:
+    get:
+      tags:
+        - Shifts
+      summary: Get shift by ID
+      description: Retrieve a specific shift by its ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Shift ID
+      responses:
+        '200':
+          description: Shift retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Shift'
+    put:
+      tags:
+        - Shifts
+      summary: Update a shift
+      description: Update an existing shift record
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Shift ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+                date:
+                  type: string
+                  format: date
+                capacity:
+                  type: integer
+                zone:
+                  type: string
+                  enum: [full-day, half-day, reading-area, computer-zone, quiet-study, group-study]
+                staffAssigned:
+                  type: array
+                  items:
+                    type: string
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Shift updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Shift'
+    delete:
+      tags:
+        - Shifts
+      summary: Delete a shift
+      description: Delete a shift record (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Shift ID
+      responses:
+        '200':
+          description: Shift deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
+  /api/shifts/zone/{zoneId}:
+    get:
+      tags:
+        - Shifts
+      summary: Get shifts by zone
+      description: Retrieve all shifts for a specific zone
+      parameters:
+        - in: path
+          name: zoneId
+          required: true
+          schema:
+            type: string
+          description: Zone ID
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: Filter by date
+      responses:
+        '200':
+          description: Shifts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Shift'
+
+  /api/shifts/schedule:
+    get:
+      tags:
+        - Shifts
+      summary: Get shift schedule
+      description: Retrieve shifts by date for scheduling
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          description: Start date for the schedule
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          description: End date for the schedule
+      responses:
+        '200':
+          description: Shift schedule retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Shift'
+
+  /api/shifts/staff/{staffId}:
+    get:
+      tags:
+        - Shifts
+      summary: Get staff shifts
+      description: Retrieve all shifts for a specific staff member
+      parameters:
+        - in: path
+          name: staffId
+          required: true
+          schema:
+            type: string
+          description: Staff ID
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          description: Start date filter
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          description: End date filter
+      responses:
+        '200':
+          description: Staff shifts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Shift'
+
+  /api/shifts/property/{propertyId}:
+    get:
+      tags:
+        - Shifts
+      summary: Get property shifts
+      description: Retrieve all shifts for a specific property
+      parameters:
+        - in: path
+          name: propertyId
+          required: true
+          schema:
+            type: string
+          description: Property ID
+      responses:
+        '200':
+          description: Property shifts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Shift'
+
+  /api/shifts/{id}/status:
+    put:
+      tags:
+        - Shifts
+      summary: Update shift status
+      description: Update the status of a shift
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Shift ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive, full, cancelled]
+                  description: New status for the shift
+      responses:
+        '200':
+          description: Shift status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Shift'
+
+  /api/shifts/active:
+    get:
+      tags:
+        - Shifts
+      summary: Get active shifts
+      description: Retrieve all currently active shifts
+      responses:
+        '200':
+          description: Active shifts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Shift'
+
+  /api/shifts/availability:
+    get:
+      tags:
+        - Shifts
+      summary: Get shifts with availability
+      description: Get all shifts with their current availability
+      parameters:
+        - in: query
+          name: date
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Date to check availability
+      responses:
+        '200':
+          description: Shifts availability retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShiftAvailability'
+
+  /api/shifts/stats:
+    get:
+      tags:
+        - Shifts
+      summary: Get shift statistics
+      description: Get statistics about shifts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Shift statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalShifts:
+                        type: integer
+                      activeShifts:
+                        type: integer
+                      inactiveShifts:
+                        type: integer
+                      fullShifts:
+                        type: integer
+                      cancelledShifts:
+                        type: integer
+                      byZone:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            zone:
+                              type: string
+                            count:
+                              type: integer
+
+components:
+  schemas:
+    Shift:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the shift
+        name:
+          type: string
+          description: Name of the shift
+        startTime:
+          type: string
+          format: date-time
+          description: Start time of the shift
+        endTime:
+          type: string
+          format: date-time
+          description: End time of the shift
+        date:
+          type: string
+          format: date
+          description: Date of the shift
+        capacity:
+          type: integer
+          description: Maximum capacity of the shift
+        zone:
+          type: string
+          enum: [full-day, half-day, reading-area, computer-zone, quiet-study, group-study]
+          description: Zone for the shift
+        currentOccupancy:
+          type: integer
+          description: Current number of people in the shift
+        staffAssigned:
+          type: array
+          items:
+            type: string
+          description: Staff assigned to the shift
+        isActive:
+          type: boolean
+          description: Whether the shift is active
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          
+    ShiftAvailability:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Shift ID
+        name:
+          type: string
+          description: Shift name
+        startTime:
+          type: string
+          format: date-time
+          description: Start time
+        endTime:
+          type: string
+          format: date-time
+          description: End time
+        zone:
+          type: string
+          description: Zone identifier
+        capacity:
+          type: integer
+          description: Total capacity
+        available:
+          type: integer
+          description: Number of available spots
+        occupied:
+          type: integer
+          description: Number of occupied spots
+        isAvailable:
+          type: boolean
+          description: Whether the shift has available spots 
