@@ -8,16 +8,16 @@ const { errorHandler } = require('./middleware/errorHandler');
 const swaggerSpecs = require('./config/swagger');
 
 // Import routes
-const authRoutes = require('./routes/auth.routes');
-const studentRoutes = require('./routes/student.routes');
-const seatRoutes = require('./routes/seat.routes');
-const bookingRoutes = require('./routes/booking.routes');
-const attendanceRoutes = require('./routes/attendance.routes');
-const paymentRoutes = require('./routes/payment.routes');
-const reportRoutes = require('./routes/report.routes');
-const operationRoutes = require('./routes/operation.routes');
-const financialRoutes = require('./routes/financial.routes');
-const systemRoutes = require('./routes/system.routes');
+const authRoutes = require('./routes/authRoutes');
+const studentRoutes = require('./routes/studentRoutes');
+const seatRoutes = require('./routes/seatRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const operationRoutes = require('./routes/operationRoutes');
+const financialRoutes = require('./routes/financialRoutes');
+const systemRoutes = require('./routes/systemRoutes');
 
 const app = express();
 

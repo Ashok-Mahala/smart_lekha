@@ -3,19 +3,20 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
-const config = require('./config');
+const { config: { mongoURI, ...otherConfig } } = require('./config');
+// Then use mongoURI directly
 const { errorHandler } = require('./middleware/errorHandler');
 
 // Import routes
-const authRoutes = require('./routes/auth.routes');
-const studentRoutes = require('./routes/student.routes');
-const seatRoutes = require('./routes/seat.routes');
-const bookingRoutes = require('./routes/booking.routes');
-const paymentRoutes = require('./routes/payment.routes');
-const reportRoutes = require('./routes/report.routes');
-const operationRoutes = require('./routes/operation.routes');
-const systemRoutes = require('./routes/system.routes');
-const financialRoutes = require('./routes/financial.routes');
+const authRoutes = require('./routes/authRoutes');
+const studentRoutes = require('./routes/studentRoutes');
+const seatRoutes = require('./routes/seatRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const operationRoutes = require('./routes/operationRoutes');
+const systemRoutes = require('./routes/systemRoutes');
+const financialRoutes = require('./routes/financialRoutes');
 
 // Initialize express app
 const app = express();
@@ -27,12 +28,22 @@ app.use(morgan('dev'));
 app.use(helmet());
 
 // Connect to MongoDB
+
+// Add this right before your mongoose.connect()
+//console.log('Attempting to connect to MongoDB with URI:', config.mongoURI);
+//console.log('Full config object:', config);
+console.log('Environment variables:', {
+  MONGODB_URI: process.env.MONGODB_URI,
+  MONGODB_USERNAME: process.env.MONGODB_USERNAME,
+  MONGODB_PASSWORD: process.env.MONGODB_PASSWORD,
+  MONGODB_HOST: process.env.MONGODB_HOST,
+  MONGODB_PORT: process.env.MONGODB_PORT,
+  MONGODB_DATABASE: process.env.MONGODB_DATABASE
+});
 mongoose
-  .connect(config.mongoURI, {
+  .connect(mongoURI, {
     useNewUrlParser: true,
-    useUnifiedTopology: true,
-    useCreateIndex: true,
-    useFindAndModify: false
+    useUnifiedTopology: true
   })
   .then(() => console.log('MongoDB Connected'))
   .catch(err => {

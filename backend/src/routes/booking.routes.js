@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const bookingController = require('../controllers/booking.controller');
+const bookingController = require('../controllers/bookingController');
 const { validateId, validateDateRange } = require('../middleware/validation');
 
 // Get all bookings

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const reportController = require('../controllers/report.controller');
+const reportController = require('../controllers/reportController');
 const { validateDateRange, validateId } = require('../middleware/validation');
 
 // Get all reports

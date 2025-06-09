@@ -16,9 +16,9 @@ router.get('/logs', systemController.getSystemLogs);
 router.get('/status', systemController.getSystemStatus);
 
 // Backup system
-router.post('/backup', systemController.backupSystem);
+// router.post('/backup', systemController.backupSystem);
 
-// Restore system
-router.post('/restore', systemController.restoreSystem);
+// // Restore system
+// router.post('/restore', systemController.restoreSystem);
 
 module.exports = router; 

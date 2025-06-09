@@ -17,7 +17,7 @@ const {
   deleteAttendance,
   getAttendanceStats,
   getStudentAttendance
-} = require('../controllers/attendance.controller');
+} = require('../controllers/attendanceController');
 
 // Public routes
 router.get('/', validate(getAttendanceValidation), getAttendanceRecords);

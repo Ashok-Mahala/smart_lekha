@@ -18,7 +18,7 @@ const {
   assignStudent,
   releaseSeat,
   getSeatStats
-} = require('../controllers/seat.controller');
+} = require('../controllers/seatController');
 
 // Public routes
 router.get('/', validate(getSeatsValidation), getSeats);

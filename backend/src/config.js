@@ -28,7 +28,7 @@ const config = {
   nodeEnv: NODE_ENV,
   
   // MongoDB configuration
-  mongoUri: process.env.MONGODB_URI || `mongodb://localhost:27017/seatflow-sb2-${NODE_ENV}`,
+  mongoURI: `mongodb://${process.env.MONGODB_USERNAME}:${process.env.MONGODB_PASSWORD}@${process.env.MONGODB_HOST}:${process.env.MONGODB_PORT}/${process.env.MONGODB_DATABASE}?authSource=admin`,
   
   // JWT configuration
   jwtSecret: process.env.JWT_SECRET,

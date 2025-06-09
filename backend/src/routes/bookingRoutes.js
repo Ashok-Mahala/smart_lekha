@@ -18,7 +18,7 @@ const {
   cancelBooking,
   completeBooking,
   getBookingStats
-} = require('../controllers/booking.controller');
+} = require('../controllers/bookingController');
 
 // Public routes
 router.get('/', validate(getBookingsValidation), getBookings);

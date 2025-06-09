@@ -8,7 +8,7 @@ const {
   updateStudent,
   deleteStudent,
   getStudentStats
-} = require('../controllers/student.controller');
+} = require('../controllers/studentController');
 
 // Public routes
 router.get('/', getStudents);

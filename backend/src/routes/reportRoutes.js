@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 const { 
-  getReports,
+  getReportData,
   generateReport,
-  getReportById,
-  deleteReport
-} = require('../controllers/report.controller');
+  //getReportById,
+  //deleteReport
+} = require('../controllers/reportController');
 
 // Public routes (if any)
 
@@ -14,15 +14,15 @@ const {
 router.use(protect);
 
 // Get all reports
-router.get('/', getReports);
+router.get('/', getReportData);
 
 // Generate a new report
 router.post('/', generateReport);
 
-// Get specific report by ID
-router.get('/:id', getReportById);
+// // Get specific report by ID
+// router.get('/:id', getReportById);
 
-// Delete report
-router.delete('/:id', authorize('admin'), deleteReport);
+// // Delete report
+// router.delete('/:id', authorize('admin'), deleteReport);
 
 module.exports = router; 

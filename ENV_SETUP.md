@@ -37,7 +37,11 @@ Each environment uses its own set of environment variables defined in specific `
 
 ```
 # Required
-MONGODB_URI=mongodb://localhost:27017/seatflow-sb2
+MONGODB_USERNAME        = ashok
+MONGODB_PASSWORD        = Ram%405045%40
+MONGODB_DATABASE        = smart_lekha
+MONGODB_HOST            = 127.0.0.1
+MONGODB_PORT            = 27017
 JWT_SECRET=your_jwt_secret_key
 
 # Optional with defaults

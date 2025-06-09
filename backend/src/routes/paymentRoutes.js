@@ -21,7 +21,7 @@ const {
   cancelPayment,
   getPaymentStats,
   getStudentPayments
-} = require('../controllers/payment.controller');
+} = require('../controllers/paymentController');
 
 // Public routes
 router.get('/', validate(getPaymentsValidation), getPayments);

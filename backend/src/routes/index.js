@@ -2,15 +2,15 @@ const express = require('express');
 const router = express.Router();
 
 const authRoutes = require('./auth');
-const studentRoutes = require('./student.routes');
-const seatRoutes = require('./seat.routes');
+const studentRoutes = require('./studentRoutes');
+const seatRoutes = require('./seatRoutes');
 const bookingRoutes = require('./bookingRoutes');
-const attendanceRoutes = require('./attendance.routes');
-const paymentRoutes = require('./payment.routes');
-const reportRoutes = require('./report.routes');
-const operationRoutes = require('./operation.routes');
-const systemRoutes = require('./system.routes');
-const financialRoutes = require('./financial.routes');
+const attendanceRoutes = require('./attendanceRoutes');
+const paymentRoutes = require('./paymentRoutes');
+const reportRoutes = require('./reportRoutes');
+const operationRoutes = require('./operationRoutes');
+const systemRoutes = require('./systemRoutes');
+const financialRoutes = require('./financialRoutes');
 
 // Health check route
 router.get('/health', (req, res) => {

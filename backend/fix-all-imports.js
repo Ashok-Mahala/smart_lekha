@@ -35,7 +35,7 @@ const routeMappings = {
   'paymentRoutes': 'payment.routes',
   'reportRoutes': 'report.routes',
   'operationRoutes': 'operation.routes',
-  'authRoutes': 'auth.routes',
+  'authRoutes': 'authRoutes',
   'financialRoutes': 'financial.routes',
   'systemRoutes': 'system.routes'
 };

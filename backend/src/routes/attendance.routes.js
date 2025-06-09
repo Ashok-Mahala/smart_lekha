@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const attendanceController = require('../controllers/attendance.controller');
+const attendanceController = require('../controllers/attendanceController');
 const { validateDateRange, validateId } = require('../middleware/validation');
 
 // Get all attendance records

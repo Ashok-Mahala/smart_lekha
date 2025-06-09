@@ -8,7 +8,7 @@ const {
   updateProfile,
   changePassword,
   logout
-} = require('../controllers/auth.controller');
+} = require('../controllers/authController');
 
 // Public routes
 router.post('/register', register);
