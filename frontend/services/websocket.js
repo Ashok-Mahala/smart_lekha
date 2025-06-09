@@ -12,7 +12,7 @@ class WebSocketService {
   connect() {
     try {
       // Default to port 5000 to match .env file
-      const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://localhost:5000'}/ws`;
+      const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://62.72.58.243:5000'}/ws`;
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {

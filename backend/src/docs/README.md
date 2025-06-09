@@ -24,7 +24,7 @@ The API documentation is organized into multiple YAML files, each focusing on a 
 
 The Swagger documentation is available at `/api-docs` when the server is running. For example:
 
-- Development: `http://localhost:5000/api-docs`
+- Development: `http://62.72.58.243:5000/api-docs`
 - Production: `https://yourdomain.com/api-docs`
 
 ## Authentication

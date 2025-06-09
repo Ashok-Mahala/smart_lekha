@@ -75,7 +75,7 @@ npm run backend:build
 The API is fully documented using Swagger/OpenAPI 3.0. To access the API documentation:
 
 1. Start the backend server
-2. Navigate to `/api-docs` in your browser (e.g., http://localhost:5000/api-docs)
+2. Navigate to `/api-docs` in your browser (e.g., http://62.72.58.243:5000/api-docs)
 
 The documentation includes:
 

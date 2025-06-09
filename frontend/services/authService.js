@@ -32,17 +32,31 @@ export const authService = {
   },
 
   async signUp(email, password, name, options = {}) {
-    return withErrorHandling(async () => {
+    console.log('Signing up with:', { email, password, name });
+    if (!email || !password || !name) {
+      throw new Error('Email, password, and name are required for registration');
+    }
+    if (typeof email !== 'string' || typeof password !== 'string' || typeof name !== 'string') {
+      throw new Error('Email, password, and name must be strings');
+    }
+    if (password.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error('Invalid email format');
+    }
+    console.log('Validated sign-up data:', { email, password, name });
+    
       const response = await api.post('/auth/register', {
         email,
         password,
-        name
+        firstName: name,
+        lastName: name, // Assuming lastName is optional
       });
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
       }
       return response.data.user;
-    }, { ...options, rethrow: true });
   },
 
   async signOut(options = {}) {

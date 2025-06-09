@@ -14,7 +14,7 @@ The Swagger documentation provides an interactive UI to explore, understand, and
 
 2. Open your browser and navigate to:
    ```
-   http://localhost:5000/api-docs
+   http://62.72.58.243:5000/api-docs
    ```
 
 ## Using the Swagger UI

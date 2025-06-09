@@ -182,7 +182,7 @@ The API is fully documented using Swagger/OpenAPI 3.0. To access the documentati
 
 2. Navigate to:
    ```
-   http://localhost:5000/api-docs
+   http://62.72.58.243:5000/api-docs
    ```
 
 3. You can test endpoints directly from the Swagger UI:
