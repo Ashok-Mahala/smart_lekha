@@ -28,14 +28,21 @@ export default function LoginPage() {
 
   const onSubmit = async (data) => {
     setIsLoading(true);
-    
+    console.log("Submit login");
     try {
-      await authService.signIn(data.email, data.password, {
+      const user = await authService.signIn(data.email, data.password, {
         showToast: false, // We'll handle toasts manually
         form // Pass the form for field-level errors
       });
-      toast.success('Logged in successfully');
-      navigate('/dashboard');
+      if(user.id){
+        toast.success('Logged in successfully');
+        navigate('/dashboard');
+      }
+      else{
+        toast.error('Someting went wrong! Please tey Again!');
+        console.log("user Details:",user);
+      }
+
     } catch (error) {
       // Using our new error handling utility
       // This will display appropriate errors and set form field errors if needed

@@ -35,23 +35,18 @@ export const studentPropTypes = PropTypes.shape({
 
 // Get all students
 export const getAllStudents = async (params = {}, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await api.get(API_BASE_URL, { params });
     return response.data;
-  }, options);
 };
 
 // Get student by ID
 export const getStudentById = async (id, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await api.get(`${API_BASE_URL}/${id}`);
     return response.data;
-  }, options);
 };
 
 // Create student
 export const createStudent = async (studentData, options = {}) => {
-  return withErrorHandling(async () => {
     // Determine if we're dealing with FormData or regular JSON
     const isFormData = studentData instanceof FormData;
     
@@ -64,14 +59,11 @@ export const createStudent = async (studentData, options = {}) => {
     if (options.showToast !== false) {
       toast.success('Student added successfully');
     }
-    
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 // Update student
 export const updateStudent = async (id, studentData, options = {}) => {
-  return withErrorHandling(async () => {
     // Determine if we're dealing with FormData or regular JSON
     const isFormData = studentData instanceof FormData;
     
@@ -86,12 +78,10 @@ export const updateStudent = async (id, studentData, options = {}) => {
     }
     
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 // Delete student
 export const deleteStudent = async (id, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await api.delete(`${API_BASE_URL}/${id}`);
     
     if (options.showToast !== false) {
@@ -99,7 +89,6 @@ export const deleteStudent = async (id, options = {}) => {
     }
     
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 export const fetchStudents = async () => {
@@ -196,45 +185,34 @@ export const reactivateStudent = async (studentId) => {
 };
 
 export const searchStudents = async (query, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await api.get(`${API_BASE_URL}/search`, {
       params: { query }
     });
     return response.data;
-  }, options);
 };
 
 export const getStudentAttendance = async (id, params = {}, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await api.get(`${API_BASE_URL}/${id}/attendance`, { params });
     return response.data;
-  }, options);
 };
 
 export const getStudentPayments = async (id, params = {}, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await api.get(`${API_BASE_URL}/${id}/payments`, { params });
     return response.data;
-  }, options);
 };
 
 export const updateStudentStatus = async (id, status, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await api.put(`${API_BASE_URL}/${id}/status`, { status });
     
     if (options.showToast !== false) {
       toast.success(`Student status updated to ${status}`);
     }
-    
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 export const getStudentStats = async (options = {}) => {
-  return withErrorHandling(async () => {
     const response = await api.get(`${API_BASE_URL}/stats`);
     return response.data;
-  }, options);
 };
 
 export default {

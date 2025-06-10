@@ -16,15 +16,16 @@ export const userDataPropTypes = PropTypes.shape({
 
 export const authService = {
   async signIn(email, password, options = {}) {
-    return withErrorHandling(async () => {
+      console.log("Login Function Call");
       const response = await api.post('/auth/login', { email, password });
+      console.log("response",response);
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
+        localStorage.setItem('userid', response.data.user.id);
       }
       return response.data.user;
-    }, { ...options, rethrow: true });
   },
-
+    
   async signUp(email, password, name, options = {}) {
     if (!email || !password || !name) {
       throw new Error('Email, password, and name are required for registration');
@@ -57,7 +58,6 @@ export const authService = {
   },
 
   async signOut(options = {}) {
-    return withErrorHandling(async () => {
       const token = localStorage.getItem('token'); // Get token before removing
       localStorage.removeItem('token'); // Remove immediately for UI
 
@@ -72,33 +72,26 @@ export const authService = {
         console.error('Logout error:', error);
         throw error;
       }
-    }, options);
   },
 
   async getCurrentUser(options = {}) {
-    return withErrorHandling(async () => {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No token found');
       const response = await api.get('/auth/me');
       return response.data;
-    }, options);
   },
 
   async updateProfile(userData, options = {}) {
-    return withErrorHandling(async () => {
       const response = await api.put('/auth/me', userData);
       return response.data;
-    }, options);
   },
 
   async changePassword(currentPassword, newPassword, options = {}) {
-    return withErrorHandling(async () => {
       const response = await api.put('/auth/change-password', {
         currentPassword,
         newPassword,
       });
       return response.data;
-    }, options);
   },
 
   isAuthenticated() {

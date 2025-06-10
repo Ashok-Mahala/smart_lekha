@@ -26,10 +26,8 @@ export const seatPropTypes = PropTypes.shape({
  * @returns {Promise<Array>} - Array of seats
  */
 export const getAllSeats = async (params = {}, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(API_BASE_URL, { params });
     return response.data;
-  }, options);
 };
 
 /**
@@ -39,10 +37,8 @@ export const getAllSeats = async (params = {}, options = {}) => {
  * @returns {Promise<Object>} - Seat object
  */
 export const getSeatById = async (id, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(`${API_BASE_URL}/${id}`);
     return response.data;
-  }, options);
 };
 
 /**
@@ -52,11 +48,9 @@ export const getSeatById = async (id, options = {}) => {
  * @returns {Promise<Object>} - Created seat
  */
 export const createSeat = async (seatData, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.post(API_BASE_URL, seatData);
     toast.success('Seat created successfully');
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 /**
@@ -67,11 +61,9 @@ export const createSeat = async (seatData, options = {}) => {
  * @returns {Promise<Object>} - Updated seat
  */
 export const updateSeat = async (id, seatData, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.put(`${API_BASE_URL}/${id}`, seatData);
     toast.success('Seat updated successfully');
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 /**
@@ -81,11 +73,9 @@ export const updateSeat = async (id, seatData, options = {}) => {
  * @returns {Promise<Object>} - Response data
  */
 export const deleteSeat = async (id, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.delete(`${API_BASE_URL}/${id}`);
     toast.success('Seat deleted successfully');
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 /**
@@ -95,10 +85,8 @@ export const deleteSeat = async (id, options = {}) => {
  * @returns {Promise<Array>} - Array of seats in the section
  */
 export const getSeatsBySection = async (section, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(`${API_BASE_URL}/section/${section}`);
     return response.data;
-  }, options);
 };
 
 /**
@@ -108,10 +96,8 @@ export const getSeatsBySection = async (section, options = {}) => {
  * @returns {Promise<Array>} - Array of available seats
  */
 export const getAvailableSeats = async (params = {}, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(`${API_BASE_URL}/available`, { params });
     return response.data;
-  }, options);
 };
 
 /**
@@ -123,12 +109,10 @@ export const getAvailableSeats = async (params = {}, options = {}) => {
  * @returns {Promise<Object>} - Availability information
  */
 export const getSeatAvailability = async (id, startDate, endDate, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(`${API_BASE_URL}/${id}/availability`, {
       params: { startDate, endDate }
     });
     return response.data;
-  }, options);
 };
 
 /**
@@ -139,11 +123,9 @@ export const getSeatAvailability = async (id, startDate, endDate, options = {}) 
  * @returns {Promise<Object>} - Updated seat
  */
 export const updateSeatStatus = async (id, status, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.put(`${API_BASE_URL}/${id}/status`, { status });
     toast.success(`Seat status updated to ${status}`);
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 export default {

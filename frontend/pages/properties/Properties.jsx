@@ -36,7 +36,8 @@ const PropertiesPage = () => {
 
   const handleAddProperty = (property) => {
     // Here you would typically make an API call to add the property
-    console.log('Adding property:', property);
+    const userid = localStorage.getItem('userid');
+    console.log('Adding property:,userid', property,userid);
     toast.success("Property added successfully");
   };
 

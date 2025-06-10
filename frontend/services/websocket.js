@@ -13,7 +13,7 @@ class WebSocketService {
     try {
       // Default to port 5000 to match .env file
       const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://62.72.58.243:5000'}/ws`;
-      this.socket = new WebSocket(wsUrl);
+      //this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
         console.log('WebSocket connected');
@@ -26,20 +26,20 @@ class WebSocketService {
           const data = JSON.parse(event.data);
           this.handleMessage(data);
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          //console.error('Error parsing WebSocket message:', error);
         }
       };
 
       this.socket.onclose = () => {
-        console.log('WebSocket disconnected');
+        //console.log('WebSocket disconnected');
         this.handleReconnect();
       };
 
       this.socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        //console.error('WebSocket error:', error);
       };
     } catch (error) {
-      console.error('Failed to create WebSocket connection:', error);
+      //console.error('Failed to create WebSocket connection:', error);
     }
   }
 
@@ -49,7 +49,7 @@ class WebSocketService {
       this.reconnectDelay *= 2; // Exponential backoff
       setTimeout(() => this.connect(), this.reconnectDelay);
     } else {
-      toast.error('Lost connection to server. Please refresh the page.');
+      //toast.error('Lost connection to server. Please refresh the page.');
     }
   }
 
@@ -74,19 +74,19 @@ class WebSocketService {
     
     switch (type) {
       case 'success':
-        toast.success(message, { description: title });
+        //toast.success(message, { description: title });
         break;
       case 'error':
-        toast.error(message, { description: title });
+        //toast.error(message, { description: title });
         break;
       case 'warning':
-        toast.warning(message, { description: title });
+        //toast.warning(message, { description: title });
         break;
       case 'info':
-        toast.info(message, { description: title });
+        //toast.info(message, { description: title });
         break;
       default:
-        toast(message, { description: title });
+        //toast(message, { description: title });
     }
   }
 

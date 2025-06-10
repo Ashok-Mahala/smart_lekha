@@ -21,10 +21,8 @@ export const getShifts = async (params = {}) => {
 
 // Get shift by ID
 export const getShiftById = async (id, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(`${API_BASE_URL}/${id}`);
     return response.data;
-  }, options);
 };
 
 // Get shifts by zone
@@ -49,29 +47,23 @@ export const getShiftSchedule = async (params = {}) => {
 
 // Create new shift
 export const createShift = async (shiftData, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.post(API_BASE_URL, shiftData);
     toast.success('Shift created successfully');
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 // Update shift
 export const updateShift = async (id, shiftData, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.put(`${API_BASE_URL}/${id}`, shiftData);
     toast.success('Shift updated successfully');
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 // Delete shift
 export const deleteShift = async (id, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.delete(`${API_BASE_URL}/${id}`);
     toast.success('Shift deleted successfully');
     return response.data;
-  }, { ...options, showToast: false });
 };
 
 // Get staff shifts
@@ -172,10 +164,8 @@ export const fetchShiftStats = async () => {
  * @returns {Promise<Array>} - Array of shifts
  */
 export const getAllShifts = async (params = {}, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(API_BASE_URL, { params });
     return response.data;
-  }, options);
 };
 
 /**
@@ -184,10 +174,8 @@ export const getAllShifts = async (params = {}, options = {}) => {
  * @returns {Promise<Array>} - Array of active shifts
  */
 export const getActiveShifts = async (options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(`${API_BASE_URL}/active`);
     return response.data;
-  }, options);
 };
 
 /**
@@ -197,12 +185,10 @@ export const getActiveShifts = async (options = {}) => {
  * @returns {Promise<Array>} - Array of shifts with availability info
  */
 export const getShiftsAvailability = async (date, options = {}) => {
-  return withErrorHandling(async () => {
     const response = await axios.get(`${API_BASE_URL}/availability`, { 
       params: { date } 
     });
     return response.data;
-  }, options);
 };
 
 export default {

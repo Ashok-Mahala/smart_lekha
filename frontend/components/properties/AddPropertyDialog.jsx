@@ -37,8 +37,9 @@ const AddPropertyDialog = ({ open, onOpenChange, onAddProperty }) => {
   });
 
   const handleAddProperty = () => {
+    //toast.error("Please fill name, type and address fields");
     if (!propertyDetails.name || !propertyDetails.type || !propertyDetails.address) {
-      toast.error("Please fill in all required fields");
+      toast.error("Please fill name, type and address fields");
       return;
     }
 

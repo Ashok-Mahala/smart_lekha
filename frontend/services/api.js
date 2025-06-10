@@ -94,193 +94,145 @@ api.interceptors.response.use(
 export const apiService = {
   auth: {
     login: async (email, password, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.post('/auth/login', { email, password });
         if (response.data.token) {
           localStorage.setItem('token', response.data.token);
         }
         return response.data;
-      }, { ...options, rethrow: true }); // rethrow so login failures can be handled by the form
     },
 
     register: async (userData, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.post('/auth/register', userData);
         if (response.data.token) {
           localStorage.setItem('token', response.data.token);
         }
         return response.data;
-      }, { ...options, rethrow: true });
     },
 
     getProfile: async (options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get('/auth/me');
         return response.data;
-      }, options);
     },
 
     updateProfile: async (userData, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.put('/auth/me', userData);
         return response.data;
-      }, options);
     },
 
     changePassword: async (currentPassword, newPassword, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.put('/auth/change-password', { currentPassword, newPassword });
         return response.data;
-      }, options);
     }
   },
 
   seats: {
     getAllSeats: async (params, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get('/seats', { params });
         return response.data;
-      }, options);
     },
 
     getSeatById: async (id, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get(`/seats/${id}`);
         return response.data;
-      }, options);
     },
 
     createSeat: async (seatData, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.post('/seats', seatData);
         return response.data;
-      }, options);
     },
 
     updateSeat: async (id, seatData, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.put(`/seats/${id}`, seatData);
         return response.data;
-      }, options);
     },
 
     deleteSeat: async (id, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.delete(`/seats/${id}`);
         return response.data;
-      }, options);
     },
 
     getSeatAvailability: async (id, startTime, endTime, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get(`/seats/${id}/availability`, {
           params: { startTime, endTime }
         });
         return response.data;
-      }, options);
     },
 
     updateSeatStatus: async (id, status, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.put(`/seats/${id}/status`, { status });
         return response.data;
-      }, options);
     }
   },
 
   bookings: {
     createBooking: async (bookingData, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.post('/bookings', bookingData);
         return response.data;
-      }, options);
     },
 
     getAllBookings: async (params, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get('/bookings', { params });
         return response.data;
-      }, options);
     },
 
     getBookingById: async (id, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get(`/bookings/${id}`);
         return response.data;
-      }, options);
     },
 
     getUserBookings: async (params, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get('/bookings/user', { params });
         return response.data;
-      }, options);
     },
 
     updateBookingStatus: async (id, status, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.put(`/bookings/${id}/status`, { status });
         return response.data;
-      }, options);
     },
 
     cancelBooking: async (id, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.post(`/bookings/${id}/cancel`);
         return response.data;
-      }, options);
     }
   },
 
   students: {
     getStudents: async (params, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get('/students', { params });
         return response.data;
-      }, options);
     },
 
     getStudentById: async (id, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.get(`/students/${id}`);
         return response.data;
-      }, options);
     },
 
     createStudent: async (studentData, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.post('/students', studentData, {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
         });
         return response.data;
-      }, options);
     },
 
     updateStudent: async (id, studentData, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.put(`/students/${id}`, studentData, {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
         });
         return response.data;
-      }, options);
     },
 
     deleteStudent: async (id, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.delete(`/students/${id}`);
         return response.data;
-      }, options);
     },
 
     updateStudentStatus: async (id, status, options = {}) => {
-      return withErrorHandling(async () => {
         const response = await api.put(`/students/${id}/status`, { status });
         return response.data;
-      }, options);
     }
   }
 };

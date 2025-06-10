@@ -15,7 +15,6 @@ const fileUploadService = {
    * @returns {Promise<Object>} - The uploaded file information
    */
   uploadFile: async (file, metadata = {}, options = {}) => {
-    return withErrorHandling(async () => {
       const formData = new FormData();
       formData.append('file', file);
       
@@ -33,9 +32,7 @@ const fileUploadService = {
       if (options.showToast !== false) {
         toast.success('File uploaded successfully');
       }
-      
       return response.data;
-    }, options);
   },
   
   /**
@@ -47,7 +44,6 @@ const fileUploadService = {
    * @returns {Promise<Array<Object>>} - Array of uploaded file information
    */
   uploadMultipleFiles: async (files, metadata = {}, options = {}) => {
-    return withErrorHandling(async () => {
       const formData = new FormData();
       
       // Add each file to form data
@@ -71,7 +67,6 @@ const fileUploadService = {
       }
       
       return response.data;
-    }, options);
   },
   
   /**
@@ -82,7 +77,6 @@ const fileUploadService = {
    * @returns {Promise<Object>} - The deletion result
    */
   deleteFile: async (fileIdOrUrl, options = {}) => {
-    return withErrorHandling(async () => {
       // Determine if we're dealing with a full URL or just an ID
       const isUrl = fileIdOrUrl.startsWith('http');
       const endpoint = isUrl 
@@ -96,9 +90,7 @@ const fileUploadService = {
       if (options.showToast !== false) {
         toast.success('File deleted successfully');
       }
-      
       return response.data;
-    }, options);
   },
   
   /**
