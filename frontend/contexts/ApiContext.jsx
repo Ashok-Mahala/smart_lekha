@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react';
-import * as api from '../smlekha';
+import * as api from './api';
 import PropTypes from 'prop-types';
 
 // Create a context for API services

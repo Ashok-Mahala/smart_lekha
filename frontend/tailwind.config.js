@@ -11,7 +11,7 @@ export default {
     './services/**/*.{js,jsx,ts,tsx}',
     './providers/**/*.{js,jsx,ts,tsx}',
     './lib/**/*.{js,jsx,ts,tsx}',
-    './smlekha/**/*.{js,jsx,ts,tsx}',
+    '/api/**/*.{js,jsx,ts,tsx}',
     './App.jsx',
     './main.jsx',
     './router.jsx',

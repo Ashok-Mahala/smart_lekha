@@ -1,4 +1,4 @@
-import api from './smlekha';
+import api from '/api';
 import { withErrorHandling } from '@/lib/errorHandler';
 import { toast } from 'sonner';
 

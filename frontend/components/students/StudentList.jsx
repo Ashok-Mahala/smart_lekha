@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { getStudents } from '../../smlekha/students';
+import { getStudents } from '.././api/students';
 import { Table, Button, Input, Spinner } from '../ui';
 import { toast } from 'sonner';
 

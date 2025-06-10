@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { getSeats, bookSeat, releaseSeat } from '../../smlekha/seats';
+import { getSeats, bookSeat, releaseSeat } from '.././api/seats';
 import { Table, Button, Input, Spinner, Badge } from '../ui';
 import { toast } from 'sonner';
 

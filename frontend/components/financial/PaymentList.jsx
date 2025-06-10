@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { getPayments, verifyPayment, refundPayment } from '../../smlekha/payments';
+import { getPayments, verifyPayment, refundPayment } from '.././api/payments';
 import { Table, Button, Input, Spinner, Badge } from '../ui';
 import { toast } from 'sonner';
 

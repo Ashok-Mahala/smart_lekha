@@ -4,7 +4,7 @@ import {
   getBookings,
   deleteBooking,
   updateBookingStatus
-} from '../../smlekha/bookings';
+} from '.././api/bookings';
 import { Table, Button, Input, Spinner, Badge, Modal, Card } from '../ui';
 import { toast } from 'sonner';
 

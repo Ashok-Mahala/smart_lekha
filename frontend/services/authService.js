@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import api from './smlekha';
+import api from '/api';
 import { withErrorHandling } from '@/lib/errorHandler';
 
 export const authCredentialsPropTypes = PropTypes.shape({
