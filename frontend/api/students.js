@@ -104,7 +104,7 @@ export const deleteStudent = async (id, options = {}) => {
 
 export const fetchStudents = async () => {
   try {
-    const response = await fetch('/api/students');
+    const response = await fetch('/smlekha/students');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -119,7 +119,7 @@ export const fetchStudents = async () => {
 
 export const fetchStudentStats = async () => {
   try {
-    const response = await fetch('/api/students/stats');
+    const response = await fetch('/smlekha/students/stats');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -141,7 +141,7 @@ export const fetchStudentStats = async () => {
 
 export const addStudent = async (studentData) => {
   try {
-    const response = await fetch('/api/students', {
+    const response = await fetch('/smlekha/students', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ export const addStudent = async (studentData) => {
 
 export const fetchOldStudents = async () => {
   try {
-    const response = await fetch('/api/students/old');
+    const response = await fetch('/smlekha/students/old');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -177,7 +177,7 @@ export const fetchOldStudents = async () => {
 
 export const reactivateStudent = async (studentId) => {
   try {
-    const response = await fetch(`/api/students/${studentId}/reactivate`, {
+    const response = await fetch(`/smlekha/students/${studentId}/reactivate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

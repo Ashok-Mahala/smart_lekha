@@ -6,7 +6,7 @@ import { API_CONFIG } from './config.js';
 import api from './axios';
 
 const API_BASE_URL = API_CONFIG.baseURL;
-const REPORTS_ENDPOINT = '/api/reports';
+const REPORTS_ENDPOINT = '/smlekha/reports';
 
 // Get daily summary report
 export const getDailySummary = async (date) => {

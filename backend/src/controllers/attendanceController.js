@@ -5,7 +5,7 @@ const Student = require('../models/Student');
 const Seat = require('../models/Seat');
 
 // @desc    Get all attendance records
-// @route   GET /api/attendance
+// @route   GET /smlekha/attendance
 // @access  Private
 exports.getAttendanceRecords = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
@@ -44,7 +44,7 @@ exports.getAttendanceRecords = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get single attendance record
-// @route   GET /api/attendance/:id
+// @route   GET /smlekha/attendance/:id
 // @access  Private
 exports.getAttendanceById = asyncHandler(async (req, res) => {
   const attendance = await Attendance.findById(req.params.id)
@@ -62,7 +62,7 @@ exports.getAttendanceById = asyncHandler(async (req, res) => {
 });
 
 // @desc    Create attendance record
-// @route   POST /api/attendance
+// @route   POST /smlekha/attendance
 // @access  Private
 exports.createAttendance = asyncHandler(async (req, res) => {
   const { student, seat, date, status, notes } = req.body;
@@ -108,7 +108,7 @@ exports.createAttendance = asyncHandler(async (req, res) => {
 });
 
 // @desc    Update attendance record
-// @route   PUT /api/attendance/:id
+// @route   PUT /smlekha/attendance/:id
 // @access  Private
 exports.updateAttendance = asyncHandler(async (req, res) => {
   const attendance = await Attendance.findById(req.params.id);
@@ -133,7 +133,7 @@ exports.updateAttendance = asyncHandler(async (req, res) => {
 });
 
 // @desc    Delete attendance record
-// @route   DELETE /api/attendance/:id
+// @route   DELETE /smlekha/attendance/:id
 // @access  Private/Admin
 exports.deleteAttendance = asyncHandler(async (req, res) => {
   const attendance = await Attendance.findById(req.params.id);
@@ -151,7 +151,7 @@ exports.deleteAttendance = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get attendance statistics
-// @route   GET /api/attendance/stats
+// @route   GET /smlekha/attendance/stats
 // @access  Private/Admin
 exports.getAttendanceStats = asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
@@ -192,7 +192,7 @@ exports.getAttendanceStats = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get student attendance history
-// @route   GET /api/attendance/student/:studentId
+// @route   GET /smlekha/attendance/student/:studentId
 // @access  Private
 exports.getStudentAttendance = asyncHandler(async (req, res) => {
   const { studentId } = req.params;

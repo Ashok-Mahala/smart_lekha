@@ -12,7 +12,7 @@ const useSeatLayout = () => {
   const fetchLayout = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/seats/layout');
+      const response = await fetch('/smlekha/seats/layout');
       
       if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
         throw new Error('API endpoint not available');
@@ -30,7 +30,7 @@ const useSeatLayout = () => {
 
   const updateLayout = async (layoutData) => {
     try {
-      const response = await fetch('/api/seats/layout', {
+      const response = await fetch('/smlekha/seats/layout', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -54,7 +54,7 @@ const useSeatLayout = () => {
 
   const addSeat = async (seatData) => {
     try {
-      const response = await fetch('/api/seats', {
+      const response = await fetch('/smlekha/seats', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -81,7 +81,7 @@ const useSeatLayout = () => {
 
   const updateSeat = async (seatId, seatData) => {
     try {
-      const response = await fetch(`/api/seats/${seatId}`, {
+      const response = await fetch(`/smlekha/seats/${seatId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -110,7 +110,7 @@ const useSeatLayout = () => {
 
   const deleteSeat = async (seatId) => {
     try {
-      const response = await fetch(`/api/seats/${seatId}`, {
+      const response = await fetch(`/smlekha/seats/${seatId}`, {
         method: 'DELETE',
       });
       

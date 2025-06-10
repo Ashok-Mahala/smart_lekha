@@ -92,7 +92,7 @@ const paymentResponsePropTypes = PropTypes.shape({
 // Remove mock data and add API call
 const fetchDuePayments = async () => {
   try {
-    const response = await fetch('/api/due-payments');
+    const response = await fetch('/smlekha/due-payments');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -165,7 +165,7 @@ const DuePaymentsPage = () => {
         setError(null);
 
         // Fetch due payments
-        const paymentsResponse = await fetch('/api/due-payments');
+        const paymentsResponse = await fetch('/smlekha/due-payments');
         if (!paymentsResponse.ok || !paymentsResponse.headers.get('content-type')?.includes('application/json')) {
           throw new Error('API endpoint not available');
         }
@@ -173,7 +173,7 @@ const DuePaymentsPage = () => {
         setDuePayments(paymentsData);
 
         // Fetch payment methods
-        const methodsResponse = await fetch('/api/payment-methods');
+        const methodsResponse = await fetch('/smlekha/payment-methods');
         if (methodsResponse.ok && methodsResponse.headers.get('content-type')?.includes('application/json')) {
           const methodsData = await methodsResponse.json();
           setPaymentMethods(methodsData);
@@ -530,7 +530,7 @@ const DuePaymentsPage = () => {
       setShowReceiptPreview(true);
 
       // Send payment data to backend
-      const response = await fetch('/api/payments', {
+      const response = await fetch('/smlekha/payments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

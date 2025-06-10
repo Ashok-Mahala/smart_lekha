@@ -27,7 +27,7 @@ export default function SecurityPage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/devices');
+      // const response = await fetch('/smlekha/devices');
       // const data = await response.json();
       // setDevices(data);
       setLoading(false);
@@ -41,7 +41,7 @@ export default function SecurityPage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/security-score');
+      // const response = await fetch('/smlekha/security-score');
       // const data = await response.json();
       // setSecurityScore(data.score);
       setSecurityScore(85); // Default value until API is implemented

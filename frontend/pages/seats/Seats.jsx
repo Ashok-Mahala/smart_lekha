@@ -30,7 +30,7 @@ const defaultLayoutConfig = {
 
 const fetchSeatStats = async () => {
   try {
-    const response = await fetch('/api/seats/stats');
+    const response = await fetch('/smlekha/seats/stats');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -68,8 +68,8 @@ const SeatsPage = () => {
       setIsLoading(true);
       try {
         const [layoutResponse, statsResponse] = await Promise.all([
-          fetch('/api/seats/layout'),
-          fetch('/api/seats/stats'),
+          fetch('/smlekha/seats/layout'),
+          fetch('/smlekha/seats/stats'),
         ]);
         
         if (!layoutResponse.ok || !statsResponse.ok) {
@@ -94,7 +94,7 @@ const SeatsPage = () => {
 
   const handleLayoutSave = async (config) => {
     try {
-      const response = await fetch('/api/layout-config', {
+      const response = await fetch('/smlekha/layout-config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -137,7 +137,7 @@ const SeatsPage = () => {
 
   const handleUpdateSeat = async (seatId, seatData) => {
     try {
-      const response = await fetch(`/api/seats/${seatId}`, {
+      const response = await fetch(`/smlekha/seats/${seatId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -158,7 +158,7 @@ const SeatsPage = () => {
       }));
       
       // Refresh stats after updating seat
-      const statsResponse = await fetch('/api/seats/stats');
+      const statsResponse = await fetch('/smlekha/seats/stats');
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setStats(statsData);
@@ -175,7 +175,7 @@ const SeatsPage = () => {
 
   const handleDeleteSeat = async (seatId) => {
     try {
-      const response = await fetch(`/api/seats/${seatId}`, {
+      const response = await fetch(`/smlekha/seats/${seatId}`, {
         method: 'DELETE',
       });
       
@@ -189,7 +189,7 @@ const SeatsPage = () => {
       }));
       
       // Refresh stats after deleting seat
-      const statsResponse = await fetch('/api/seats/stats');
+      const statsResponse = await fetch('/smlekha/seats/stats');
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setStats(statsData);

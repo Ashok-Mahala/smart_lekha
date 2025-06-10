@@ -59,7 +59,7 @@ const OldStudentsPage = ({ students = [] }) => {
       setIsLoading(true);
       try {
         // Fetch old students
-        const studentsResponse = await fetch('/api/students/old');
+        const studentsResponse = await fetch('/smlekha/students/old');
         if (!studentsResponse.ok || !studentsResponse.headers.get('content-type')?.includes('application/json')) {
           throw new Error('API endpoint not available');
         }
@@ -67,7 +67,7 @@ const OldStudentsPage = ({ students = [] }) => {
         setOldStudents(studentsData);
 
         // Fetch status types and badge variants
-        const statusResponse = await fetch('/api/status-types');
+        const statusResponse = await fetch('/smlekha/status-types');
         if (statusResponse.ok && statusResponse.headers.get('content-type')?.includes('application/json')) {
           const statusData = await statusResponse.json();
           setStatusTypes([
@@ -97,7 +97,7 @@ const OldStudentsPage = ({ students = [] }) => {
   const handleExportData = async () => {
     setIsExporting(true);
     try {
-      const response = await fetch('/api/students/old/export', {
+      const response = await fetch('/smlekha/students/old/export', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -143,7 +143,7 @@ const OldStudentsPage = ({ students = [] }) => {
 
   const handleBackToActive = async (studentId) => {
     try {
-      const response = await fetch(`/api/students/${studentId}/reactivate`, {
+      const response = await fetch(`/smlekha/students/${studentId}/reactivate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,7 +160,7 @@ const OldStudentsPage = ({ students = [] }) => {
       });
       
       // Refresh the student list
-      const fetchResponse = await fetch('/api/students/old');
+      const fetchResponse = await fetch('/smlekha/students/old');
       if (fetchResponse.ok && fetchResponse.headers.get('content-type')?.includes('application/json')) {
         const data = await fetchResponse.json();
         setOldStudents(data);

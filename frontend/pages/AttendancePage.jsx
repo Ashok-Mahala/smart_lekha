@@ -55,7 +55,7 @@ const AttendancePage = () => {
   const fetchAttendanceRecords = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/attendance/student/${selectedStudent}`);
+      const response = await fetch(`/smlekha/attendance/student/${selectedStudent}`);
       if (!response.ok) throw new Error('Failed to fetch attendance records');
       const data = await response.json();
       setAttendanceRecords(data);
@@ -73,7 +73,7 @@ const AttendancePage = () => {
   const handleRecordAttendance = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/attendance/record', {
+      const response = await fetch('/smlekha/attendance/record', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +106,7 @@ const AttendancePage = () => {
 
   const handleRecordActivity = async (type) => {
     try {
-      const response = await fetch('/api/attendance/activity', {
+      const response = await fetch('/smlekha/attendance/activity', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
-import axiosInstance from '@/api/axios';
+import axiosInstance from '@/smlekha/axios';
 import PropTypes from 'prop-types';
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';

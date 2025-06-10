@@ -52,23 +52,23 @@ mongoose
   });
 
 // Health check route
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date() });
+app.get('/smlekha/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date(), name: "Smart lekha" });
 });
 
 // API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/students', studentRoutes);
-app.use('/api/seats', seatRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/operations', operationRoutes);
-app.use('/api/system', systemRoutes);
-app.use('/api/financial', financialRoutes);
+app.use('/smlekha/auth', authRoutes);
+app.use('/smlekha/students', studentRoutes);
+app.use('/smlekha/seats', seatRoutes);
+app.use('/smlekha/bookings', bookingRoutes);
+app.use('/smlekha/payments', paymentRoutes);
+app.use('/smlekha/reports', reportRoutes);
+app.use('/smlekha/operations', operationRoutes);
+app.use('/smlekha/system', systemRoutes);
+app.use('/smlekha/financial', financialRoutes);
 
 // 404 handler for API routes
-app.use('/api/*', (req, res, next) => {
+app.use('/smlekha/*', (req, res, next) => {
   res.status(404).json({
     code: 'not_found',
     message: `Route ${req.originalUrl} not found`,

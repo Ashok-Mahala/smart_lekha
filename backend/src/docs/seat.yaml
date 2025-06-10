@@ -1,5 +1,5 @@
 paths:
-  /api/seats:
+  /smlekha/seats:
     get:
       tags:
         - Seats
@@ -119,7 +119,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Seat'
 
-  /api/seats/{id}:
+  /smlekha/seats/{id}:
     get:
       tags:
         - Seats
@@ -221,7 +221,7 @@ paths:
                   message:
                     type: string
 
-  /api/seats/availability:
+  /smlekha/seats/availability:
     get:
       tags:
         - Seats
@@ -244,7 +244,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Seat'
 
-  /api/seats/{id}/assign:
+  /smlekha/seats/{id}/assign:
     post:
       tags:
         - Seats
@@ -279,7 +279,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Seat'
 
-  /api/seats/{id}/release:
+  /smlekha/seats/{id}/release:
     post:
       tags:
         - Seats
@@ -302,7 +302,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Seat'
 
-  /api/seats/stats:
+  /smlekha/seats/stats:
     get:
       tags:
         - Seats

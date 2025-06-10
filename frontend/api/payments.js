@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import PropTypes from 'prop-types';
 import api from './axios';
 
-const PAYMENTS_ENDPOINT = '/api/payments';
+const PAYMENTS_ENDPOINT = '/smlekha/payments';
 
 // Get all payments with optional filtering
 export const getPayments = async (params = {}) => {
@@ -121,7 +121,7 @@ export const paymentPropTypes = PropTypes.shape({
 
 export const fetchPayments = async () => {
   try {
-    const response = await fetch('/api/payments');
+    const response = await fetch('/smlekha/payments');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -136,7 +136,7 @@ export const fetchPayments = async () => {
 
 export const fetchDuePayments = async () => {
   try {
-    const response = await fetch('/api/payments/due');
+    const response = await fetch('/smlekha/payments/due');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -151,7 +151,7 @@ export const fetchDuePayments = async () => {
 
 export const fetchPaymentStats = async () => {
   try {
-    const response = await fetch('/api/payments/stats');
+    const response = await fetch('/smlekha/payments/stats');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');

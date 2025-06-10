@@ -4,7 +4,7 @@ import {
   getStaff,
   updateStaffRole,
   deleteStaff
-} from '../../api/staff';
+} from '../../smlekha/staff';
 import { Table, Button, Input, Spinner, Badge, Modal } from '../ui';
 import { toast } from 'sonner';
 

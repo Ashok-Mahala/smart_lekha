@@ -15,7 +15,7 @@ const DashboardLayout = ({ children }) => {
       try {
         setIsLoading(true);
         // Replace with actual API call
-        // const response = await fetch('/api/properties');
+        // const response = await fetch('/smlekha/properties');
         // const data = await response.json();
         // If properties are loaded and there's at least one
         if (properties.length > 0) {

@@ -29,19 +29,19 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // API Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
+app.use('/smlekha-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
 // Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/students', studentRoutes);
-app.use('/api/seats', seatRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/operations', operationRoutes);
-app.use('/api/financial', financialRoutes);
-app.use('/api/system', systemRoutes);
+app.use('/smlekha/auth', authRoutes);
+app.use('/smlekha/students', studentRoutes);
+app.use('/smlekha/seats', seatRoutes);
+app.use('/smlekha/bookings', bookingRoutes);
+app.use('/smlekha/attendance', attendanceRoutes);
+app.use('/smlekha/payments', paymentRoutes);
+app.use('/smlekha/reports', reportRoutes);
+app.use('/smlekha/operations', operationRoutes);
+app.use('/smlekha/financial', financialRoutes);
+app.use('/smlekha/system', systemRoutes);
 
 // Error handling
 app.use(errorHandler);

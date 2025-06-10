@@ -43,35 +43,35 @@ npm start
 ## API Endpoints
 
 ### Authentication
-- POST `/api/auth/login` - Login and get JWT token
-- POST `/api/auth/verify` - Verify JWT token
+- POST `/smlekha/auth/login` - Login and get JWT token
+- POST `/smlekha/auth/verify` - Verify JWT token
 
 ### Students
-- GET `/api/students` - Get all students
-- GET `/api/students/:id` - Get student by ID
-- POST `/api/students` - Create new student
-- PUT `/api/students/:id` - Update student
-- DELETE `/api/students/:id` - Delete student
+- GET `/smlekha/students` - Get all students
+- GET `/smlekha/students/:id` - Get student by ID
+- POST `/smlekha/students` - Create new student
+- PUT `/smlekha/students/:id` - Update student
+- DELETE `/smlekha/students/:id` - Delete student
 
 ### Seats
-- GET `/api/seats` - Get all seats
-- GET `/api/seats/:id` - Get seat by ID
-- POST `/api/seats` - Create new seat
-- PUT `/api/seats/:id` - Update seat
-- POST `/api/seats/:id/book` - Book a seat
-- POST `/api/seats/:id/release` - Release a seat
+- GET `/smlekha/seats` - Get all seats
+- GET `/smlekha/seats/:id` - Get seat by ID
+- POST `/smlekha/seats` - Create new seat
+- PUT `/smlekha/seats/:id` - Update seat
+- POST `/smlekha/seats/:id/book` - Book a seat
+- POST `/smlekha/seats/:id/release` - Release a seat
 
 ### Payments
-- GET `/api/payments` - Get all payments
-- GET `/api/payments/:id` - Get payment by ID
-- POST `/api/payments` - Create new payment
-- PUT `/api/payments/:id/status` - Update payment status
-- GET `/api/payments/student/:studentId` - Get payments by student
-- GET `/api/payments/summary/monthly` - Get monthly payment summary
+- GET `/smlekha/payments` - Get all payments
+- GET `/smlekha/payments/:id` - Get payment by ID
+- POST `/smlekha/payments` - Create new payment
+- PUT `/smlekha/payments/:id/status` - Update payment status
+- GET `/smlekha/payments/student/:studentId` - Get payments by student
+- GET `/smlekha/payments/summary/monthly` - Get monthly payment summary
 
 ## Authentication
 
-All endpoints except `/api/auth/login` and `/api/auth/verify` require authentication. Include the JWT token in the Authorization header:
+All endpoints except `/smlekha/auth/login` and `/smlekha/auth/verify` require authentication. Include the JWT token in the Authorization header:
 
 ```
 Authorization: Bearer <your-token>
@@ -182,7 +182,7 @@ The API is fully documented using Swagger/OpenAPI 3.0. To access the documentati
 
 2. Navigate to:
    ```
-   http://62.72.58.243:5000/api-docs
+   http://62.72.58.243:5000/smlekha-docs
    ```
 
 3. You can test endpoints directly from the Swagger UI:

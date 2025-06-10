@@ -58,7 +58,7 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
     const fetchNotifications = async () => {
       try {
         // Replace with actual API call
-        // const response = await fetch('/api/notifications');
+        // const response = await fetch('/smlekha/notifications');
         // const data = await response.json();
         // setNotifications(data);
       } catch (error) {
@@ -69,7 +69,7 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
     const fetchUserProfile = async () => {
       try {
         // Replace with actual API call
-        // const response = await fetch('/api/user-profile');
+        // const response = await fetch('/smlekha/user-profile');
         // const data = await response.json();
         // setAdminUser(data);
       } catch (error) {
@@ -117,18 +117,15 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
     navigate("/admin/team");
   }, [navigate]);
 
-  const handleLogout = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      // In real app, call your logout API
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API call
-      navigate("/auth/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [navigate]);
+  const handleLogout = async () => {
+  try {
+    await authService.signOut();
+    navigate('/login'); // or router.push('/login');
+  } catch (err) {
+    console.error('Logout failed:', err);
+    navigate('/login'); // still redirect to login even if logout request fails
+  }
+};
 
   return (
     <div className="flex items-center justify-between w-full px-4 py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">

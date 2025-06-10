@@ -50,7 +50,7 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch('/api/seats');
+        const response = await fetch('/smlekha/seats');
         
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
           throw new Error('API endpoint not available');
@@ -131,7 +131,7 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
     }
 
     try {
-      const response = await fetch(`/api/seats/${selectedSeatForPreBook.id}/reserve`, {
+      const response = await fetch(`/smlekha/seats/${selectedSeatForPreBook.id}/reserve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -205,7 +205,7 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
     }
 
     try {
-      const response = await fetch(`/api/seats/${selectedAvailableSeat.id}/book`, {
+      const response = await fetch(`/smlekha/seats/${selectedAvailableSeat.id}/book`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

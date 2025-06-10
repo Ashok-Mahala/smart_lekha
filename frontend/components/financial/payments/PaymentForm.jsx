@@ -69,7 +69,7 @@ const PaymentForm = ({ onClose }) => {
         amount: parseFloat(formData.amount)
       };
 
-      const response = await fetch('/api/payments', {
+      const response = await fetch('/smlekha/payments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +106,7 @@ const PaymentForm = ({ onClose }) => {
     if (studentId) {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/students/${studentId}`);
+        const response = await fetch(`/smlekha/students/${studentId}`);
         
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
           throw new Error('Failed to fetch student data');

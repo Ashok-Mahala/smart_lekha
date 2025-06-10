@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // API Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
+app.use('/smlekha-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
 // Simple health check route
 app.get('/health', (req, res) => {
@@ -21,5 +21,5 @@ app.get('/health', (req, res) => {
 const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`Simple server running on port ${PORT}`);
-  console.log(`API Documentation available at http://localhost:${PORT}/api-docs`);
+  console.log(`API Documentation available at http://localhost:${PORT}/smlekha-docs`);
 }); 

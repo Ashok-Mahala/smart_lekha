@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
-import { handleApiResponse } from '@/api/axios';
-import api from '@/api/axios';
+import { handleApiResponse } from '@/smlekha/axios';
+import api from '@/smlekha/axios';
 import PropTypes from 'prop-types';
 
 // Initial state
@@ -83,7 +83,7 @@ const StudentProvider = ({ children }) => {
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/students');
+      const response = await fetch('/smlekha/students');
       
       if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
         throw new Error('API endpoint not available');
@@ -101,7 +101,7 @@ const StudentProvider = ({ children }) => {
 
   const fetchStudentStats = async () => {
     try {
-      const response = await fetch('/api/students/stats');
+      const response = await fetch('/smlekha/students/stats');
       
       if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
         throw new Error('API endpoint not available');
@@ -117,7 +117,7 @@ const StudentProvider = ({ children }) => {
 
   const addStudent = async (studentData) => {
     try {
-      const response = await fetch('/api/students', {
+      const response = await fetch('/smlekha/students', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +140,7 @@ const StudentProvider = ({ children }) => {
 
   const updateStudent = async (studentId, studentData) => {
     try {
-      const response = await fetch(`/api/students/${studentId}`, {
+      const response = await fetch(`/smlekha/students/${studentId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -167,7 +167,7 @@ const StudentProvider = ({ children }) => {
 
   const deleteStudent = async (studentId) => {
     try {
-      const response = await fetch(`/api/students/${studentId}`, {
+      const response = await fetch(`/smlekha/students/${studentId}`, {
         method: 'DELETE',
       });
       

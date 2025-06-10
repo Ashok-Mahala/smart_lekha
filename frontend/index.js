@@ -20,13 +20,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/students', require('./routes/students'));
-app.use('/api/properties', require('./routes/properties'));
-app.use('/api/bookings', require('./routes/bookings'));
-app.use('/api/payments', require('./routes/payments'));
-app.use('/api/reports', require('./routes/reports'));
+app.use('/smlekha/auth', require('./routes/auth'));
+app.use('/smlekha/users', require('./routes/users'));
+app.use('/smlekha/students', require('./routes/students'));
+app.use('/smlekha/properties', require('./routes/properties'));
+app.use('/smlekha/bookings', require('./routes/bookings'));
+app.use('/smlekha/payments', require('./routes/payments'));
+app.use('/smlekha/reports', require('./routes/reports'));
 
 // Error handling
 app.use(errorHandler);

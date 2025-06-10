@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Sofa, Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import PropTypes from 'prop-types';
-import { getAllSeats } from "@/api/seats";
+import { getAllSeats } from "@/smlekha/seats";
 
 // Individual seat component for better reusability
 const SeatItem = ({ seat, selected, onSelect }) => {

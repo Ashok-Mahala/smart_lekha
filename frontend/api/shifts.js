@@ -130,7 +130,7 @@ export const shiftPropTypes = PropTypes.shape({
 
 export const fetchShifts = async () => {
   try {
-    const response = await fetch('/api/shifts');
+    const response = await fetch('/smlekha/shifts');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -145,7 +145,7 @@ export const fetchShifts = async () => {
 
 export const fetchShiftStats = async () => {
   try {
-    const response = await fetch('/api/shifts/stats');
+    const response = await fetch('/smlekha/shifts/stats');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');

@@ -73,7 +73,7 @@ import PropTypes from 'prop-types';
 // Remove empty expenses array and add API call
 const fetchExpenses = async () => {
   try {
-    const response = await fetch('/api/expenses');
+    const response = await fetch('/smlekha/expenses');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');

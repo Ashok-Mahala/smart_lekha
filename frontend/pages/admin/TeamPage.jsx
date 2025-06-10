@@ -42,7 +42,7 @@ export default function TeamPage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/team-members');
+      // const response = await fetch('/smlekha/team-members');
       // const data = await response.json();
       // setTeamMembers(data);
       setLoading(false);
@@ -56,7 +56,7 @@ export default function TeamPage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/team-activity');
+      // const response = await fetch('/smlekha/team-activity');
       // const data = await response.json();
       // setTeamActivity(data);
       setLoading(false);
@@ -70,7 +70,7 @@ export default function TeamPage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/properties');
+      // const response = await fetch('/smlekha/properties');
       // const data = await response.json();
       // setProperties(data);
       setLoading(false);

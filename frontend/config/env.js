@@ -30,7 +30,7 @@ export const ENV = {
   NODE_ENV: getEnvVar('MODE', 'development'),
   
   // API configuration
-  API_URL: getEnvVar('VITE_API_URL', 'http://62.72.58.243:5000/api'),
+  API_URL: getEnvVar('VITE_API_URL', 'http://62.72.58.243:5000/smlekha'),
   WS_URL: getEnvVar('VITE_WS_URL', 'ws://62.72.58.243:5000'),
   
   // Feature flags

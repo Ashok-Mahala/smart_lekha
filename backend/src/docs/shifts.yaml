@@ -1,5 +1,5 @@
 paths:
-  /api/shifts:
+  /smlekha/shifts:
     get:
       tags:
         - Shifts
@@ -116,7 +116,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Shift'
 
-  /api/shifts/{id}:
+  /smlekha/shifts/{id}:
     get:
       tags:
         - Shifts
@@ -223,7 +223,7 @@ paths:
                   message:
                     type: string
 
-  /api/shifts/zone/{zoneId}:
+  /smlekha/shifts/zone/{zoneId}:
     get:
       tags:
         - Shifts
@@ -252,7 +252,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Shift'
 
-  /api/shifts/schedule:
+  /smlekha/shifts/schedule:
     get:
       tags:
         - Shifts
@@ -281,7 +281,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Shift'
 
-  /api/shifts/staff/{staffId}:
+  /smlekha/shifts/staff/{staffId}:
     get:
       tags:
         - Shifts
@@ -316,7 +316,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Shift'
 
-  /api/shifts/property/{propertyId}:
+  /smlekha/shifts/property/{propertyId}:
     get:
       tags:
         - Shifts
@@ -339,7 +339,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Shift'
 
-  /api/shifts/{id}/status:
+  /smlekha/shifts/{id}/status:
     put:
       tags:
         - Shifts
@@ -380,7 +380,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Shift'
 
-  /api/shifts/active:
+  /smlekha/shifts/active:
     get:
       tags:
         - Shifts
@@ -396,7 +396,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Shift'
 
-  /api/shifts/availability:
+  /smlekha/shifts/availability:
     get:
       tags:
         - Shifts
@@ -420,7 +420,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/ShiftAvailability'
 
-  /api/shifts/stats:
+  /smlekha/shifts/stats:
     get:
       tags:
         - Shifts

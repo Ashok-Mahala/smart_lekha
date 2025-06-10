@@ -8,8 +8,8 @@ import {
 } from '@/lib/errorHandler';
 
 // Get API URL from environment variables with a fallback
-// const API_URL = import.meta.env.VITE_API_URL || 'http://62.72.58.243:5000/api';
-const API_URL = 'http://62.72.58.243:5000/api';
+// const API_URL = import.meta.env.VITE_API_URL || 'http://62.72.58.243:5000/smlekha';
+const API_URL = 'http://62.72.58.243:5000/smlekha';
 // Log the API URL being used (helpful for debugging)
 console.log('API URL:', API_URL);
 

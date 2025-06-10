@@ -322,7 +322,7 @@ const StudentsPage = () => {
   // Add the missing fetchShifts function
   const fetchShifts = async () => {
     try {
-      const response = await fetch('/api/shifts');
+      const response = await fetch('/smlekha/shifts');
       
       if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
         throw new Error('API endpoint not available');
@@ -342,7 +342,7 @@ const StudentsPage = () => {
 
   const fetchStudentStats = async () => {
     try {
-      const response = await fetch('/api/students/stats');
+      const response = await fetch('/smlekha/students/stats');
       
       if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
         throw new Error('API endpoint not available');
@@ -493,7 +493,7 @@ const StudentsPage = () => {
   const fetchStudents = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/students');
+      const response = await fetch('/smlekha/students');
       
       if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
         throw new Error('API endpoint not available');
@@ -503,7 +503,7 @@ const StudentsPage = () => {
       setStudents(students);
       
       // Fetch stats separately
-      const statsResponse = await fetch('/api/students/stats');
+      const statsResponse = await fetch('/smlekha/students/stats');
       if (statsResponse.ok && statsResponse.headers.get('content-type')?.includes('application/json')) {
         const stats = await statsResponse.json();
         setStats(stats);

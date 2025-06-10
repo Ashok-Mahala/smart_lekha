@@ -5,7 +5,7 @@ const Seat = require('../models/Seat');
 const Student = require('../models/Student');
 
 // @desc    Get all bookings
-// @route   GET /api/bookings
+// @route   GET /smlekha/bookings
 // @access  Private
 exports.getBookings = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
@@ -37,7 +37,7 @@ exports.getBookings = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get single booking
-// @route   GET /api/bookings/:id
+// @route   GET /smlekha/bookings/:id
 // @access  Private
 exports.getBookingById = asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id)
@@ -55,7 +55,7 @@ exports.getBookingById = asyncHandler(async (req, res) => {
 });
 
 // @desc    Create new booking
-// @route   POST /api/bookings
+// @route   POST /smlekha/bookings
 // @access  Private
 exports.createBooking = asyncHandler(async (req, res) => {
   const { student, seat, startDate, endDate, purpose } = req.body;
@@ -112,7 +112,7 @@ exports.createBooking = asyncHandler(async (req, res) => {
 });
 
 // @desc    Update booking
-// @route   PUT /api/bookings/:id
+// @route   PUT /smlekha/bookings/:id
 // @access  Private
 exports.updateBooking = asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id);
@@ -142,7 +142,7 @@ exports.updateBooking = asyncHandler(async (req, res) => {
 });
 
 // @desc    Delete booking
-// @route   DELETE /api/bookings/:id
+// @route   DELETE /smlekha/bookings/:id
 // @access  Private/Admin
 exports.deleteBooking = asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id);
@@ -169,7 +169,7 @@ exports.deleteBooking = asyncHandler(async (req, res) => {
 });
 
 // @desc    Cancel booking
-// @route   PUT /api/bookings/:id/cancel
+// @route   PUT /smlekha/bookings/:id/cancel
 // @access  Private
 exports.cancelBooking = asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id);
@@ -201,7 +201,7 @@ exports.cancelBooking = asyncHandler(async (req, res) => {
 });
 
 // @desc    Complete booking
-// @route   PUT /api/bookings/:id/complete
+// @route   PUT /smlekha/bookings/:id/complete
 // @access  Private
 exports.completeBooking = asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id);
@@ -233,7 +233,7 @@ exports.completeBooking = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get booking statistics
-// @route   GET /api/bookings/stats
+// @route   GET /smlekha/bookings/stats
 // @access  Private/Admin
 exports.getBookingStats = asyncHandler(async (req, res) => {
   const stats = await Booking.aggregate([

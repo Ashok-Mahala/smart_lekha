@@ -79,7 +79,7 @@ export const paymentResponsePropTypes = PropTypes.shape({
 // Remove mock data and add API call
 const fetchPayments = async () => {
   try {
-    const response = await fetch('/api/payments');
+    const response = await fetch('/smlekha/payments');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -420,7 +420,7 @@ const PaymentsPage = () => {
       setCurrentReceipt(paymentRecord);
       setShowReceiptPreview(true);
 
-      const response = await fetch('/api/payments', {
+      const response = await fetch('/smlekha/payments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

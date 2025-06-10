@@ -71,7 +71,7 @@ const QuickCollection = ({ onClose }) => {
 
       setIsLoadingStudent(true);
       try {
-        const response = await fetch(`/api/students/${formData.studentId}`);
+        const response = await fetch(`/smlekha/students/${formData.studentId}`);
         
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
           throw new Error('Failed to fetch student data');
@@ -117,7 +117,7 @@ const QuickCollection = ({ onClose }) => {
       }
 
       // Submit payment to API
-      const response = await fetch('/api/payments/collect', {
+      const response = await fetch('/smlekha/payments/collect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -157,7 +157,7 @@ const QuickCollection = ({ onClose }) => {
   // Generate receipt
   const generateReceipt = async (data) => {
     try {
-      const response = await fetch(`/api/receipts/generate`, {
+      const response = await fetch(`/smlekha/receipts/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

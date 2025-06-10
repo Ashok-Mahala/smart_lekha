@@ -1,6 +1,6 @@
 import api from './axios';
 
-const ZONES_ENDPOINT = '/api/zones';
+const ZONES_ENDPOINT = '/smlekha/zones';
 
 // Get all zones
 export const getZones = async (params = {}) => {
@@ -114,7 +114,7 @@ export const scheduleZoneMaintenance = async (zoneId, maintenanceData) => {
 
 export const fetchZoneStats = async () => {
   try {
-    const response = await fetch('/api/zones/stats');
+    const response = await fetch('/smlekha/zones/stats');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');

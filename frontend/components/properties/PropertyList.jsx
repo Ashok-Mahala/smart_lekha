@@ -4,7 +4,7 @@ import {
   getProperties,
   deleteProperty,
   updatePropertySettings
-} from '../../api/properties';
+} from '../../smlekha/properties';
 import { Table, Button, Input, Spinner, Badge, Modal, Card } from '../ui';
 import { toast } from 'sonner';
 

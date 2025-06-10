@@ -22,7 +22,7 @@ const OccupancyChart = ({ className }) => {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch('/api/occupancy');
+        const response = await fetch('/smlekha/occupancy');
         
         // If the response is not OK or returns HTML instead of JSON
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {

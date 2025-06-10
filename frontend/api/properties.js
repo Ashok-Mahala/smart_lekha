@@ -1,6 +1,6 @@
 import api from './axios';
 
-const PROPERTIES_ENDPOINT = '/api/properties';
+const PROPERTIES_ENDPOINT = '/smlekha/properties';
 
 // Get all properties
 export const getProperties = async (params = {}) => {

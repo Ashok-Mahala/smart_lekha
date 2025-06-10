@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { handleApiResponse } from '@/api/axios';
-import api from '@/api/axios';
+import { handleApiResponse } from '@/smlekha/axios';
+import api from '@/smlekha/axios';
 import PropTypes from 'prop-types';
 
 const AuthContext = createContext();

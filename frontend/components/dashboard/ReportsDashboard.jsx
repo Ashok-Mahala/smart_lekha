@@ -8,7 +8,7 @@ import {
   getPaymentSummaryReport,
   exportReportToPDF,
   exportReportToExcel
-} from '../../api/reports';
+} from '../../smlekha/reports';
 import { Card, Button, Select, DateRangePicker, Spinner } from '../ui';
 import { toast } from 'sonner';
 import {

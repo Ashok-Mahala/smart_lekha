@@ -37,7 +37,7 @@ const StudentBookingPage = () => {
     const fetchBookings = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/bookings');
+        const response = await fetch('/smlekha/bookings');
         
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
           throw new Error('API endpoint not available');
@@ -108,7 +108,7 @@ const StudentBookingPage = () => {
 
   const handleCreateBooking = async (bookingData) => {
     try {
-      const response = await fetch('/api/bookings', {
+      const response = await fetch('/smlekha/bookings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +138,7 @@ const StudentBookingPage = () => {
 
   const handleUpdateBooking = async (bookingId, bookingData) => {
     try {
-      const response = await fetch(`/api/bookings/${bookingId}`, {
+      const response = await fetch(`/smlekha/bookings/${bookingId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -172,7 +172,7 @@ const StudentBookingPage = () => {
 
   const handleDeleteBooking = async (bookingId) => {
     try {
-      const response = await fetch(`/api/bookings/${bookingId}`, {
+      const response = await fetch(`/smlekha/bookings/${bookingId}`, {
         method: 'DELETE',
       });
       

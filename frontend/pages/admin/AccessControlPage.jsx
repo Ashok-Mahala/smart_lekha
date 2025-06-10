@@ -38,7 +38,7 @@ export default function AccessControlPage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/roles');
+      // const response = await fetch('/smlekha/roles');
       // const data = await response.json();
       // setRoles(data);
       setLoading(false);
@@ -52,7 +52,7 @@ export default function AccessControlPage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/permissions');
+      // const response = await fetch('/smlekha/permissions');
       // const data = await response.json();
       // setPermissions(data);
       setLoading(false);
@@ -66,7 +66,7 @@ export default function AccessControlPage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/access-logs');
+      // const response = await fetch('/smlekha/access-logs');
       // const data = await response.json();
       // setAccessLogs(data);
       setLoading(false);

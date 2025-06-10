@@ -1,6 +1,6 @@
 export const login = async (credentials) => {
   try {
-    const response = await fetch('/api/auth/login', {
+    const response = await fetch('/smlekha/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -24,29 +24,33 @@ export const login = async (credentials) => {
 };
 
 export const logout = async () => {
+  // Remove tokens immediately
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+
   try {
-    const response = await fetch('/api/auth/logout', {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/smlekha/auth/logout', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      },
+        'Authorization': `Bearer ${token}`
+      }
     });
-    
+
     if (!response.ok) {
-      throw new Error('Logout failed');
+      console.warn('Server logout failed with:', response.status);
     }
-    
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-  } catch (error) {
-    console.error('Error logging out:', error);
-    throw error;
+  } catch (err) {
+    console.error('Logout request error:', err);
+  } finally {
+    window.location.href = '/login';
   }
 };
 
+
 export const register = async (userData) => {
   try {
-    const response = await fetch('/api/auth/register', {
+    const response = await fetch('/smlekha/auth/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -71,7 +75,7 @@ export const register = async (userData) => {
 
 export const forgotPassword = async (email) => {
   try {
-    const response = await fetch('/api/auth/forgot-password', {
+    const response = await fetch('/smlekha/auth/forgot-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -90,7 +94,7 @@ export const forgotPassword = async (email) => {
 
 export const resetPassword = async (token, password) => {
   try {
-    const response = await fetch('/api/auth/reset-password', {
+    const response = await fetch('/smlekha/auth/reset-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -109,7 +113,7 @@ export const resetPassword = async (token, password) => {
 
 export const verifyEmail = async (token) => {
   try {
-    const response = await fetch('/api/auth/verify-email', {
+    const response = await fetch('/smlekha/auth/verify-email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -128,7 +132,7 @@ export const verifyEmail = async (token) => {
 
 export const refreshToken = async () => {
   try {
-    const response = await fetch('/api/auth/refresh-token', {
+    const response = await fetch('/smlekha/auth/refresh-token', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,

@@ -22,7 +22,7 @@ const StudentTable = () => {
         setError(null);
 
         // Fetch students
-        const studentsResponse = await fetch('/api/students');
+        const studentsResponse = await fetch('/smlekha/students');
         if (!studentsResponse.ok || !studentsResponse.headers.get('content-type')?.includes('application/json')) {
           throw new Error('API endpoint not available');
         }
@@ -30,7 +30,7 @@ const StudentTable = () => {
         setStudents(studentsData);
 
         // Fetch status types and colors
-        const statusResponse = await fetch('/api/status-types');
+        const statusResponse = await fetch('/smlekha/status-types');
         if (statusResponse.ok && statusResponse.headers.get('content-type')?.includes('application/json')) {
           const statusData = await statusResponse.json();
           setStatusTypes(statusData.types);
@@ -38,7 +38,7 @@ const StudentTable = () => {
         }
 
         // Fetch priority badges
-        const priorityResponse = await fetch('/api/priority-badges');
+        const priorityResponse = await fetch('/smlekha/priority-badges');
         if (priorityResponse.ok && priorityResponse.headers.get('content-type')?.includes('application/json')) {
           const priorityData = await priorityResponse.json();
           setPriorityBadges(priorityData);

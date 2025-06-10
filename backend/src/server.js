@@ -36,7 +36,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Routes
-app.use('/api', routes);
+app.use('/smlekha', routes);
 
 // Error handling
 app.use(notFoundHandler);

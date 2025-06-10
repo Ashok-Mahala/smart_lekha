@@ -1,5 +1,5 @@
 paths:
-  /api/operations:
+  /smlekha/operations:
     get:
       tags:
         - Operations
@@ -131,7 +131,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Operation'
 
-  /api/operations/{id}:
+  /smlekha/operations/{id}:
     get:
       tags:
         - Operations
@@ -236,7 +236,7 @@ paths:
                   data:
                     type: object
 
-  /api/operations/{id}/status:
+  /smlekha/operations/{id}/status:
     put:
       tags:
         - Operations
@@ -279,7 +279,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Operation'
 
-  /api/operations/stats:
+  /smlekha/operations/stats:
     get:
       tags:
         - Operations

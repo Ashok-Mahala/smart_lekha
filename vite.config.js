@@ -46,10 +46,10 @@ export default defineConfig(({ command, mode }) => {
       open: true,
       proxy: {
         // Proxy API requests to backend during development
-        '/api': {
+        '/smlekha': {
           target: env.VITE_API_URL || 'http://localhost:5000',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, '')
+          rewrite: (path) => path.replace(/^\/smlekha/, '')
         }
       }
     }

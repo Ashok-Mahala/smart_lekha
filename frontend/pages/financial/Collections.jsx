@@ -70,7 +70,7 @@ import 'jspdf-autotable';
 // Remove empty collections array and add API call
 const fetchCollections = async () => {
   try {
-    const response = await fetch('/api/collections');
+    const response = await fetch('/smlekha/collections');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');

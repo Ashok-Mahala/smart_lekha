@@ -22,16 +22,16 @@ The API documentation is organized into multiple YAML files, each focusing on a 
 
 ## How to Access the Documentation
 
-The Swagger documentation is available at `/api-docs` when the server is running. For example:
+The Swagger documentation is available at `/smlekha-docs` when the server is running. For example:
 
-- Development: `http://62.72.58.243:5000/api-docs`
-- Production: `https://yourdomain.com/api-docs`
+- Development: `http://62.72.58.243:5000/smlekha-docs`
+- Production: `https://yourdomain.com/smlekha-docs`
 
 ## Authentication
 
 Most API endpoints require authentication. The API uses JWT (JSON Web Token) for authentication. To authenticate:
 
-1. Obtain a token by sending a POST request to `/api/auth/login` with your credentials.
+1. Obtain a token by sending a POST request to `/smlekha/auth/login` with your credentials.
 2. Include the token in the Authorization header of subsequent requests: `Authorization: Bearer YOUR_TOKEN`
 
 ## Common Response Formats
@@ -73,7 +73,7 @@ When adding new endpoints or resources:
 After making changes to the documentation, you can validate it by:
 
 1. Starting the server
-2. Accessing the Swagger UI at `/api-docs`
+2. Accessing the Swagger UI at `/smlekha-docs`
 3. Testing the documented endpoints directly through the UI
 
 ## Best Practices

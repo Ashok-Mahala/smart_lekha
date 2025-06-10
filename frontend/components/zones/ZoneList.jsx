@@ -4,7 +4,7 @@ import {
   getZones,
   deleteZone,
   updateZoneSettings
-} from '../../api/zones';
+} from '../../smlekha/zones';
 import { Table, Button, Input, Spinner, Badge, Modal, Card } from '../ui';
 import { toast } from 'sonner';
 

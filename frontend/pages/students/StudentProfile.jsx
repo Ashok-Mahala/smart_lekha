@@ -81,7 +81,7 @@ const StudentProfile = () => {
     const fetchStudentData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/students/${id}`);
+        const response = await fetch(`/smlekha/students/${id}`);
         
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
           throw new Error('API endpoint not available');
@@ -114,7 +114,7 @@ const StudentProfile = () => {
   const handleSave = async () => {
     try {
       setIsSubmitting(true);
-      const response = await fetch(`/api/students/${id}`, {
+      const response = await fetch(`/smlekha/students/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

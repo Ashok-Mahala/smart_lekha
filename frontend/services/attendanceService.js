@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import api from './api';
+import api from './smlekha';
 
 export const attendanceRecordPropTypes = PropTypes.shape({
   id: PropTypes.string.isRequired,

@@ -25,7 +25,7 @@ export const formatSeatsForRow = (seats, rowNumber) => {
 // Get all seats
 export const getAllSeats = async () => {
   try {
-    const response = await fetch('/api/seats');
+    const response = await fetch('/smlekha/seats');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -42,7 +42,7 @@ export const getAllSeats = async () => {
 // Get seat by ID
 export const getSeatById = async (id) => {
   try {
-    const response = await fetch(`/api/seats/${id}`);
+    const response = await fetch(`/smlekha/seats/${id}`);
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -59,7 +59,7 @@ export const getSeatById = async (id) => {
 // Get seats by floor
 export const getSeatsByFloor = async (floor) => {
   try {
-    const response = await fetch(`/api/seats/floor/${floor}`);
+    const response = await fetch(`/smlekha/seats/floor/${floor}`);
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -76,7 +76,7 @@ export const getSeatsByFloor = async (floor) => {
 // Get available seats
 export const getAvailableSeats = async () => {
   try {
-    const response = await fetch('/api/seats/available');
+    const response = await fetch('/smlekha/seats/available');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
@@ -93,7 +93,7 @@ export const getAvailableSeats = async () => {
 // Reserve seat
 export const reserveSeat = async (seatId, studentId, startTime, endTime) => {
   try {
-    const response = await fetch(`/api/seats/${seatId}/reserve`, {
+    const response = await fetch(`/smlekha/seats/${seatId}/reserve`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -122,7 +122,7 @@ export const reserveSeat = async (seatId, studentId, startTime, endTime) => {
 // Release seat
 export const releaseSeat = async (seatId) => {
   try {
-    const response = await fetch(`/api/seats/${seatId}/release`, {
+    const response = await fetch(`/smlekha/seats/${seatId}/release`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -146,7 +146,7 @@ export const releaseSeat = async (seatId) => {
 // Mark seat as maintenance
 export const markSeatMaintenance = async (seatId, isInMaintenance) => {
   try {
-    const response = await fetch(`/api/seats/${seatId}/maintenance`, {
+    const response = await fetch(`/smlekha/seats/${seatId}/maintenance`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

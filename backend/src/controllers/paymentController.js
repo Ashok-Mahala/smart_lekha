@@ -4,7 +4,7 @@ const Payment = require('../models/Payment');
 const Student = require('../models/Student');
 
 // @desc    Get all payments
-// @route   GET /api/payments
+// @route   GET /smlekha/payments
 // @access  Private
 exports.getPayments = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
@@ -40,7 +40,7 @@ exports.getPayments = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get single payment
-// @route   GET /api/payments/:id
+// @route   GET /smlekha/payments/:id
 // @access  Private
 exports.getPaymentById = asyncHandler(async (req, res) => {
   const payment = await Payment.findById(req.params.id)
@@ -57,7 +57,7 @@ exports.getPaymentById = asyncHandler(async (req, res) => {
 });
 
 // @desc    Create payment
-// @route   POST /api/payments
+// @route   POST /smlekha/payments
 // @access  Private
 exports.createPayment = asyncHandler(async (req, res) => {
   const { student, amount, type, description, paymentMethod } = req.body;
@@ -85,7 +85,7 @@ exports.createPayment = asyncHandler(async (req, res) => {
 });
 
 // @desc    Update payment
-// @route   PUT /api/payments/:id
+// @route   PUT /smlekha/payments/:id
 // @access  Private
 exports.updatePayment = asyncHandler(async (req, res) => {
   const payment = await Payment.findById(req.params.id);
@@ -115,7 +115,7 @@ exports.updatePayment = asyncHandler(async (req, res) => {
 });
 
 // @desc    Delete payment
-// @route   DELETE /api/payments/:id
+// @route   DELETE /smlekha/payments/:id
 // @access  Private/Admin
 exports.deletePayment = asyncHandler(async (req, res) => {
   const payment = await Payment.findById(req.params.id);
@@ -133,7 +133,7 @@ exports.deletePayment = asyncHandler(async (req, res) => {
 });
 
 // @desc    Complete payment
-// @route   PUT /api/payments/:id/complete
+// @route   PUT /smlekha/payments/:id/complete
 // @access  Private
 exports.completePayment = asyncHandler(async (req, res) => {
   const payment = await Payment.findById(req.params.id);
@@ -159,7 +159,7 @@ exports.completePayment = asyncHandler(async (req, res) => {
 });
 
 // @desc    Cancel payment
-// @route   PUT /api/payments/:id/cancel
+// @route   PUT /smlekha/payments/:id/cancel
 // @access  Private
 exports.cancelPayment = asyncHandler(async (req, res) => {
   const payment = await Payment.findById(req.params.id);
@@ -185,7 +185,7 @@ exports.cancelPayment = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get payment statistics
-// @route   GET /api/payments/stats
+// @route   GET /smlekha/payments/stats
 // @access  Private/Admin
 exports.getPaymentStats = asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
@@ -230,7 +230,7 @@ exports.getPaymentStats = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get student payment history
-// @route   GET /api/payments/student/:studentId
+// @route   GET /smlekha/payments/student/:studentId
 // @access  Private
 exports.getStudentPayments = asyncHandler(async (req, res) => {
   const { studentId } = req.params;

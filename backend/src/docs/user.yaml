@@ -1,5 +1,5 @@
 paths:
-  /api/auth/register:
+  /smlekha/auth/register:
     post:
       tags:
         - Authentication
@@ -68,7 +68,7 @@ paths:
                   code: 'DUPLICATE_EMAIL'
                   message: 'Email already exists'
 
-  /api/auth/login:
+  /smlekha/auth/login:
     post:
       tags:
         - Authentication
@@ -121,7 +121,7 @@ paths:
                   code: 'INVALID_CREDENTIALS'
                   message: 'Invalid email or password'
 
-  /api/auth/logout:
+  /smlekha/auth/logout:
     post:
       tags:
         - Authentication
@@ -144,7 +144,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
-  /api/auth/refresh-token:
+  /smlekha/auth/refresh-token:
     post:
       tags:
         - Authentication
@@ -168,7 +168,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
-  /api/users:
+  /smlekha/users:
     get:
       tags:
         - Users
@@ -228,7 +228,7 @@ paths:
         '403':
           $ref: '#/components/responses/ForbiddenError'
 
-  /api/users/{id}:
+  /smlekha/users/{id}:
     get:
       tags:
         - Users
@@ -361,7 +361,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundError'
 
-  /api/users/change-password:
+  /smlekha/users/change-password:
     post:
       tags:
         - Users
@@ -414,7 +414,7 @@ paths:
                   code: 'INVALID_PASSWORD'
                   message: 'Current password is incorrect'
 
-  /api/users/profile:
+  /smlekha/users/profile:
     get:
       tags:
         - Users

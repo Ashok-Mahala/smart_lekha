@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Textarea } from "@/components/ui/textarea";
 import PropTypes from 'prop-types';
-import { getAvailableSeats } from "@/api/seats";
+import { getAvailableSeats } from "@/smlekha/seats";
 import { useToast } from "@/components/ui/use-toast";
 
 const AddBookingPage = () => {
@@ -65,9 +65,9 @@ const AddBookingPage = () => {
       setIsLoading(true);
       try {
         const [studentsResponse, seatsResponse, shiftsResponse] = await Promise.all([
-          fetch('/api/students'),
-          fetch('/api/seats'),
-          fetch('/api/shifts'),
+          fetch('/smlekha/students'),
+          fetch('/smlekha/seats'),
+          fetch('/smlekha/shifts'),
         ]);
         
         if (!studentsResponse.ok || !seatsResponse.ok || !shiftsResponse.ok) {
@@ -185,7 +185,7 @@ const AddBookingPage = () => {
       }
 
       // Send booking data to API
-      const response = await fetch('/api/bookings', {
+      const response = await fetch('/smlekha/bookings', {
         method: 'POST',
         body: formDataObj,
       });

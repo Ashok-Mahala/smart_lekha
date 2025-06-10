@@ -35,10 +35,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { studentSchema } from '@/lib/validations';
-import { apiService } from '@/services/api';
+import { apiService } from '@/services/smlekha';
 import { handleFormErrors } from '@/lib/errorHandler';
-import { getActiveShifts } from '@/api/shifts';
-import { getAvailableSeats, getSeatsBySection } from '@/api/seats';
+import { getActiveShifts } from '@/smlekha/shifts';
+import { getAvailableSeats, getSeatsBySection } from '@/smlekha/seats';
 
 const AddStudentPage = () => {
   const navigate = useNavigate();

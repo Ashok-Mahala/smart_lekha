@@ -1,5 +1,5 @@
 paths:
-  /api/bookings:
+  /smlekha/bookings:
     get:
       tags:
         - Bookings
@@ -106,7 +106,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Booking'
 
-  /api/bookings/{id}:
+  /smlekha/bookings/{id}:
     get:
       tags:
         - Bookings
@@ -199,7 +199,7 @@ paths:
                   data:
                     type: object
 
-  /api/bookings/{id}/cancel:
+  /smlekha/bookings/{id}/cancel:
     put:
       tags:
         - Bookings
@@ -239,7 +239,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Booking'
 
-  /api/bookings/{id}/complete:
+  /smlekha/bookings/{id}/complete:
     put:
       tags:
         - Bookings
@@ -277,7 +277,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Booking'
 
-  /api/bookings/stats:
+  /smlekha/bookings/stats:
     get:
       tags:
         - Bookings

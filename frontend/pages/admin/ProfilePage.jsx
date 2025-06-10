@@ -43,7 +43,7 @@ export default function ProfilePage() {
     try {
       setLoading(true);
       // Replace with actual API call
-      // const response = await fetch('/api/user-profile');
+      // const response = await fetch('/smlekha/user-profile');
       // const data = await response.json();
       // setUser(data);
       setLoading(false);

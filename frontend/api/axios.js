@@ -32,7 +32,7 @@ api.interceptors.response.use(
 
       try {
         // Call refresh token endpoint
-        const response = await api.post('/api/auth/refresh-token');
+        const response = await api.post('/smlekha/auth/refresh-token');
         const { token } = response.data;
 
         // Update token in storage

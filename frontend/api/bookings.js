@@ -1,6 +1,6 @@
 import api from './axios';
 
-const BOOKINGS_ENDPOINT = '/api/bookings';
+const BOOKINGS_ENDPOINT = '/smlekha/bookings';
 
 // Get all bookings
 export const getBookings = async (params = {}) => {

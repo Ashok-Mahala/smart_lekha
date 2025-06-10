@@ -4,7 +4,7 @@ import {
   getShifts,
   deleteShift,
   updateShiftStatus
-} from '../../api/shifts';
+} from '../../smlekha/shifts';
 import { Table, Button, Input, Spinner, Badge, Modal, Card } from '../ui';
 import { toast } from 'sonner';
 

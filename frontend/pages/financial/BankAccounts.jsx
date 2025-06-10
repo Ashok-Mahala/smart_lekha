@@ -77,7 +77,7 @@ const BankAccounts = () => {
         setError(null);
 
         // Fetch bank accounts
-        const accountsResponse = await fetch('/api/bank-accounts');
+        const accountsResponse = await fetch('/smlekha/bank-accounts');
         if (!accountsResponse.ok || !accountsResponse.headers.get('content-type')?.includes('application/json')) {
           throw new Error('API endpoint not available');
         }
@@ -85,21 +85,21 @@ const BankAccounts = () => {
         setAccounts(accountsData);
 
         // Fetch account purposes
-        const purposesResponse = await fetch('/api/account-purposes');
+        const purposesResponse = await fetch('/smlekha/account-purposes');
         if (purposesResponse.ok && purposesResponse.headers.get('content-type')?.includes('application/json')) {
           const purposesData = await purposesResponse.json();
           setAccountPurposes(purposesData);
         }
 
         // Fetch recent transactions
-        const transactionsResponse = await fetch('/api/bank-accounts/transactions');
+        const transactionsResponse = await fetch('/smlekha/bank-accounts/transactions');
         if (transactionsResponse.ok && transactionsResponse.headers.get('content-type')?.includes('application/json')) {
           const transactionsData = await transactionsResponse.json();
           setTransactions(transactionsData);
         }
 
         // Fetch account types
-        const typesResponse = await fetch('/api/account-types');
+        const typesResponse = await fetch('/smlekha/account-types');
         if (typesResponse.ok && typesResponse.headers.get('content-type')?.includes('application/json')) {
           const typesData = await typesResponse.json();
           setAccountTypes(typesData);

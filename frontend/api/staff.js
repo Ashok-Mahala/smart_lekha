@@ -1,6 +1,6 @@
 import api from './axios';
 
-const STAFF_ENDPOINT = '/api/staff';
+const STAFF_ENDPOINT = '/smlekha/staff';
 
 // Get all staff members
 export const getStaff = async (params = {}) => {
@@ -104,7 +104,7 @@ export const updateStaffSchedule = async (id, scheduleData) => {
 
 export const fetchStaffStats = async () => {
   try {
-    const response = await fetch('/api/staff/stats');
+    const response = await fetch('/smlekha/staff/stats');
     
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw new Error('API endpoint not available');
