@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
-import { handleApiResponse } from '@/smlekha/axios';
-import api from '@/smlekha/axios';
+import { handleApiResponse } from '@/api/axios';
+import api from '@/api/axios';
 import PropTypes from 'prop-types';
 
 // Initial state

@@ -27,7 +27,7 @@ import {
   fetchOccupancyData, 
   fetchStudentActivityData,
   fetchFinancialData
-} from '@/smlekha/reports';
+} from '@/api/reports';
 
 // API Integration Types
 export const bookingPropTypes = PropTypes.shape({

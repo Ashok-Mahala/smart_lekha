@@ -37,8 +37,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { studentSchema } from '@/lib/validations';
 import { apiService } from '@/services/smlekha';
 import { handleFormErrors } from '@/lib/errorHandler';
-import { getActiveShifts } from '@/smlekha/shifts';
-import { getAvailableSeats, getSeatsBySection } from '@/smlekha/seats';
+import { getActiveShifts } from '@/api/shifts';
+import { getAvailableSeats, getSeatsBySection } from '@/api/seats';
 
 const AddStudentPage = () => {
   const navigate = useNavigate();

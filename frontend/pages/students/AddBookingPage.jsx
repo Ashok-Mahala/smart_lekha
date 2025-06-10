@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Textarea } from "@/components/ui/textarea";
 import PropTypes from 'prop-types';
-import { getAvailableSeats } from "@/smlekha/seats";
+import { getAvailableSeats } from "@/api/seats";
 import { useToast } from "@/components/ui/use-toast";
 
 const AddBookingPage = () => {

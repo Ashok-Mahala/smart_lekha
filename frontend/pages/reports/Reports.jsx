@@ -47,8 +47,8 @@ import {
   fetchOccupancyData,
   fetchStudentActivityData,
   fetchFinancialData,
-} from '@/smlekha/reports';
-import { API_CONFIG } from '@/smlekha/config';
+} from '@/api/reports';
+import { API_CONFIG } from '@/api/config';
 
 const ReportsPage = () => {
   const [dateRange, setDateRange] = useState("7days");
