@@ -25,7 +25,7 @@ router.get('/', validate(getBookingsValidation), getBookings);
 router.get('/:id', getBookingById);
 
 // Protected routes
-router.use(protect);
+// router.use(protect);
 
 router.post('/', validate(createBookingValidation), createBooking);
 router.put('/:id', validate(updateBookingValidation), updateBooking);

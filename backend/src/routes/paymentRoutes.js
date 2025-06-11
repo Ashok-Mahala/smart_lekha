@@ -28,7 +28,7 @@ router.get('/', validate(getPaymentsValidation), getPayments);
 router.get('/:id', getPaymentById);
 
 // Protected routes
-router.use(protect);
+// router.use(protect);
 
 router.post('/', validate(createPaymentValidation), createPayment);
 router.put('/:id', validate(updatePaymentValidation), updatePayment);

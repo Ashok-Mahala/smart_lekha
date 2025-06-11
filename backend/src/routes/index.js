@@ -11,6 +11,7 @@ const reportRoutes = require('./reportRoutes');
 const operationRoutes = require('./operationRoutes');
 const systemRoutes = require('./systemRoutes');
 const financialRoutes = require('./financialRoutes');
+const propertyRoutes = require('./propertyRoutes');
 
 // Health check route
 router.get('/health', (req, res) => {
@@ -28,6 +29,7 @@ router.use('/reports', reportRoutes);
 router.use('/operations', operationRoutes);
 router.use('/system', systemRoutes);
 router.use('/financial', financialRoutes);
+router.use('/properties', propertyRoutes);
 
 // Add more route modules here as needed
 // router.use('/users', userRoutes);

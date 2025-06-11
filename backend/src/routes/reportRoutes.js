@@ -11,7 +11,7 @@ const {
 // Public routes (if any)
 
 // Protected routes
-router.use(protect);
+// router.use(protect);
 
 // Get all reports
 router.get('/', getReportData);

@@ -28,6 +28,8 @@ import PropertiesPage from './pages/properties/Properties';
 import PropertyDetails from './pages/properties/PropertyDetails';
 import { authService } from './services/authService';
 
+
+
 const isAuthenticated = () => {
   return authService.isAuthenticated();
 };

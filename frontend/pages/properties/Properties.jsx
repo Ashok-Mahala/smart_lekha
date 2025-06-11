@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Plus, Building2, Users, Sofa, IndianRupee, Edit, Trash2, MoreVertical, LayoutGrid, List } from 'lucide-react';
+import { Search, Plus, Building2, Users, Sofa, IndianRupeeIcon, Edit, Trash2, MoreVertical, LayoutGrid, List } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,28 +17,44 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { properties } from '@/data/properties';
 import { motion } from 'framer-motion';
 import AddPropertyDialog from '@/components/properties/AddPropertyDialog';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PropTypes from 'prop-types';
+import { getProperties, createProperty } from '@/api/properties';
 
 const PropertiesPage = () => {
   const navigate = useNavigate();
   const [showAddProperty, setShowAddProperty] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProperty, setSelectedProperty] = useState(null);
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    getProperties()
+      .then((data) => setProperties(data))
+      .catch(() => toast.error('Failed to fetch properties'))
+      .finally(() => setLoading(false));
+  }, []);
 
   const filteredProperties = properties.filter(property =>
     property.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddProperty = (property) => {
-    // Here you would typically make an API call to add the property
-    const userid = localStorage.getItem('userid');
-    console.log('Adding property:,userid', property,userid);
-    toast.success("Property added successfully");
+  const handleAddProperty = async (property) => {
+    try {
+      setLoading(true);
+      const newProperty = await createProperty(property);
+      setProperties((prev) => [...prev, newProperty]);
+      toast.success('Property added successfully');
+    } catch (error) {
+      toast.error('Failed to add property');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePropertyClick = (propertyId) => {
@@ -108,7 +124,7 @@ const PropertiesPage = () => {
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <div className="flex items-center gap-3">
                     <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${property.logoColor} bg-opacity-10`}>
-                      <property.logo className="h-5 w-5" />
+                      {/* <property.logo className="h-5 w-5" /> */}
                     </div>
                     <div>
                       <CardTitle className="text-lg font-semibold">{property.name}</CardTitle>
@@ -147,10 +163,10 @@ const PropertiesPage = () => {
                       <Users className="h-4 w-4 mb-1" />
                           <span className="text-sm font-medium">{property.students} Students</span>
                     </div>
-                    <div className="flex flex-col items-center p-2 bg-muted/50 rounded-lg">
-                      <IndianRupee className="h-4 w-4 mb-1" />
-                          <span className="text-sm font-medium">₹{property.revenue.toLocaleString()}</span>
-                    </div>
+                    {/* <div className="flex flex-col items-center p-2 bg-muted/50 rounded-lg">
+                      <IndianRupeeIcon className="h-4 w-4 mb-1" />
+                      <span className="text-sm font-medium"> ₹ {property.revenue != null ? property.revenue.toLocaleString() : '0'} </span>
+                    </div> */}
                   </div>
                 </CardContent>
               </Card>
@@ -192,7 +208,7 @@ const PropertiesPage = () => {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                  <IndianRupee className="h-4 w-4 text-muted-foreground" />
+                  <IndianRupeeIcon className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">₹{totalRevenue.toLocaleString()}</div>

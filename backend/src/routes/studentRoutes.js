@@ -16,7 +16,7 @@ router.get('/stats', getStudentStats);
 router.get('/:id', getStudentById);
 
 // Protected routes (require authentication)
-router.use(protect);
+// router.use(protect);
 
 // Admin only routes
 router.use(authorize('admin'));
