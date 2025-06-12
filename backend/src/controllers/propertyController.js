@@ -6,7 +6,7 @@ const Property = require('../models/Property');
 // @route   GET /smlekha/properties
 // @access  Private
 exports.getProperties = asyncHandler(async (req, res) => {
-  const properties = await Property.find();
+  const properties = await Property.find({ user: req.user._id });
   res.status(200).json(properties);
 });
 
