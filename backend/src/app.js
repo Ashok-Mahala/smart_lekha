@@ -18,7 +18,8 @@ const reportRoutes = require('./routes/reportRoutes');
 const operationRoutes = require('./routes/operationRoutes');
 const financialRoutes = require('./routes/financialRoutes');
 const systemRoutes = require('./routes/systemRoutes');
-
+const propertyRoutes = require('./routes/propertyRoutes');
+const shiftRoutes = require('./routes/shiftRoutes');
 const app = express();
 
 // Middleware
@@ -42,6 +43,8 @@ app.use('/smlekha/reports', reportRoutes);
 app.use('/smlekha/operations', operationRoutes);
 app.use('/smlekha/financial', financialRoutes);
 app.use('/smlekha/system', systemRoutes);
+app.use('/smlekha/properties', propertyRoutes);
+app.use('/smlekha/shifts', shiftRoutes);
 
 // Error handling
 app.use(errorHandler);

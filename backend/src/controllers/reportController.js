@@ -3,6 +3,7 @@ const Student = require('../models/Student');
 const Booking = require('../models/Booking');
 const Payment = require('../models/Payment');
 const User = require('../models/User');
+const Report = require('../models/Report');
 
 const generateReport = async (req, res) => {
   try {
@@ -12,37 +13,77 @@ const generateReport = async (req, res) => {
 
     const {
       type,
-      startDate,
-      endDate,
-      filters
+      title,
+      description,
+      parameters,
+      format = 'pdf'
     } = req.body;
 
-    let reportData;
-    switch (type) {
-      case 'attendance':
-        reportData = await generateAttendanceReport(startDate, endDate, filters);
-        break;
-      case 'financial':
-        reportData = await generateFinancialReport(startDate, endDate, filters);
-        break;
-      case 'student':
-        reportData = await generateStudentReport(startDate, endDate, filters);
-        break;
-      default:
-        return res.status(400).json({ message: 'Invalid report type' });
-    }
-
-    res.json({
-      message: 'Report generated successfully',
-      report: {
-        type,
-        startDate,
-        endDate,
-        generatedAt: new Date(),
-        generatedBy: req.user._id,
-        data: reportData
-      }
+    // Create report with pending status
+    const report = new Report({
+      type,
+      title,
+      description,
+      parameters,
+      format,
+      status: 'processing',
+      generatedBy: req.user._id
     });
+
+    await report.save();
+
+    try {
+      // Generate report data based on type
+      let reportData;
+      switch (type) {
+        case 'attendance':
+          reportData = await generateAttendanceReport(parameters.startDate, parameters.endDate, parameters.filters);
+          break;
+        case 'financial':
+          reportData = await generateFinancialReport(parameters.startDate, parameters.endDate, parameters.filters);
+          break;
+        case 'student':
+          reportData = await generateStudentReport(parameters.startDate, parameters.endDate, parameters.filters);
+          break;
+        case 'occupancy':
+          reportData = await generateOccupancyReport(parameters.startDate, parameters.endDate, parameters.filters);
+          break;
+        case 'booking':
+          reportData = await generateBookingReport(parameters.startDate, parameters.endDate, parameters.filters);
+          break;
+        case 'payment':
+          reportData = await generatePaymentReport(parameters.startDate, parameters.endDate, parameters.filters);
+          break;
+        default:
+          throw new Error('Invalid report type');
+      }
+
+      // Update report with data and metadata
+      const metadata = {
+        rowCount: Array.isArray(reportData) ? reportData.length : 0,
+        generationTime: Date.now() - report.createdAt,
+        fileSize: 0 // Will be updated when file is generated
+      };
+
+      await report.setData(reportData, metadata);
+
+      // Generate file if needed
+      if (format !== 'json') {
+        const fileBuffer = await generateReportFile(report);
+        const fileUrl = await uploadReportFile(fileBuffer, report._id, format);
+        report.fileUrl = fileUrl;
+        report.metadata.fileSize = fileBuffer.length;
+        await report.save();
+      }
+
+      res.json({
+        message: 'Report generated successfully',
+        report
+      });
+    } catch (error) {
+      await report.updateStatus('failed', error.message);
+      throw error;
+    }
   } catch (error) {
     console.error('Error generating report:', error);
     res.status(500).json({ message: 'Error generating report', error: error.message });
@@ -166,8 +207,285 @@ const getReportSummary = async (req, res) => {
   }
 };
 
+const getDailySummary = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [totalStudents, bookings, payments] = await Promise.all([
+      Student.countDocuments({ status: 'active' }),
+      Booking.find({ 
+        startTime: { $gte: today },
+        status: 'active'
+      }),
+      Payment.find({
+        createdAt: { $gte: today },
+        status: 'completed'
+      })
+    ]);
+
+    const totalRevenue = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const occupancyRate = bookings.length > 0 ? (bookings.length / 100) * 100 : 0; // Assuming 100 is max capacity
+
+    res.json({
+      totalStudents,
+      peakHour: calculatePeakHour(bookings),
+      totalRevenue,
+      occupancyRate
+    });
+  } catch (error) {
+    console.error('Error fetching daily summary:', error);
+    res.status(500).json({ message: 'Error fetching daily summary', error: error.message });
+  }
+};
+
+const getOccupancyData = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const query = {
+      startTime: {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      }
+    };
+
+    const bookings = await Booking.find(query);
+    const occupancyData = processOccupancyData(bookings);
+
+    res.json(occupancyData);
+  } catch (error) {
+    console.error('Error fetching occupancy data:', error);
+    res.status(500).json({ message: 'Error fetching occupancy data', error: error.message });
+  }
+};
+
+const getRevenueData = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const query = {
+      createdAt: {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      },
+      status: 'completed'
+    };
+
+    const payments = await Payment.find(query);
+    const revenueData = processRevenueData(payments);
+
+    res.json(revenueData);
+  } catch (error) {
+    console.error('Error fetching revenue data:', error);
+    res.status(500).json({ message: 'Error fetching revenue data', error: error.message });
+  }
+};
+
+const getStudentActivityData = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const query = {
+      createdAt: {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      }
+    };
+
+    const [bookings, payments] = await Promise.all([
+      Booking.find(query).populate('studentId'),
+      Payment.find(query).populate('studentId')
+    ]);
+
+    const activityData = processStudentActivityData(bookings, payments);
+    res.json(activityData);
+  } catch (error) {
+    console.error('Error fetching student activity data:', error);
+    res.status(500).json({ message: 'Error fetching student activity data', error: error.message });
+  }
+};
+
+const getFinancialData = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const query = {
+      createdAt: {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      }
+    };
+
+    const payments = await Payment.find(query);
+    const financialData = processFinancialData(payments);
+
+    res.json(financialData);
+  } catch (error) {
+    console.error('Error fetching financial data:', error);
+    res.status(500).json({ message: 'Error fetching financial data', error: error.message });
+  }
+};
+
+const getAllReports = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const query = {
+      createdAt: {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      }
+    };
+
+    const reports = await Report.find(query)
+      .populate('generatedBy', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json(reports);
+  } catch (error) {
+    console.error('Error fetching reports:', error);
+    res.status(500).json({ message: 'Error fetching reports', error: error.message });
+  }
+};
+
+const getReportById = async (req, res) => {
+  try {
+    const report = await Report.findById(req.params.id)
+      .populate('generatedBy', 'name email');
+
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    res.json(report);
+  } catch (error) {
+    console.error('Error fetching report:', error);
+    res.status(500).json({ message: 'Error fetching report', error: error.message });
+  }
+};
+
+const createReport = async (req, res) => {
+  try {
+    const { type, title, description, parameters, format } = req.body;
+
+    const report = new Report({
+      type,
+      title,
+      description,
+      parameters,
+      format,
+      status: 'pending',
+      generatedBy: req.user._id
+    });
+
+    await report.save();
+    res.status(201).json(report);
+  } catch (error) {
+    console.error('Error creating report:', error);
+    res.status(500).json({ message: 'Error creating report', error: error.message });
+  }
+};
+
+const deleteReport = async (req, res) => {
+  try {
+    const report = await Report.findByIdAndDelete(req.params.id);
+
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    res.json({ message: 'Report deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting report:', error);
+    res.status(500).json({ message: 'Error deleting report', error: error.message });
+  }
+};
+
+const downloadReport = async (req, res) => {
+  try {
+    const report = await Report.findById(req.params.id);
+
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    if (report.status !== 'completed') {
+      return res.status(400).json({ message: 'Report is not ready for download' });
+    }
+
+    if (report.fileUrl) {
+      // If file is already generated, redirect to file URL
+      return res.redirect(report.fileUrl);
+    }
+
+    // Generate file on the fly
+    const fileBuffer = await generateReportFile(report);
+    
+    // Set appropriate headers based on format
+    const contentType = {
+      'pdf': 'application/pdf',
+      'excel': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'csv': 'text/csv',
+      'json': 'application/json'
+    }[report.format];
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename=${report.title || 'report'}.${report.format}`);
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('Error downloading report:', error);
+    res.status(500).json({ message: 'Error downloading report', error: error.message });
+  }
+};
+
+const calculatePeakHour = (bookings) => {
+  // Implementation to calculate peak hour from bookings
+  return "14:00"; // Placeholder
+};
+
+const processOccupancyData = (bookings) => {
+  // Implementation to process occupancy data
+  return {
+    daily: [{ current: 0, total: 100 }],
+    weekly: [{ current: 0, total: 100 }],
+    monthly: [{ current: 0, total: 100 }],
+    yearly: [{ current: 0, total: 100 }]
+  };
+};
+
+const processRevenueData = (payments) => {
+  // Implementation to process revenue data
+  return {
+    daily: [{ amount: 0 }],
+    weekly: [{ amount: 0 }],
+    monthly: [{ amount: 0 }],
+    yearly: [{ amount: 0 }]
+  };
+};
+
+const processStudentActivityData = (bookings, payments) => {
+  // Implementation to process student activity data
+  return [];
+};
+
+const processFinancialData = (payments) => {
+  // Implementation to process financial data
+  return [];
+};
+
+const generateReportFile = async (report) => {
+  // Implementation to generate report file
+  return Buffer.from(''); // Placeholder
+};
+
 module.exports = {
   generateReport,
   getReportData,
-  getReportSummary
+  getReportSummary,
+  getDailySummary,
+  getOccupancyData,
+  getRevenueData,
+  getStudentActivityData,
+  getFinancialData,
+  getAllReports,
+  getReportById,
+  createReport,
+  deleteReport,
+  downloadReport
 }; 
