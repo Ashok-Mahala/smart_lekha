@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
 import { useApi } from '../../hooks/useApi';
-import {
-  getProperties,
-  deleteProperty,
-  updatePropertySettings
-} from '.././api/properties';
+import { getProperties, deleteProperty, updatePropertySettings  } from '.././api/properties';
 import { Table, Button, Input, Spinner, Badge, Modal, Card } from '../ui';
 import { toast } from 'sonner';
 

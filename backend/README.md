@@ -74,7 +74,7 @@ npm start
 All endpoints except `/smlekha/auth/login` and `/smlekha/auth/verify` require authentication. Include the JWT token in the Authorization header:
 
 ```
-Authorization: Bearer <your-token>
+Authorization: bearer <your-token>
 ```
 
 # SeatFlow Backend Setup Guide
@@ -209,7 +209,7 @@ The documentation files are located in the `src/docs/` directory and are organiz
 For protected endpoints, click the "Authorize" button at the top of the page and enter your JWT token:
 
 ```
-Bearer your-jwt-token
+bearer your-jwt-token
 ```
 
 ### Adding New Documentation

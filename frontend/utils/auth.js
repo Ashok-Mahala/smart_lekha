@@ -1,4 +1,4 @@
-const TOKEN_KEY = 'auth_token';
+const TOKEN_KEY = 'token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 
 export const getToken = () => {

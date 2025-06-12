@@ -57,7 +57,7 @@ You can test endpoints directly from the Swagger UI:
 For endpoints that require authentication:
 
 1. Click the "Authorize" button at the top of the page.
-2. Enter your JWT token in the format: `Bearer your-token-here`
+2. Enter your JWT token in the format: `bearer your-token-here`
 3. Click "Authorize" and close the modal.
 4. All subsequent requests will include this token.
 

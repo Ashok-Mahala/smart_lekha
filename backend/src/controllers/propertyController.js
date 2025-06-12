@@ -25,7 +25,11 @@ exports.getPropertyById = asyncHandler(async (req, res) => {
 // @route   POST /smlekha/properties
 // @access  Private
 exports.createProperty = asyncHandler(async (req, res) => {
-  const property = await Property.create(req.body);
+  const propertyData = {
+    ...req.body,
+    user: req.user._id // This comes from your auth middleware
+  };
+  const property = await Property.create(propertyData);
   res.status(201).json(property);
 });
 

@@ -32,7 +32,7 @@ The Swagger documentation is available at `/smlekha-docs` when the server is run
 Most API endpoints require authentication. The API uses JWT (JSON Web Token) for authentication. To authenticate:
 
 1. Obtain a token by sending a POST request to `/smlekha/auth/login` with your credentials.
-2. Include the token in the Authorization header of subsequent requests: `Authorization: Bearer YOUR_TOKEN`
+2. Include the token in the Authorization header of subsequent requests: `Authorization: bearer YOUR_TOKEN`
 
 ## Common Response Formats
 
