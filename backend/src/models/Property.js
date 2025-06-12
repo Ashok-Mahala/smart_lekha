@@ -22,6 +22,11 @@ const propertySchema = new mongoose.Schema({
     avatar: { type: String }
   },
   images: [{ type: String }],
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  }
 }, {
   timestamps: true
 });
