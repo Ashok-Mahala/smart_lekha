@@ -6,6 +6,7 @@ const PROPERTIES_ENDPOINT = '/properties';
 export const getProperties = async (params = {}) => {
   try {
     const response = await api.get(PROPERTIES_ENDPOINT, { params });
+    localStorage.setItem('properties', JSON.stringify(response.data));
     return response.data;
   } catch (error) {
     throw error;

@@ -28,6 +28,7 @@ import {
   fetchStudentActivityData,
   fetchFinancialData
 } from '@/api/reports';
+import {getProperties} from '@/api/properties'
 
 // API Integration Types
 export const bookingPropTypes = PropTypes.shape({
@@ -143,13 +144,15 @@ const DashboardPage = () => {
         revenueData,
         occupancyData,
         studentActivityData,
-        financialData
+        financialData,
+        propertyData
       ] = await Promise.all([
         getDailySummary(),
         fetchRevenueData(),
         fetchOccupancyData(),
         fetchStudentActivityData(),
-        fetchFinancialData()
+        fetchFinancialData(),
+        getProperties()
       ]);
 
       setDashboardData({

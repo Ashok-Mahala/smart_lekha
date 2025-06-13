@@ -20,7 +20,6 @@ import {
   X,
   CreditCard
 } from "lucide-react";
-import { properties } from "@/data/properties";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -53,35 +52,63 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
     lastLogin: ""
   });
 
-  // Fetch notifications from API
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Load properties from localStorage on component mount
   useEffect(() => {
-    const fetchNotifications = async () => {
+    const loadProperties = () => {
       try {
-        // Replace with actual API call
-        // const response = await fetch('/smlekha/notifications');
-        // const data = await response.json();
-        // setNotifications(data);
+        setLoading(true);
+        const storedData = localStorage.getItem('properties');
+        
+        if (storedData) {
+          const parsedData = JSON.parse(storedData);
+          const formattedProperties = parsedData.map(property => ({
+            id: property._id,
+            name: property.name,
+            logo: Building2,
+            // ... other property mappings ...
+          }));
+          
+          setProperties(formattedProperties);
+
+          // Check for existing selection in localStorage
+          const storedSelected = localStorage.getItem('selected_property');
+          
+          if (storedSelected) {
+            // Use stored selection if exists
+            onPropertyChange(storedSelected);
+          } else if (formattedProperties.length > 0) {
+            // Select first property by default if no selection exists
+            const firstPropertyId = formattedProperties[0].id;
+            localStorage.setItem('selected_property', firstPropertyId);
+            onPropertyChange(firstPropertyId);
+          }
+        }
       } catch (error) {
-        console.error('Error fetching notifications:', error);
+        console.error("Error loading properties:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
-    const fetchUserProfile = async () => {
-      try {
-        // Replace with actual API call
-        // const response = await fetch('/smlekha/user-profile');
-        // const data = await response.json();
-        // setAdminUser(data);
-      } catch (error) {
-        console.error('Error fetching user profile:', error);
-      }
-    };
+    loadProperties();
+  }, [onPropertyChange]);
 
-    fetchNotifications();
-    fetchUserProfile();
-  }, []);
+  // Update localStorage whenever selectedProperty changes
+  useEffect(() => {
+    if (selectedProperty) {
+      localStorage.setItem('selected_property', selectedProperty);
+    }
+  }, [selectedProperty]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+  // Ensure we have a selected property when properties load
+  const selectedPropertyData = properties.find(p => p.id === selectedProperty) || 
+                              (properties.length > 0 ? properties[0] : null);
+  const PropertyLogo = selectedPropertyData?.logo || Building2;
 
   const handleMarkAsRead = (id) => {
     setNotifications(notifications.map(n => 
@@ -96,9 +123,6 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
   const filteredNotifications = notifications.filter(n => 
     filter === 'all' ? true : !n.isRead
   );
-
-  const selectedPropertyData = properties.find(p => p.id === selectedProperty);
-  const PropertyLogo = selectedPropertyData?.logo || Building2;
 
   // Handler functions
   const handleProfileClick = useCallback(() => {
