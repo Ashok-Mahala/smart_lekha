@@ -77,12 +77,15 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
           // Check for existing selection in localStorage
           const storedSelected = localStorage.getItem('selected_property');
           
-          if (storedSelected) {
+          
+          if (storedSelected && storedSelected != 'default') {
+            //console.log("storedSelected",storedSelected);
             // Use stored selection if exists
             onPropertyChange(storedSelected);
           } else if (formattedProperties.length > 0) {
             // Select first property by default if no selection exists
             const firstPropertyId = formattedProperties[0].id;
+            //console.log("firstPropertyId",firstPropertyId);
             localStorage.setItem('selected_property', firstPropertyId);
             onPropertyChange(firstPropertyId);
           }
