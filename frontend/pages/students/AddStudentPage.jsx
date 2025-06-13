@@ -17,7 +17,7 @@ import {
   BookOpen, 
   Phone, 
   MapPin, 
-  Calendar, 
+  Calendar as CalendarIcon, 
   GraduationCap, 
   Building2,
   Shield,
@@ -26,10 +26,10 @@ import {
   Image as ImageIcon,
   FileText
 } from "lucide-react";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import PropTypes from 'prop-types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -177,12 +177,12 @@ const AddStudentPage = () => {
       // Personal Information
       name: "",
       fatherName: "",
-      dateOfBirth: new Date(),
+      dateOfBirth: new Date(), // Initialize with Date object
       gender: "male",
       
       // Academic Information
       studentId: "",
-      admissionDate: new Date(),
+      admissionDate: new Date(), // Initialize with Date object
       course: "",
       shift: "morning",
       seatNo: "",
@@ -333,13 +333,17 @@ const AddStudentPage = () => {
     setIsSubmitting(true);
     
     try {
+      console.log('Form data before submission:', data);
+      
       // Create a FormData object for file uploads
       const formData = new FormData();
       
       // Add all form fields to FormData
       Object.keys(data).forEach(key => {
         if (key === 'dateOfBirth' || key === 'admissionDate') {
-          formData.append(key, data[key].toISOString());
+          // Ensure we're working with a Date object
+          const date = data[key] instanceof Date ? data[key] : new Date(data[key]);
+          formData.append(key, date.toISOString());
         } else {
           formData.append(key, data[key]);
         }
@@ -350,11 +354,18 @@ const AddStudentPage = () => {
       if (idProofFront) formData.append('idProofFront', idProofFront);
       if (idProofBack) formData.append('idProofBack', idProofBack);
       
+      // Log FormData contents for debugging
+      for (let pair of formData.entries()) {
+        console.log(pair[0] + ': ' + pair[1]);
+      }
+      
       // Call API using the enhanced error handling
-      await apiService.students.createStudent(formData, {
-        form, // Pass the form for field-level errors
+      const response = await apiService.students.createStudent(formData, {
+        form,
         showToast: true,
       });
+      
+      console.log('API Response:', response);
       
       toast({
         title: "Success",
@@ -363,9 +374,22 @@ const AddStudentPage = () => {
       
       navigate('/students');
     } catch (error) {
-      // Our error handling is now within apiService through withErrorHandling
-      // No need for manual error handling here
       console.error('Failed to add student:', error);
+      
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add student. Please check the form and try again.",
+        variant: "destructive",
+      });
+      
+      if (error.errors) {
+        Object.entries(error.errors).forEach(([field, message]) => {
+          form.setError(field, {
+            type: 'manual',
+            message: message
+          });
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -448,9 +472,7 @@ const AddStudentPage = () => {
                         <Label htmlFor="name">Full Name <span className="text-red-500">*</span></Label>
                         <Input
                           id="name"
-                          name="name"
-                          value={form.watch('name')}
-                          onChange={form.handleChange('name')}
+                          {...form.register('name')}
                           placeholder="Enter student's full name"
                           required
                         />
@@ -460,39 +482,10 @@ const AddStudentPage = () => {
                         <Label htmlFor="fatherName">Father's/Husband's Name <span className="text-red-500">*</span></Label>
                         <Input
                           id="fatherName"
-                          name="fatherName"
-                          value={form.watch('fatherName')}
-                          onChange={form.handleChange('fatherName')}
+                          {...form.register('fatherName')}
                           placeholder="Enter father's/husband's name"
                           required
                         />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="dateOfBirth">Date of Birth <span className="text-red-500">*</span></Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-start text-left font-normal"
-                            >
-                              <Calendar className="mr-2 h-4 w-4" />
-                              {form.watch('dateOfBirth') ? (
-                                format(form.watch('dateOfBirth'), "PPP")
-                              ) : (
-                                <span>Pick a date</span>
-                              )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <CalendarComponent
-                              mode="single"
-                              selected={form.watch('dateOfBirth')}
-                              onSelect={(date) => form.setValue('dateOfBirth', date || new Date())}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
                       </div>
                     </div>
 
@@ -583,48 +576,71 @@ const AddStudentPage = () => {
                         <Label htmlFor="studentId">Student ID <span className="text-red-500">*</span></Label>
                         <Input
                           id="studentId"
-                          name="studentId"
-                          value={form.watch('studentId')}
-                          onChange={form.handleChange('studentId')}
+                          {...form.register('studentId')}
                           placeholder="Enter student ID"
                           required
                         />
                       </div>
 
+                      {/* Date of Birth Field */}
                       <div className="space-y-2">
-                        <Label htmlFor="admissionDate">Admission Date <span className="text-red-500">*</span></Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-start text-left font-normal"
-                            >
-                              <Calendar className="mr-2 h-4 w-4" />
-                              {form.watch('admissionDate') ? (
-                                format(form.watch('admissionDate'), "PPP")
-                              ) : (
-                                <span>Pick a date</span>
-                              )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <CalendarComponent
-                              mode="single"
-                              selected={form.watch('admissionDate')}
-                              onSelect={(date) => form.setValue('admissionDate', date || new Date())}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
+                        <Label htmlFor="dateOfBirth" className="text-sm font-medium flex items-center gap-2">
+                          <CalendarIcon className="h-4 w-4 text-primary" />
+                          Date of Birth <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="grid gap-2">
+                          <Input
+                            type="date"
+                            id="dateOfBirth"
+                            value={form.watch('dateOfBirth') ? format(new Date(form.watch('dateOfBirth')), 'yyyy-MM-dd') : ''}
+                            onChange={(e) => {
+                              const date = e.target.value ? new Date(e.target.value) : null;
+                              form.setValue('dateOfBirth', date);
+                            }}
+                            className="w-full"
+                            required
+                            max={format(new Date(), 'yyyy-MM-dd')}
+                          />
+                          {form.formState.errors.dateOfBirth && (
+                            <p className="text-sm text-red-500">
+                              {form.formState.errors.dateOfBirth.message}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Admission Date Field */}
+                      <div className="space-y-2">
+                        <Label htmlFor="admissionDate" className="text-sm font-medium flex items-center gap-2">
+                          <CalendarIcon className="h-4 w-4 text-primary" />
+                          Admission Date <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="grid gap-2">
+                          <Input
+                            type="date"
+                            id="admissionDate"
+                            value={form.watch('admissionDate') ? format(new Date(form.watch('admissionDate')), 'yyyy-MM-dd') : ''}
+                            onChange={(e) => {
+                              const date = e.target.value ? new Date(e.target.value) : null;
+                              form.setValue('admissionDate', date);
+                            }}
+                            className="w-full"
+                            required
+                            min={format(new Date(), 'yyyy-MM-dd')}
+                          />
+                          {form.formState.errors.admissionDate && (
+                            <p className="text-sm text-red-500">
+                              {form.formState.errors.admissionDate.message}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
                       <div className="space-y-2">
                         <Label htmlFor="course">Course <span className="text-red-500">*</span></Label>
                         <Input
                           id="course"
-                          name="course"
-                          value={form.watch('course')}
-                          onChange={form.handleChange('course')}
+                          {...form.register('course')}
                           placeholder="Enter course name"
                           required
                         />
@@ -668,9 +684,7 @@ const AddStudentPage = () => {
                         <div className="flex gap-2">
                           <Input
                             id="seatNo"
-                            name="seatNo"
-                            value={form.watch('seatNo')}
-                            onChange={form.handleChange('seatNo')}
+                            {...form.register('seatNo')}
                             placeholder="Enter seat number"
                             readOnly
                           />
@@ -690,6 +704,9 @@ const AddStudentPage = () => {
                             <DialogContent className="sm:max-w-md">
                               <DialogHeader>
                                 <DialogTitle>Select a Seat</DialogTitle>
+                                <DialogDescription>
+                                  Choose an available seat for the student
+                                </DialogDescription>
                               </DialogHeader>
                               {isLoadingSeats ? (
                                 <div className="flex items-center justify-center p-8">
@@ -746,10 +763,8 @@ const AddStudentPage = () => {
                         <Label htmlFor="email">Email Address <span className="text-red-500">*</span></Label>
                         <Input
                           id="email"
-                          name="email"
+                          {...form.register('email')}
                           type="email"
-                          value={form.watch('email')}
-                          onChange={form.handleChange('email')}
                           placeholder="Enter student's email"
                           required
                         />
@@ -759,9 +774,7 @@ const AddStudentPage = () => {
                         <Label htmlFor="phone">Phone Number <span className="text-red-500">*</span></Label>
                         <Input
                           id="phone"
-                          name="phone"
-                          value={form.watch('phone')}
-                          onChange={form.handleChange('phone')}
+                          {...form.register('phone')}
                           placeholder="Enter student's phone number"
                           required
                         />
@@ -771,9 +784,7 @@ const AddStudentPage = () => {
                         <Label htmlFor="whatsapp">WhatsApp Number</Label>
                         <Input
                           id="whatsapp"
-                          name="whatsapp"
-                          value={form.watch('whatsapp')}
-                          onChange={form.handleChange('whatsapp')}
+                          {...form.register('whatsapp')}
                           placeholder="Enter WhatsApp number (if different from phone)"
                         />
                       </div>
@@ -784,9 +795,7 @@ const AddStudentPage = () => {
                         <Label htmlFor="address">Address <span className="text-red-500">*</span></Label>
                         <Textarea
                           id="address"
-                          name="address"
-                          value={form.watch('address')}
-                          onChange={form.handleChange('address')}
+                          {...form.register('address')}
                           placeholder="Enter student's address"
                           required
                         />
@@ -797,9 +806,7 @@ const AddStudentPage = () => {
                           <Label htmlFor="city">City</Label>
                           <Input
                             id="city"
-                            name="city"
-                            value={form.watch('city')}
-                            onChange={form.handleChange('city')}
+                            {...form.register('city')}
                             placeholder="City"
                           />
                         </div>
@@ -807,9 +814,7 @@ const AddStudentPage = () => {
                           <Label htmlFor="state">State</Label>
                           <Input
                             id="state"
-                            name="state"
-                            value={form.watch('state')}
-                            onChange={form.handleChange('state')}
+                            {...form.register('state')}
                             placeholder="State"
                           />
                         </div>
@@ -817,9 +822,7 @@ const AddStudentPage = () => {
                           <Label htmlFor="pincode">Pincode</Label>
                           <Input
                             id="pincode"
-                            name="pincode"
-                            value={form.watch('pincode')}
-                            onChange={form.handleChange('pincode')}
+                            {...form.register('pincode')}
                             placeholder="Pincode"
                           />
                         </div>
@@ -859,9 +862,7 @@ const AddStudentPage = () => {
                         <Label htmlFor="idProofNumber">ID Proof Number <span className="text-red-500">*</span></Label>
                         <Input
                           id="idProofNumber"
-                          name="idProofNumber"
-                          value={form.watch('idProofNumber')}
-                          onChange={form.handleChange('idProofNumber')}
+                          {...form.register('idProofNumber')}
                           placeholder="Enter ID proof number"
                           required
                         />
@@ -993,9 +994,7 @@ const AddStudentPage = () => {
                         <Label htmlFor="notes">Additional Notes</Label>
                         <Textarea
                           id="notes"
-                          name="notes"
-                          value={form.watch('notes')}
-                          onChange={form.handleChange('notes')}
+                          {...form.register('notes')}
                           placeholder="Enter any additional notes about the student"
                         />
                       </div>

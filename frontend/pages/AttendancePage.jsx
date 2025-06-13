@@ -38,7 +38,7 @@ export const attendanceRecordPropTypes = PropTypes.shape({
 const AttendancePage = () => {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState('');
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [date, setDate] = useState(new Date());
   const [status, setStatus] = useState('present');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
