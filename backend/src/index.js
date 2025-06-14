@@ -19,6 +19,7 @@ const systemRoutes = require('./routes/systemRoutes');
 const financialRoutes = require('./routes/financialRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
 const LayoutRoutes = require('./routes/layoutRoutes');
+const ShiftRoutes = require('./routes/shiftRoutes');
 // Initialize express app
 const app = express();
 
@@ -69,6 +70,7 @@ app.use('/smlekha/system', systemRoutes);
 app.use('/smlekha/financial', financialRoutes);
 app.use('/smlekha/properties', propertyRoutes);
 app.use('/smlekha/layouts', LayoutRoutes);
+app.use('/smlekha/shifts', ShiftRoutes);
 
 // 404 handler for API routes
 app.use('/smlekha/*', (req, res, next) => {

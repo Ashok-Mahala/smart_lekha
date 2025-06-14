@@ -37,8 +37,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { studentSchema } from '@/lib/validations';
 import { apiService } from '@/services/api';
 import { handleFormErrors } from '@/lib/errorHandler';
-import { getActiveShifts } from '@/api/shifts';
-import { getAvailableSeats, getSeatsBySection } from '@/api/seats';
+import { getShifts } from '@/api/shifts';
+import { getSeatsByProperty as getAvailableSeats, getSeatsByProperty as getSeatsBySection } from '@/api/seats';
 
 const AddStudentPage = () => {
   const navigate = useNavigate();
@@ -60,7 +60,7 @@ const AddStudentPage = () => {
     const loadShifts = async () => {
       setIsLoadingShifts(true);
       try {
-        const shiftsData = await getActiveShifts();
+        const shiftsData = await getShifts();
         if (shiftsData && shiftsData.length > 0) {
           setAvailableShifts(shiftsData.map(shift => ({
             id: shift.id,

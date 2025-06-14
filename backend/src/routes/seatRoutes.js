@@ -1,40 +1,39 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
-const validate = require('../middleware/validate');
 const {
-  createSeatValidation,
-  updateSeatValidation,
-  getSeatsValidation,
-  assignStudentValidation
-} = require('../validations/seatValidation');
-const {
-  getSeats,
-  getSeatById,
-  createSeat,
-  updateSeat,
-  deleteSeat,
-  getSeatAvailability,
-  assignStudent,
+  getSeatsByProperty,
+  bulkCreateSeats,
+  bookSeat,
+  reserveSeat,
   releaseSeat,
-  getSeatStats
+  getSeatStats,
+  getShifts,
+  updateSeatStatus
 } = require('../controllers/seatController');
+// const {
+//   bulkCreateValidation,
+//   bookSeatValidation,
+//   reserveSeatValidation,
+//   updateStatusValidation
+// } = require('../validations/seatValidation');
 
 // Public routes
-router.get('/', validate(getSeatsValidation), getSeats);
-router.get('/availability', getSeatAvailability);
+router.get('/property/:propertyId', getSeatsByProperty);
+router.get('/shifts', getShifts);
 router.get('/stats', getSeatStats);
-router.get('/:id', getSeatById);
 
 // Protected routes (require authentication)
 router.use(protect);
 
-// Admin only routes
-router.use(authorize('admin'));
-router.post('/', validate(createSeatValidation), createSeat);
-router.put('/:id', validate(updateSeatValidation), updateSeat);
-router.delete('/:id', deleteSeat);
-router.post('/:id/assign', validate(assignStudentValidation), assignStudent);
+// Student routes
+router.post('/:id/book', bookSeat);
+router.post('/:id/reserve', reserveSeat);
 router.post('/:id/release', releaseSeat);
 
-module.exports = router; 
+// Admin routes
+// router.use(authorize('admin'));
+router.post('/bulk', bulkCreateSeats);
+router.put('/:id/status', updateSeatStatus);
+
+module.exports = router;

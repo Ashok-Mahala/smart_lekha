@@ -21,58 +21,53 @@ import PropTypes from 'prop-types';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
+import { bookSeat, reserveSeat, releaseSeat } from "@/api/seats";
 
-// Shifts will be fetched from API
-const shifts = [];
-
-const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false }) => {
-  const [seats, setSeats] = useState([]);
+const InteractiveSeatMap = ({ 
+  className, 
+  config,
+  seats: initialSeats = [],
+  onSeatSelect, 
+  onSeatUpdate,
+  onSeatDelete,
+  showOnlyAvailable = false 
+}) => {
+  const [seats, setSeats] = useState(initialSeats);
   const [currentDate, setCurrentDate] = useState(new Date().toLocaleDateString('en-US', { 
     weekday: 'long', 
     year: 'numeric', 
     month: 'long', 
     day: 'numeric' 
   }));
-  const [selectedShift, setSelectedShift] = useState(shifts[0]);
-  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [shifts, setShifts] = useState([]);
+  const [selectedShift, setSelectedShift] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [isPreBookDialogOpen, setIsPreBookDialogOpen] = useState(false);
   const [isAvailableDialogOpen, setIsAvailableDialogOpen] = useState(false);
   const [selectedSeatForPreBook, setSelectedSeatForPreBook] = useState(null);
   const [selectedAvailableSeat, setSelectedAvailableSeat] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchSeats = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        const response = await fetch('/smlekha/seats');
-        
-        if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-          throw new Error('API endpoint not available');
-      }
+    setSeats(initialSeats);
+  }, [initialSeats]);
 
-        const data = await response.json();
-        setSeats(data);
+  useEffect(() => {
+    const loadShifts = async () => {
+      try {
+        const shiftsData = await getShifts();
+        setShifts(shiftsData);
+        if (shiftsData.length > 0) {
+          setSelectedShift(shiftsData[0]);
+        }
       } catch (error) {
-        console.error('Error fetching seats:', error);
-        setError('Unable to load seat data.');
-        toast({
-          title: "Error",
-          description: "Failed to load seat data. 2",
-          variant: "destructive",
-        });
-        
-        // Initialize with empty seats array when API fails
-        setSeats([]);
-      } finally {
-        setIsLoading(false);
+        console.error('Failed to load shifts:', error);
       }
-  };
+    };
+
+    loadShifts();
 
     // Update date and time
     const updateDateTime = () => {
@@ -86,7 +81,6 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
       setCurrentDate(now.toLocaleDateString('en-US', options));
     };
 
-    fetchSeats();
     updateDateTime();
 
     // Update time every minute
@@ -103,15 +97,12 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
     if (seat.status === 'reserved') {
       setSelectedSeatForPreBook(seat);
       setIsPreBookDialogOpen(true);
-      setSelectedSeats([]);
     } else if (seat.status === 'occupied') {
       setSelectedStudent(seat.student);
       setIsStudentDialogOpen(true);
-      setSelectedSeats([]);
     } else if (seat.status === 'available') {
       setSelectedAvailableSeat(seat);
       setIsAvailableDialogOpen(true);
-      setSelectedSeats([]);
     }
     
     if (onSeatSelect) {
@@ -120,7 +111,6 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
   };
 
   const handlePreBookConfirm = async (bookingDetails) => {
-    // Validate booking details
     if (!bookingDetails.name || !bookingDetails.email || !bookingDetails.phone || !bookingDetails.date) {
       toast({
         title: "Error",
@@ -131,70 +121,45 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
     }
 
     try {
-      const response = await fetch(`/smlekha/seats/${selectedSeatForPreBook.id}/reserve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: bookingDetails.name,
-          email: bookingDetails.email,
-          phone: bookingDetails.phone,
-          date: bookingDetails.date
-        }),
+      setIsLoading(true);
+      const updatedSeat = await reserveSeat(selectedSeatForPreBook.id, {
+        studentId: `temp-${Date.now()}`, // Replace with actual student ID
+        until: bookingDetails.date,
+        name: bookingDetails.name,
+        email: bookingDetails.email,
+        phone: bookingDetails.phone,
+        date: bookingDetails.date
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to reserve seat');
+      // Update local state and notify parent
+      const updatedSeats = seats.map(seat => 
+        seat.id === selectedSeatForPreBook.id ? updatedSeat : seat
+      );
+      setSeats(updatedSeats);
+      
+      if (onSeatUpdate) {
+        onSeatUpdate(selectedSeatForPreBook.id, updatedSeat);
       }
-
-      // Update seat status locally
-    setSeats(seats.map(seat => 
-      seat.id === selectedSeatForPreBook.id 
-        ? { 
-            ...seat, 
-              status: 'reserved', 
-            student: { 
-              id: `PRE-${Date.now()}`, 
-              name: bookingDetails.name,
-              email: bookingDetails.email,
-              phone: bookingDetails.phone,
-              bookingDate: bookingDetails.date
-            }
-          }
-        : seat
-    ));
 
       toast({
         title: "Success",
         description: `Seat ${selectedSeatForPreBook.number} pre-booked successfully for ${bookingDetails.name}`,
-    });
-
+      });
     } catch (error) {
       console.error('Error reserving seat:', error);
       toast({
         title: "Error",
-        description: "Failed to reserve seat",
+        description: error.message || "Failed to reserve seat",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
+      setIsPreBookDialogOpen(false);
+      setSelectedSeatForPreBook(null);
     }
-
-    setIsPreBookDialogOpen(false);
-    setSelectedSeatForPreBook(null);
-  };
-
-  const handleStudentDialogClose = () => {
-    setIsStudentDialogOpen(false);
-    setSelectedStudent(null);
-  };
-
-  const handlePreBookDialogClose = () => {
-    setIsPreBookDialogOpen(false);
-    setSelectedSeatForPreBook(null);
   };
 
   const handleAvailableSeatConfirm = async (bookingDetails) => {
-    // Validate booking details
     if (!bookingDetails.name || !bookingDetails.email || !bookingDetails.phone || !bookingDetails.shift || !bookingDetails.date) {
       toast({
         title: "Error",
@@ -205,58 +170,53 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
     }
 
     try {
-      const response = await fetch(`/smlekha/seats/${selectedAvailableSeat.id}/book`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: bookingDetails.name,
-          email: bookingDetails.email,
-          phone: bookingDetails.phone,
-          shift: bookingDetails.shift,
-          date: bookingDetails.date
-        }),
+      setIsLoading(true);
+      const updatedSeat = await bookSeat(selectedAvailableSeat.id, {
+        studentId: `temp-${Date.now()}`, // Replace with actual student ID
+        until: bookingDetails.date,
+        name: bookingDetails.name,
+        email: bookingDetails.email,
+        phone: bookingDetails.phone,
+        shift: bookingDetails.shift,
+        date: bookingDetails.date
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to book seat');
+      // Update local state and notify parent
+      const updatedSeats = seats.map(seat => 
+        seat.id === selectedAvailableSeat.id ? updatedSeat : seat
+      );
+      setSeats(updatedSeats);
+      
+      if (onSeatUpdate) {
+        onSeatUpdate(selectedAvailableSeat.id, updatedSeat);
       }
-
-      // Update seat status locally
-    setSeats(seats.map(seat => 
-      seat.id === selectedAvailableSeat.id 
-        ? { 
-            ...seat, 
-            status: 'occupied', 
-            student: { 
-              id: `ST-${Date.now()}`, 
-              name: bookingDetails.name,
-              email: bookingDetails.email,
-              phone: bookingDetails.phone,
-              shift: bookingDetails.shift,
-              bookingDate: bookingDetails.date
-            }
-          }
-        : seat
-    ));
 
       toast({
         title: "Success",
         description: `Seat ${selectedAvailableSeat.number} booked successfully for ${bookingDetails.name}`,
-    });
-
+      });
     } catch (error) {
       console.error('Error booking seat:', error);
       toast({
         title: "Error",
-        description: "Failed to book seat",
+        description: error.message || "Failed to book seat",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
+      setIsAvailableDialogOpen(false);
+      setSelectedAvailableSeat(null);
     }
+  };
 
-    setIsAvailableDialogOpen(false);
-    setSelectedAvailableSeat(null);
+  const handleStudentDialogClose = () => {
+    setIsStudentDialogOpen(false);
+    setSelectedStudent(null);
+  };
+
+  const handlePreBookDialogClose = () => {
+    setIsPreBookDialogOpen(false);
+    setSelectedSeatForPreBook(null);
   };
 
   const handleAvailableDialogClose = () => {
@@ -308,12 +268,80 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
     return null;
   };
 
-  if (isLoading) {
-  return (
+  // Calculate rows based on layout configuration
+  const renderSeats = () => {
+    if (!config || !seats.length) return null;
+
+    const { rows, columns } = config;
+    const seatGrid = [];
+
+    for (let row = 0; row < rows; row++) {
+      const rowSeats = seats.filter(seat => seat.row === row);
+      const seatRow = [];
+
+      for (let col = 0; col < columns; col++) {
+        const seat = rowSeats.find(s => s.column === col);
+        
+        if (!seat) {
+          seatRow.push(<div key={`empty-${row}-${col}`} className="w-full aspect-square" />);
+          continue;
+        }
+
+        if (showOnlyAvailable && seat.status !== 'available') {
+          continue;
+        }
+
+        seatRow.push(
+          <TooltipProvider key={seat.id}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`}
+                  onClick={() => handleSeatClick(seat)}
+                  disabled={seat.status === 'locked'}
+                >
+                  <div className="flex flex-col items-center justify-center h-full">
+                    {getSeatIcon(seat)}
+                    <span className="text-xs mt-1">{seat.number}</span>
+                    {seat.student && (
+                      <span className="text-[10px] truncate max-w-full px-1">
+                        {seat.student.name.split(' ')[0]}
+                      </span>
+                    )}
+                  </div>
+                  <div className={getSeatBorderColor(seat)}></div>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <div className="text-xs">
+                  <p className="font-semibold">Seat #{seat.number}</p>
+                  <p>Status: {getSeatStatus(seat)}</p>
+                  {seat.student && <p>Student: {seat.student.name}</p>}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      }
+
+      seatGrid.push(
+        <div key={`row-${row}`} className="grid gap-2" style={{ 
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` 
+        }}>
+          {seatRow}
+        </div>
+      );
+    }
+
+    return seatGrid;
+  };
+
+  if (isLoading && !seats.length) {
+    return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-6 w-6 animate-spin mr-2" />
         <span>Loading seat map...</span>
-            </div>
+      </div>
     );
   }
 
@@ -324,25 +352,19 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
         <Button variant="outline" size="sm" className="mt-2" onClick={() => window.location.reload()}>
           Retry
         </Button>
-                </div>
+      </div>
     );
   }
 
-  if (!seats || seats.length === 0) {
+  if (!seats.length) {
     return (
       <div className="p-4 rounded-md bg-amber-50 border border-amber-200 text-amber-700">
         <p>No seat data available. Please try again later.</p>
         <Button variant="outline" size="sm" className="mt-2" onClick={() => window.location.reload()}>
           Retry
         </Button>
-                </div>
+      </div>
     );
-  }
-
-  // Group seats into rows of 8
-  const rows = [];
-  for (let i = 0; i < seats.length; i += 8) {
-    rows.push(seats.slice(i, i + 8));
   }
 
   return (
@@ -353,69 +375,31 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
             <h3 className="font-semibold">Seat Booking</h3>
             <p className="text-sm text-muted-foreground">{currentDate}</p>
           </div>
-          <div className="w-full md:w-auto">
-            <Select value={selectedShift.id} onValueChange={(value) => setSelectedShift(shifts.find(s => s.id === value))}>
-              <SelectTrigger className="w-full md:w-[240px]">
-              <SelectValue placeholder="Select shift" />
-            </SelectTrigger>
-            <SelectContent>
-                {shifts.map(shift => (
-                <SelectItem key={shift.id} value={shift.id}>
-                  {shift.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-            <p className="text-xs text-muted-foreground mt-1">{selectedShift?.time || 'Select a shift'}</p>
-          </div>
+          {shifts.length > 0 && (
+            <div className="w-full md:w-auto">
+              <Select 
+                value={selectedShift?.id} 
+                onValueChange={(value) => setSelectedShift(shifts.find(s => s.id === value))}
+              >
+                <SelectTrigger className="w-full md:w-[240px]">
+                  <SelectValue placeholder="Select shift" />
+                </SelectTrigger>
+                <SelectContent>
+                  {shifts.map(shift => (
+                    <SelectItem key={shift.id} value={shift.id}>
+                      {shift.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">{selectedShift?.time || 'Select a shift'}</p>
+            </div>
+          )}
         </div>
       </Card>
 
-      <div className="grid grid-cols-8 gap-2">
-        {rows.map((row, rowIndex) => (
-          <React.Fragment key={`row-${rowIndex}`}>
-            {row.map((seat) => {
-              // Filter out non-available seats if showOnlyAvailable is true
-              if (showOnlyAvailable && seat.status !== 'available') {
-                return null;
-              }
-
-              return (
-          <TooltipProvider key={seat.id}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                        className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`}
-                  onClick={() => handleSeatClick(seat)}
-                  disabled={seat.status === 'locked'}
-                >
-                        <div className="flex flex-col items-center justify-center h-full">
-                          {getSeatIcon(seat)}
-                          <span className="text-xs mt-1">{seat.number}</span>
-                  {seat.student && (
-                            <span className="text-[10px] truncate max-w-full px-1">
-                              {seat.student.name.split(' ')[0]}
-                            </span>
-                  )}
-                  </div>
-                        <div className={getSeatBorderColor(seat)}></div>
-                </button>
-              </TooltipTrigger>
-                    <TooltipContent side="top">
-                      <div className="text-xs">
-                        <p className="font-semibold">Seat #{seat.number}</p>
-                        <p>Status: {getSeatStatus(seat)}</p>
-                  {seat.student && (
-                          <p>Student: {seat.student.name}</p>
-                        )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-              );
-            })}
-          </React.Fragment>
-        ))}
+      <div className="space-y-2">
+        {renderSeats()}
       </div>
 
       {/* Legend */}
@@ -439,33 +423,47 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
       </div>
 
       {/* Dialogs */}
-        <StudentInfoDialog
+      <StudentInfoDialog
         isOpen={isStudentDialogOpen} 
         onClose={handleStudentDialogClose} 
-          student={selectedStudent}
-        />
+        student={selectedStudent}
+      />
 
-        <PreBookedSeatDialog
+      <PreBookedSeatDialog
         isOpen={isPreBookDialogOpen} 
         onClose={handlePreBookDialogClose} 
-          onConfirm={handlePreBookConfirm}
+        onConfirm={handlePreBookConfirm}
         seatNumber={selectedSeatForPreBook?.number}
-        />
+      />
 
-        <AvailableSeatDialog
+      <AvailableSeatDialog
         isOpen={isAvailableDialogOpen} 
         onClose={handleAvailableDialogClose} 
-          onConfirm={handleAvailableSeatConfirm}
+        onConfirm={handleAvailableSeatConfirm}
         seatNumber={selectedAvailableSeat?.number}
         shifts={shifts}
       />
-      </div>
+    </div>
   );
 };
 
 InteractiveSeatMap.propTypes = {
   className: PropTypes.string,
+  config: PropTypes.shape({
+    rows: PropTypes.number.isRequired,
+    columns: PropTypes.number.isRequired,
+  }),
+  seats: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    number: PropTypes.string.isRequired,
+    row: PropTypes.number.isRequired,
+    column: PropTypes.number.isRequired,
+    status: PropTypes.string.isRequired,
+    student: PropTypes.object,
+  })),
   onSeatSelect: PropTypes.func,
+  onSeatUpdate: PropTypes.func,
+  onSeatDelete: PropTypes.func,
   showOnlyAvailable: PropTypes.bool
 };
 

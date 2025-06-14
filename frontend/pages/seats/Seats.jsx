@@ -9,10 +9,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import { getLayout, saveLayout } from "@/api/layouts";
-import { getSeatStats, updateSeatStatus, deleteSeat } from "@/api/seats";
+import { 
+  getSeatsByProperty,
+  bulkCreateSeats, // aliased to match your existing code
+  bookSeat,
+  reserveSeat,
+  releaseSeat,
+  getSeatStats,
+  getShifts,
+  updateSeatStatus
+} from "@/api/seats";
 
 // Generate default layout configuration based on total seats
-const generateDefaultLayout = (totalSeats = 50) => {
+const generateDefaultLayout = (propertyId, totalSeats = 50) => {
   const columns = Math.min(7, Math.ceil(Math.sqrt(totalSeats)));
   const rows = Math.ceil(totalSeats / columns);
   
@@ -25,31 +34,9 @@ const generateDefaultLayout = (totalSeats = 50) => {
     gap: 1,
     showNumbers: true,
     showStatus: true,
-    layout: Array(rows).fill().map(() => Array(columns).fill(true))
+    layout: Array(rows).fill().map(() => Array(columns).fill(true)),
+    propertyId
   };
-};
-
-// API Service Functions
-const fetchSeatStats = async (propertyId) => {
-  try {
-    const response = await fetch(`/api/seats/stats?propertyId=${propertyId}`);
-    if (!response.ok) {
-      const text = await response.text();
-      if (text.startsWith('<!DOCTYPE')) {
-        throw new Error('Server returned HTML error page');
-      }
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching seat stats:', error);
-    return {
-      total: 30,
-      available: 30,
-      occupied: 0,
-      prebooked: 0
-    };
-  }
 };
 
 const SeatsPage = () => {
@@ -65,6 +52,7 @@ const SeatsPage = () => {
     prebooked: 0,
   });
   const [selectedProperty, setSelectedProperty] = useState(null);
+  const [seats, setSeats] = useState([]);
 
   // Load data from localStorage
   useEffect(() => {
@@ -94,15 +82,37 @@ const SeatsPage = () => {
 
         setSelectedProperty(property);
 
-        // Load layout and stats
-        const [layoutData, statsData] = await Promise.all([
-          getLayout(property._id).catch(() => null), // Return null if fails
-          fetchSeatStats(property._id)
+        // Load layout and seats
+        const [layoutData, seatsData] = await Promise.all([
+          getLayout(property._id).catch(() => null),
+          getSeatsByProperty(property._id).catch(() => [])
         ]);
 
-        // Use fetched layout or create default based on property's totalSeats
-        const config = layoutData || generateDefaultLayout(property.totalSeats);
-        setLayoutConfig(config);
+        // If no layout exists, create a default one
+        if (!layoutData) {
+          const defaultLayout = generateDefaultLayout(property._id, property.totalSeats);
+          await saveLayout(property._id, defaultLayout);
+          setLayoutConfig(defaultLayout);
+          
+          // Create default seats
+          const seatsToCreate = Array.from({ length: property.totalSeats }, (_, i) => ({
+            seatId: `seat-${i+1}`,
+            propertyId: property._id,
+            number: i+1,
+            status: 'available',
+            row: Math.floor(i / defaultLayout.columns),
+            column: i % defaultLayout.columns
+          }));
+          
+          await Promise.all(seatsToCreate.map(seat => createSeat(seat)));
+          setSeats(seatsToCreate);
+        } else {
+          setLayoutConfig(layoutData);
+          setSeats(seatsData);
+        }
+
+        // Load stats
+        const statsData = await getSeatStats(property._id);
         setStats(statsData);
       } catch (error) {
         setError(error.message);
@@ -129,17 +139,45 @@ const SeatsPage = () => {
     
     try {
       setIsLoading(true);
-      const savedConfig = await saveLayout(selectedProperty._id, config);
+      
+      // 1. Save the layout first
+      const savedConfig = await saveLayout(selectedProperty._id, {
+        ...config,
+        propertyId: selectedProperty._id
+      });
       setLayoutConfig(savedConfig);
+      
+      // 2. Prepare seats data for bulk creation
+      const seatsToCreate = [];
+      const totalSeats = savedConfig.rows * savedConfig.columns;
+      
+      for (let i = 0; i < totalSeats; i++) {
+        seatsToCreate.push({
+          propertyId: selectedProperty._id,
+          seatNumber: `seat-${i+1}`,
+          row: Math.floor(i / savedConfig.columns).toString(),
+          column: i % savedConfig.columns,
+          status: 'available',
+          type: 'standard'
+        });
+      }
+  
+      // 3. Bulk create seats
+      const createdSeats = await bulkCreateSeats(seatsToCreate);
+      setSeats(createdSeats);
+      
+      // 4. Refresh stats
+      const stats = await getSeatStats(selectedProperty._id);
+      setStats(stats);
+      
       toast({
         title: "Success",
-        description: "Layout configuration saved successfully",
+        description: `Layout saved and ${createdSeats.length} seats created`,
       });
-      setActiveTab("view");
     } catch (error) {
       toast({
         title: "Error",
-        description: error.message || "Failed to save layout configuration",
+        description: error.message || "Failed to save layout",
         variant: "destructive",
       });
     } finally {
@@ -151,24 +189,14 @@ const SeatsPage = () => {
     if (!selectedProperty) return;
     
     try {
-      const response = await fetch(`/api/seats/${seatId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(seatData),
-      });
+      const updatedSeat = await updateSeatStatus(seatId, seatData.status);
       
-      if (!response.ok) throw new Error('Failed to update seat');
-      
-      const updatedSeat = await response.json();
-      setLayoutConfig(prev => ({
-        ...prev,
-        seats: prev.seats.map(s => s.id === seatId ? updatedSeat : s),
-      }));
+      setSeats(prevSeats => 
+        prevSeats.map(s => s.id === seatId ? updatedSeat : s)
+      );
       
       // Refresh stats
-      const stats = await fetchSeatStats(selectedProperty._id);
+      const stats = await getSeatStats(selectedProperty._id);
       setStats(stats);
     } catch (error) {
       toast({
@@ -183,19 +211,12 @@ const SeatsPage = () => {
     if (!selectedProperty) return;
     
     try {
-      const response = await fetch(`/api/seats/${seatId}`, {
-        method: 'DELETE',
-      });
+      await deleteSeat(seatId);
       
-      if (!response.ok) throw new Error('Failed to delete seat');
-      
-      setLayoutConfig(prev => ({
-        ...prev,
-        seats: prev.seats.filter(s => s.id !== seatId),
-      }));
+      setSeats(prevSeats => prevSeats.filter(s => s.id !== seatId));
       
       // Refresh stats
-      const stats = await fetchSeatStats(selectedProperty._id);
+      const stats = await getSeatStats(selectedProperty._id);
       setStats(stats);
     } catch (error) { 
       toast({
@@ -257,7 +278,7 @@ const SeatsPage = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-amber-600">{selectedProperty.totalSeats}</div>
+              <div className="text-3xl font-bold text-amber-600">{stats.total || selectedProperty.totalSeats}</div>
               <p className="text-xs text-blue-700 mt-2">Library capacity</p>
             </CardContent>
           </Card>
@@ -336,6 +357,7 @@ const SeatsPage = () => {
                 {layoutConfig ? (
                   <InteractiveSeatMap 
                     config={layoutConfig}
+                    seats={seats}
                     showOnlyAvailable={filterStatus === 'available'}
                     onSeatSelect={handleSeatSelect}
                     onSeatUpdate={handleUpdateSeat}
