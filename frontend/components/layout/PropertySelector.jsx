@@ -55,6 +55,7 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [initialLoad, setInitialLoad] = useState(true);
   
   // Load properties from localStorage on component mount
   useEffect(() => {
@@ -77,17 +78,14 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
           // Check for existing selection in localStorage
           const storedSelected = localStorage.getItem('selected_property');
           
-          
-          if (storedSelected && storedSelected != 'default') {
-            //console.log("storedSelected",storedSelected);
-            // Use stored selection if exists
-            onPropertyChange(storedSelected);
-          } else if (formattedProperties.length > 0) {
-            // Select first property by default if no selection exists
-            const firstPropertyId = formattedProperties[0].id;
-            //console.log("firstPropertyId",firstPropertyId);
-            localStorage.setItem('selected_property', firstPropertyId);
-            onPropertyChange(firstPropertyId);
+          if (initialLoad) {
+            if (storedSelected && storedSelected !== 'default') {
+              onPropertyChange(storedSelected);
+            } else if (formattedProperties.length > 0) {
+              const firstPropertyId = formattedProperties[0].id;
+              onPropertyChange(firstPropertyId);
+            }
+            setInitialLoad(false);
           }
         }
       } catch (error) {
@@ -98,14 +96,14 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
     };
 
     loadProperties();
-  }, [onPropertyChange]);
+  }, [onPropertyChange, initialLoad]); // Add initialLoad to dependencies
 
   // Update localStorage whenever selectedProperty changes
   useEffect(() => {
-    if (selectedProperty) {
+    if (selectedProperty && !initialLoad) {
       localStorage.setItem('selected_property', selectedProperty);
     }
-  }, [selectedProperty]);
+  }, [selectedProperty, initialLoad]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
   // Ensure we have a selected property when properties load
