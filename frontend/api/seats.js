@@ -128,6 +128,16 @@ export const updateSeatStatus = async (id, status, options = {}) => {
     return response.data;
 };
 
+/**
+ * Get seat statistics for a property
+ * @param {string} propertyId - Property ID
+ * @returns {Promise<Object>} Seat statistics
+ */
+export const getSeatStats = async (propertyId) => {
+    const response = await axios.get(`${API_BASE_URL}/stats/${propertyId}`);
+    return response.data;
+  };
+
 export default {
   getAllSeats,
   getSeatById,
@@ -137,5 +147,6 @@ export default {
   getSeatsBySection,
   getAvailableSeats,
   getSeatAvailability,
-  updateSeatStatus
+  updateSeatStatus,
+  getSeatStats
 };

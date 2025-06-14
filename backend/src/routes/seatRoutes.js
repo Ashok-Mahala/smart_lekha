@@ -27,7 +27,7 @@ router.get('/stats', getSeatStats);
 router.get('/:id', getSeatById);
 
 // Protected routes (require authentication)
-// router.use(protect);
+router.use(protect);
 
 // Admin only routes
 router.use(authorize('admin'));

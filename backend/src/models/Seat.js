@@ -1,6 +1,17 @@
 const mongoose = require('mongoose');
 
 const seatSchema = new mongoose.Schema({
+  propertyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Property',
+    required: true
+  },
+  status: {
+    type: String,
+    enum: ['available', 'occupied', 'reserved', 'maintenance'],
+    default: 'available'
+  },
+  reservedUntil: Date,
   seatNumber: {
     type: String,
     required: true,
@@ -52,6 +63,7 @@ const seatSchema = new mongoose.Schema({
 });
 
 // Indexes
+seatSchema.index({ propertyId: 1 });
 seatSchema.index({ seatNumber: 1 });
 seatSchema.index({ status: 1 });
 seatSchema.index({ type: 1 });

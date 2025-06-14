@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import { getLayout, saveLayout } from "@/api/layouts";
+import { getSeatStats, updateSeatStatus, deleteSeat } from "@/api/seats";
 
 // Generate default layout configuration based on total seats
 const generateDefaultLayout = (totalSeats = 50) => {
@@ -43,8 +44,8 @@ const fetchSeatStats = async (propertyId) => {
   } catch (error) {
     console.error('Error fetching seat stats:', error);
     return {
-      total: 0,
-      available: 0,
+      total: 30,
+      available: 30,
       occupied: 0,
       prebooked: 0
     };
@@ -196,7 +197,7 @@ const SeatsPage = () => {
       // Refresh stats
       const stats = await fetchSeatStats(selectedProperty._id);
       setStats(stats);
-    } catch (error) {
+    } catch (error) { 
       toast({
         title: "Error",
         description: error.message || "Failed to delete seat",
