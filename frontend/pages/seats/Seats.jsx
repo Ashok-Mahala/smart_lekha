@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import InteractiveSeatMap from "@/components/seats/InteractiveSeatMap";
 import LayoutConfigurator from "@/components/dashboard/LayoutConfigurator";
@@ -7,35 +8,37 @@ import { Users, Sofa, Calendar, CheckCircle2, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
-import PropTypes from 'prop-types';
+import { getLayout, saveLayout } from "@/api/layouts";
 
-export const layoutConfigPropTypes = PropTypes.shape({
-  rows: PropTypes.number.isRequired,
-  columns: PropTypes.number.isRequired,
-  aisleWidth: PropTypes.number.isRequired,
-  seatWidth: PropTypes.number.isRequired,
-  seatHeight: PropTypes.number.isRequired,
-  gap: PropTypes.number.isRequired
-});
-
-// Default configuration when API is not available
-const defaultLayoutConfig = {
-    rows: 14,
-    columns: 7,
-    gap: 2,
+// Generate default layout configuration based on total seats
+const generateDefaultLayout = (totalSeats = 50) => {
+  const columns = Math.min(7, Math.ceil(Math.sqrt(totalSeats)));
+  const rows = Math.ceil(totalSeats / columns);
+  
+  return {
+    rows,
+    columns,
+    aisleWidth: 2,
+    seatWidth: 1,
+    seatHeight: 1,
+    gap: 1,
     showNumbers: true,
     showStatus: true,
-    layout: Array(14).fill(null).map(() => Array(7).fill(true))
+    layout: Array(rows).fill().map(() => Array(columns).fill(true))
+  };
 };
 
-const fetchSeatStats = async () => {
+// API Service Functions
+const fetchSeatStats = async (propertyId) => {
   try {
-    const response = await fetch('/smlekha/seats/stats');
-    
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('API endpoint not available');
+    const response = await fetch(`/api/seats/stats?propertyId=${propertyId}`);
+    if (!response.ok) {
+      const text = await response.text();
+      if (text.startsWith('<!DOCTYPE')) {
+        throw new Error('Server returned HTML error page');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
     return await response.json();
   } catch (error) {
     console.error('Error fetching seat stats:', error);
@@ -52,79 +55,64 @@ const SeatsPage = () => {
   const [activeTab, setActiveTab] = useState("view");
   const [layoutConfig, setLayoutConfig] = useState(null);
   const [filterStatus, setFilterStatus] = useState(null);
-  const [selectedShift, setSelectedShift] = useState('morning');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState({
     total: 0,
     available: 0,
     occupied: 0,
-    maintenance: 0,
-    reserved: 0,
+    prebooked: 0,
   });
+  const [selectedProperty, setSelectedProperty] = useState(null);
 
+  // Load data from localStorage
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
+    const loadData = async () => {
       try {
-        const [layoutResponse, statsResponse] = await Promise.all([
-          fetch('/smlekha/seats/layout'),
-          fetch('/smlekha/seats/stats'),
-        ]);
+        setIsLoading(true);
         
-        if (!layoutResponse.ok || !statsResponse.ok) {
-          throw new Error('API endpoints not available');
+        // Get selected property ID from localStorage
+        const selectedPropertyId = localStorage.getItem('selected_property');
+        if (!selectedPropertyId) {
+          throw new Error('No property selected');
         }
+
+        // Get properties from localStorage
+        const storedProperties = localStorage.getItem('properties');
+        if (!storedProperties) {
+          throw new Error('No properties found');
+        }
+
+        // Parse properties and find selected one
+        const properties = JSON.parse(storedProperties);
+        const property = properties.find(p => p._id === selectedPropertyId);
         
-        const layoutData = await layoutResponse.json();
-        const statsData = await statsResponse.json();
-        
-        setLayoutConfig(layoutData);
+        if (!property) {
+          throw new Error('Selected property not found');
+        }
+
+        setSelectedProperty(property);
+
+        // Load layout and stats
+        const [layoutData, statsData] = await Promise.all([
+          getLayout(property._id).catch(() => null), // Return null if fails
+          fetchSeatStats(property._id)
+        ]);
+
+        // Use fetched layout or create default based on property's totalSeats
+        const config = layoutData || generateDefaultLayout(property.totalSeats);
+        setLayoutConfig(config);
         setStats(statsData);
       } catch (error) {
-        console.error('Error fetching seat data:', error);
-        setError('Failed to load seat data');
+        setError(error.message);
+        console.error('Error loading seat data:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
+    loadData();
   }, []);
-
-  const handleLayoutSave = async (config) => {
-    try {
-      const response = await fetch('/smlekha/layout-config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(config),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save layout configuration');
-      }
-
-      setLayoutConfig(config);
-      setActiveTab("view");
-      toast({
-        title: "Success",
-        description: "Layout configuration saved successfully",
-      });
-    } catch (error) {
-      console.error('Error saving layout config:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save layout configuration",
-        variant: "destructive",
-      });
-      
-      // Save locally even if API fails
-    setLayoutConfig(config);
-    setActiveTab("view");
-    }
-  };
 
   const handleCardClick = (type) => {
     setActiveTab("view");
@@ -135,9 +123,34 @@ const SeatsPage = () => {
     console.log('Selected seat:', seatId);
   };
 
-  const handleUpdateSeat = async (seatId, seatData) => {
+  const handleSaveLayout = async (config) => {
+    if (!selectedProperty) return;
+    
     try {
-      const response = await fetch(`/smlekha/seats/${seatId}`, {
+      setIsLoading(true);
+      const savedConfig = await saveLayout(selectedProperty._id, config);
+      setLayoutConfig(savedConfig);
+      toast({
+        title: "Success",
+        description: "Layout configuration saved successfully",
+      });
+      setActiveTab("view");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save layout configuration",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateSeat = async (seatId, seatData) => {
+    if (!selectedProperty) return;
+    
+    try {
+      const response = await fetch(`/api/seats/${seatId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -145,60 +158,48 @@ const SeatsPage = () => {
         body: JSON.stringify(seatData),
       });
       
-      if (!response.ok) {
-        throw new Error('Failed to update seat');
-      }
+      if (!response.ok) throw new Error('Failed to update seat');
       
       const updatedSeat = await response.json();
-      setLayoutConfig(prevConfig => ({
-        ...prevConfig,
-        seats: prevConfig.seats.map(seat => 
-          seat.id === seatId ? updatedSeat : seat
-        ),
+      setLayoutConfig(prev => ({
+        ...prev,
+        seats: prev.seats.map(s => s.id === seatId ? updatedSeat : s),
       }));
       
-      // Refresh stats after updating seat
-      const statsResponse = await fetch('/smlekha/seats/stats');
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData);
-      }
+      // Refresh stats
+      const stats = await fetchSeatStats(selectedProperty._id);
+      setStats(stats);
     } catch (error) {
-      console.error('Error updating seat:', error);
       toast({
         title: "Error",
-        description: "Failed to update seat",
+        description: error.message || "Failed to update seat",
         variant: "destructive",
       });
     }
   };
 
   const handleDeleteSeat = async (seatId) => {
+    if (!selectedProperty) return;
+    
     try {
-      const response = await fetch(`/smlekha/seats/${seatId}`, {
+      const response = await fetch(`/api/seats/${seatId}`, {
         method: 'DELETE',
       });
       
-      if (!response.ok) {
-        throw new Error('Failed to delete seat');
-      }
+      if (!response.ok) throw new Error('Failed to delete seat');
       
-      setLayoutConfig(prevConfig => ({
-        ...prevConfig,
-        seats: prevConfig.seats.filter(seat => seat.id !== seatId),
+      setLayoutConfig(prev => ({
+        ...prev,
+        seats: prev.seats.filter(s => s.id !== seatId),
       }));
       
-      // Refresh stats after deleting seat
-      const statsResponse = await fetch('/smlekha/seats/stats');
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData);
-      }
+      // Refresh stats
+      const stats = await fetchSeatStats(selectedProperty._id);
+      setStats(stats);
     } catch (error) {
-      console.error('Error deleting seat:', error);
       toast({
         title: "Error",
-        description: "Failed to delete seat",
+        description: error.message || "Failed to delete seat",
         variant: "destructive",
       });
     }
@@ -215,13 +216,25 @@ const SeatsPage = () => {
     );
   }
 
+  if (error || !selectedProperty) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center p-8">
+          <p className="text-red-500">
+            {error || 'No property selected. Please select a property first.'}
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Seat Management</h1>
+          <h1 className="text-3xl font-bold">Seat Management - {selectedProperty.name}</h1>
           <p className="text-muted-foreground">
-            Monitor library seating arrangements
+            {selectedProperty.address} • Total Seats: {selectedProperty.totalSeats}
           </p>
           {error && (
             <p className="text-sm text-yellow-600 mt-2">
@@ -230,7 +243,7 @@ const SeatsPage = () => {
           )}
         </div>
 
-        {/* Modern Seat Status Cards */}
+        {/* Seat Status Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card 
             className={cn(
@@ -309,7 +322,7 @@ const SeatsPage = () => {
           </Card>
         </div>
 
-        {/* Tabs for View and Configuration */}
+        {/* View/Configure Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="view">View Layout</TabsTrigger>
@@ -322,20 +335,31 @@ const SeatsPage = () => {
                 <CardTitle>Seat Map</CardTitle>
               </CardHeader>
               <CardContent>
-                <InteractiveSeatMap 
-                  showOnlyAvailable={filterStatus === 'available'}
-                  onSeatSelect={handleSeatSelect}
-                  className="mt-4"
-                />
+                {layoutConfig ? (
+                  <InteractiveSeatMap 
+                    config={layoutConfig}
+                    showOnlyAvailable={filterStatus === 'available'}
+                    onSeatSelect={handleSeatSelect}
+                    onSeatUpdate={handleUpdateSeat}
+                    onSeatDelete={handleDeleteSeat}
+                    className="mt-4"
+                  />
+                ) : (
+                  <p className="text-muted-foreground">No layout configuration available</p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
           
           <TabsContent value="configure">
-            <LayoutConfigurator 
-              onSave={handleLayoutSave}
-              initialConfig={layoutConfig}
-            />
+            {layoutConfig ? (
+              <LayoutConfigurator 
+                onSave={handleSaveLayout}
+                initialConfig={layoutConfig}
+              />
+            ) : (
+              <p className="text-muted-foreground">No layout configuration available to edit</p>
+            )}
           </TabsContent>
         </Tabs>
       </div>

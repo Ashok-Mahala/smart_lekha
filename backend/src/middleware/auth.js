@@ -6,8 +6,8 @@ const User = require('../models/User');
 // Protect routes
 const protect = async (req, res, next) => {
   try {
-    console.log('Headers:', req.headers); // Debug: Log all headers
-    console.log('Auth Header:', req.headers.authorization); // Debug: Specific auth header
+    //console.log('Headers:', req.headers); // Debug: Log all headers
+    //console.log('Auth Header:', req.headers.authorization); // Debug: Specific auth header
     let token;
 
     if (req.headers.authorization?.startsWith('Bearer')) {

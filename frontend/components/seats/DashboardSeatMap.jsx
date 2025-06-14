@@ -132,10 +132,10 @@ const DashboardSeatMap = ({ className }) => {
         setSeatLayout(formattedData);
       } catch (err) {
         console.error("Error fetching seats:", err);
-        setError("Failed to load seat data. Please try again later.");
+        setError("Failed to load seat data 4. Please try again later.");
         toast({
           title: "Error",
-          description: "Failed to load seat data",
+          description: "Failed to load seat data 3",
           variant: "destructive",
         });
         setSeatLayout([]);

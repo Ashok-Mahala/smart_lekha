@@ -63,7 +63,7 @@ const InteractiveSeatMap = ({ className, onSeatSelect, showOnlyAvailable = false
         setError('Unable to load seat data.');
         toast({
           title: "Error",
-          description: "Failed to load seat data.",
+          description: "Failed to load seat data. 2",
           variant: "destructive",
         });
         
