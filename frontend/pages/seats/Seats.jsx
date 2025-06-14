@@ -233,9 +233,6 @@ const SeatsPage = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Seat Management - {selectedProperty.name}</h1>
-          <p className="text-muted-foreground">
-            {selectedProperty.address} • Total Seats: {selectedProperty.totalSeats}
-          </p>
           {error && (
             <p className="text-sm text-yellow-600 mt-2">
               {error}
@@ -259,7 +256,7 @@ const SeatsPage = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-amber-600">{stats.total}</div>
+              <div className="text-3xl font-bold text-amber-600">{selectedProperty.totalSeats}</div>
               <p className="text-xs text-blue-700 mt-2">Library capacity</p>
             </CardContent>
           </Card>

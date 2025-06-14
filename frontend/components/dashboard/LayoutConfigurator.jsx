@@ -89,6 +89,10 @@ const LayoutConfigurator = ({
               : 'bg-gray-400 hover:bg-gray-500 cursor-not-allowed'
           }`}
           onClick={() => handleGridClick(rowIndex, colIndex)}
+          style={{
+            minWidth: '24px', // Minimum size for seats
+            maxWidth: '100%', // Prevent overflow
+          }}
         >
           {config.showNumbers && seatNumbers[rowIndex]?.[colIndex] > 0 && (
             <span className="text-xs text-primary-foreground">
@@ -171,10 +175,11 @@ const LayoutConfigurator = ({
             </div>
           </div>
           <div 
-            className="grid gap-2 border rounded-lg p-4"
+            className="grid gap-2 border rounded-lg p-4 overflow-auto"
             style={{
-              gridTemplateColumns: `repeat(${config.columns}, minmax(40px, 1fr))`,
-              gap: `${config.gap * 4}px`
+              gridTemplateColumns: `repeat(${config.columns}, minmax(24px, 1fr))`,
+              gap: `${config.gap * 4}px`,
+              maxWidth: '100%',
             }}
           >
             {renderGrid()}
