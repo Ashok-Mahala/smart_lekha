@@ -19,9 +19,8 @@ const seatSchema = new mongoose.Schema({
     trim: true
   },
   row: {
-    type: String,
+    type: Number,
     required: true,
-    trim: true
   },
   column: {
     type: Number,

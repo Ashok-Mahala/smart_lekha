@@ -22,17 +22,32 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { bookSeat, reserveSeat, releaseSeat } from "@/api/seats";
+import { getShifts } from "@/api/shifts";
+
+const normalizeSeats = (rawSeats) => {
+  return rawSeats.map((seat) => ({
+    id: seat._id || `seat-${seat.row}-${seat.column}`, // Fallback ID if _id is missing
+    _id: seat._id, // Keep original _id
+    number: seat.seatNumber || `seat-${seat.row}-${seat.column}`,
+    row: Number(seat.row),
+    column: Number(seat.column),
+    status: seat.status || 'available',
+    student: seat.student || null,
+    propertyId: seat.propertyId,
+    // Include any other necessary fields from the raw seat data
+  }));
+};
 
 const InteractiveSeatMap = ({ 
   className, 
-  config,
+  config = { rows: 6, columns: 20 }, // Default config if not provided
   seats: initialSeats = [],
   onSeatSelect, 
   onSeatUpdate,
   onSeatDelete,
   showOnlyAvailable = false 
 }) => {
-  const [seats, setSeats] = useState(initialSeats);
+  const [seats, setSeats] = useState(normalizeSeats(initialSeats));
   const [currentDate, setCurrentDate] = useState(new Date().toLocaleDateString('en-US', { 
     weekday: 'long', 
     year: 'numeric', 
@@ -51,8 +66,21 @@ const InteractiveSeatMap = ({
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    setSeats(initialSeats);
+    if (initialSeats && initialSeats.length > 0) {
+      setSeats(normalizeSeats(initialSeats));
+    }
   }, [initialSeats]);
+
+  useEffect(() => {
+    // Debugging: log seat data
+    seats.forEach(seat => {
+      console.log(`Seat ${seat.number} → Row: ${seat.row}, Column: ${seat.column}, Status: ${seat.status}`);
+    });
+    
+    if (seats.length > 0) {
+      console.log("Seat data sample:", seats[0]);
+    }
+  }, [seats]);
 
   useEffect(() => {
     const loadShifts = async () => {
@@ -69,7 +97,6 @@ const InteractiveSeatMap = ({
 
     loadShifts();
 
-    // Update date and time
     const updateDateTime = () => {
       const now = new Date();
       const options = { 
@@ -82,8 +109,6 @@ const InteractiveSeatMap = ({
     };
 
     updateDateTime();
-
-    // Update time every minute
     const interval = setInterval(updateDateTime, 60000);
     return () => clearInterval(interval);
   }, []);
@@ -93,7 +118,6 @@ const InteractiveSeatMap = ({
       return;
     }
 
-    // Handle different seat statuses
     if (seat.status === 'reserved') {
       setSelectedSeatForPreBook(seat);
       setIsPreBookDialogOpen(true);
@@ -122,8 +146,8 @@ const InteractiveSeatMap = ({
 
     try {
       setIsLoading(true);
-      const updatedSeat = await reserveSeat(selectedSeatForPreBook.id, {
-        studentId: `temp-${Date.now()}`, // Replace with actual student ID
+      const updatedSeat = await reserveSeat(selectedSeatForPreBook._id || selectedSeatForPreBook.id, {
+        studentId: `temp-${Date.now()}`,
         until: bookingDetails.date,
         name: bookingDetails.name,
         email: bookingDetails.email,
@@ -131,10 +155,16 @@ const InteractiveSeatMap = ({
         date: bookingDetails.date
       });
 
-      // Update local state and notify parent
-      const updatedSeats = seats.map(seat => 
-        seat.id === selectedSeatForPreBook.id ? updatedSeat : seat
+      // Update local state
+      const updatedSeats = seats.map(s => 
+        s.id === selectedSeatForPreBook.id ? { ...s, status: 'reserved', student: {
+          id: `temp-${Date.now()}`,
+          name: bookingDetails.name,
+          email: bookingDetails.email,
+          phone: bookingDetails.phone
+        }} : s
       );
+      
       setSeats(updatedSeats);
       
       if (onSeatUpdate) {
@@ -171,8 +201,8 @@ const InteractiveSeatMap = ({
 
     try {
       setIsLoading(true);
-      const updatedSeat = await bookSeat(selectedAvailableSeat.id, {
-        studentId: `temp-${Date.now()}`, // Replace with actual student ID
+      const updatedSeat = await bookSeat(selectedAvailableSeat._id || selectedAvailableSeat.id, {
+        studentId: `temp-${Date.now()}`,
         until: bookingDetails.date,
         name: bookingDetails.name,
         email: bookingDetails.email,
@@ -181,10 +211,16 @@ const InteractiveSeatMap = ({
         date: bookingDetails.date
       });
 
-      // Update local state and notify parent
-      const updatedSeats = seats.map(seat => 
-        seat.id === selectedAvailableSeat.id ? updatedSeat : seat
+      // Update local state
+      const updatedSeats = seats.map(s => 
+        s.id === selectedAvailableSeat.id ? { ...s, status: 'occupied', student: {
+          id: `temp-${Date.now()}`,
+          name: bookingDetails.name,
+          email: bookingDetails.email,
+          phone: bookingDetails.phone
+        }} : s
       );
+      
       setSeats(updatedSeats);
       
       if (onSeatUpdate) {
@@ -268,11 +304,10 @@ const InteractiveSeatMap = ({
     return null;
   };
 
-  // Calculate rows based on layout configuration
   const renderSeats = () => {
-    if (!config || !seats.length) return null;
+    if (!seats.length) return null;
 
-    const { rows, columns } = config;
+    const { rows = 6, columns = 20 } = config || {};
     const seatGrid = [];
 
     for (let row = 0; row < rows; row++) {
@@ -305,7 +340,7 @@ const InteractiveSeatMap = ({
                     <span className="text-xs mt-1">{seat.number}</span>
                     {seat.student && (
                       <span className="text-[10px] truncate max-w-full px-1">
-                        {seat.student.name.split(' ')[0]}
+                        {seat.student.name?.split(' ')[0] || 'Student'}
                       </span>
                     )}
                   </div>
@@ -316,7 +351,7 @@ const InteractiveSeatMap = ({
                 <div className="text-xs">
                   <p className="font-semibold">Seat #{seat.number}</p>
                   <p>Status: {getSeatStatus(seat)}</p>
-                  {seat.student && <p>Student: {seat.student.name}</p>}
+                  {seat.student && <p>Student: {seat.student.name || 'Unknown'}</p>}
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -437,8 +472,8 @@ const InteractiveSeatMap = ({
       />
 
       <AvailableSeatDialog
-        isOpen={isAvailableDialogOpen} 
-        onClose={handleAvailableDialogClose} 
+        open={isAvailableDialogOpen}
+        onOpenChange={setIsAvailableDialogOpen}
         onConfirm={handleAvailableSeatConfirm}
         seatNumber={selectedAvailableSeat?.number}
         shifts={shifts}
@@ -450,15 +485,16 @@ const InteractiveSeatMap = ({
 InteractiveSeatMap.propTypes = {
   className: PropTypes.string,
   config: PropTypes.shape({
-    rows: PropTypes.number.isRequired,
-    columns: PropTypes.number.isRequired,
+    rows: PropTypes.number,
+    columns: PropTypes.number,
   }),
   seats: PropTypes.arrayOf(PropTypes.shape({
-    id: PropTypes.string.isRequired,
-    number: PropTypes.string.isRequired,
-    row: PropTypes.number.isRequired,
-    column: PropTypes.number.isRequired,
-    status: PropTypes.string.isRequired,
+    id: PropTypes.string,
+    _id: PropTypes.string,
+    number: PropTypes.string,
+    row: PropTypes.number,
+    column: PropTypes.number,
+    status: PropTypes.string,
     student: PropTypes.object,
   })),
   onSeatSelect: PropTypes.func,
