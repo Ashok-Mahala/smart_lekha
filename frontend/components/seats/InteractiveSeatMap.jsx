@@ -1,19 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from "@/lib/utils";
 import { Sofa, User, Lock, Unlock, Calendar, Loader2 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
 import StudentInfoDialog from './StudentInfoDialog';
 import PreBookedSeatDialog from './PreBookedSeatDialog';
 import AvailableSeatDialog from './AvailableSeatDialog';
@@ -70,17 +59,6 @@ const InteractiveSeatMap = ({
       setSeats(normalizeSeats(initialSeats));
     }
   }, [initialSeats]);
-
-  useEffect(() => {
-    // Debugging: log seat data
-    seats.forEach(seat => {
-      console.log(`Seat ${seat.number} → Row: ${seat.row}, Column: ${seat.column}, Status: ${seat.status}`);
-    });
-    
-    if (seats.length > 0) {
-      console.log("Seat data sample:", seats[0]);
-    }
-  }, [seats]);
 
   useEffect(() => {
     const loadShifts = async () => {
