@@ -170,6 +170,92 @@ const deleteSeat = asyncHandler(async (req, res) => {
   res.json({ message: 'Seat deleted successfully', seatId: req.params.id });
 });
 
+// To update bulk seats
+const bulkUpdateSeats = async (req, res) => {
+  try {
+    const { updates } = req.body;
+    
+    const bulkOps = updates.map(update => {
+      const operation = {
+        updateOne: {
+          filter: { _id: update.id },
+          update: {}
+        }
+      };
+      
+      // Handle reactivation (status change to available)
+      if (update.updates.status === 'available') {
+        operation.updateOne.update = {
+          $set: {
+            ...update.updates,
+            status: 'available'
+          },
+          $unset: {
+            deletedAt: 1  // Remove deletedAt field when reactivating
+          }
+        };
+      } 
+      // Handle soft deletion
+      else if (update.updates.status === 'deleted') {
+        operation.updateOne.update = {
+          $set: {
+            ...update.updates,
+            status: 'deleted',
+            deletedAt: new Date()
+          }
+        };
+      }
+      // Regular updates
+      else {
+        operation.updateOne.update = {
+          $set: update.updates
+        };
+      }
+      
+      return operation;
+    });
+    
+    const result = await Seat.bulkWrite(bulkOps);
+    
+    // Get counts of different operation types
+    const reactivatedCount = updates.filter(u => 
+      u.updates.status === 'available' && u.updates.deletedAt === undefined
+    ).length;
+    
+    const deletedCount = updates.filter(u => 
+      u.updates.status === 'deleted'
+    ).length;
+    
+    const updatedCount = updates.length - reactivatedCount - deletedCount;
+    
+    res.json({
+      ...result.toJSON(),
+      operationCounts: {
+        reactivated: reactivatedCount,
+        deleted: deletedCount,
+        updated: updatedCount
+      }
+    });
+    
+  } catch (error) {
+    res.status(400).json({ 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// To delete bulk seats
+const bulkDeleteSeats = async (req, res) => {
+  try {
+    const seatIds = req.body;
+    const result = await Seat.deleteMany({ _id: { $in: seatIds } });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 
 module.exports = {
   getSeatsByProperty,
@@ -180,5 +266,7 @@ module.exports = {
   getSeatStats,
   getShifts,
   updateSeatStatus,
-  deleteSeat
+  deleteSeat,
+  bulkUpdateSeats,
+  bulkDeleteSeats
 };

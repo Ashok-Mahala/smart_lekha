@@ -158,38 +158,88 @@ const SeatsPage = () => {
       });
       setLayoutConfig(savedConfig);
       
-      // 2. Prepare seats data for bulk creation
+      // 2. Get existing seats for this property
+      const existingSeats = await getSeatsByProperty(selectedProperty._id);
+      const existingSeatsMap = new Map();
+      existingSeats.forEach(seat => {
+        existingSeatsMap.set(`${seat.row}-${seat.column}`, seat);
+      });
+      
+      // 3. Prepare seats data for operations
       const seatsToCreate = [];
+      const seatsToUpdate = [];
+      const seatsToReactivate = []; // For seats that were previously deleted
       let seatNumber = 1;
       
       for (let row = 0; row < savedConfig.rows; row++) {
         for (let col = 0; col < savedConfig.columns; col++) {
           if (savedConfig.layout[row][col]) {
-            seatsToCreate.push({
-              propertyId: selectedProperty._id,
-              seatNumber: `seat-${seatNumber}`, // Make sure seatNumber is provided
-              number: seatNumber, // Add this if needed
-              row: row.toString(), // Ensure row is string if required
-              column: col.toString(), // Ensure column is string if required
-              status: 'available',
-              type: 'standard'
-            });
-            seatNumber++;
+            const seatKey = `${row}-${col}`;
+            const existingSeat = existingSeatsMap.get(seatKey);
+            
+            if (existingSeat) {
+              if (existingSeat.status === 'deleted') {
+                // Seat exists but was previously deleted - reactivate it
+                seatsToReactivate.push({
+                  id: existingSeat._id,
+                  updates: {
+                    status: 'available',
+                    deletedAt: null // Clear deletion marker if you have one
+                  }
+                });
+              } else {
+                // Seat exists and is active - update if needed
+                seatsToUpdate.push({
+                  id: existingSeat._id,
+                  updates: {
+                    // Add any fields that might need updating
+                  }
+                });
+              }
+            } else {
+              // New seat - create
+              seatsToCreate.push({
+                propertyId: selectedProperty._id,
+                seatNumber: `seat-${seatNumber}`,
+                number: seatNumber,
+                row: row,
+                column: col,
+                status: 'available',
+                type: 'standard'
+              });
+              seatNumber++;
+            }
           }
         }
       }
-  
-      // 3. Bulk create seats
-      const createdSeats = await bulkCreateSeats(seatsToCreate);
-      setSeats(createdSeats);
       
-      // 4. Refresh stats
+      // 4. Mark seats that are no longer in the layout as deleted
+      const seatsToDelete = existingSeats.filter(seat => {
+        return !savedConfig.layout[seat.row]?.[seat.column] && seat.status !== 'deleted';
+      }).map(seat => ({
+        id: seat._id,
+        updates: {
+          status: 'deleted',
+          deletedAt: new Date() // Optional: track when it was deleted
+        }
+      }));
+      
+      // 5. Perform all operations
+      const createdSeats = seatsToCreate.length > 0 ? await bulkCreateSeats(seatsToCreate) : [];
+      const updatedSeats = seatsToUpdate.length > 0 ? await bulkUpdateSeats(seatsToUpdate) : [];
+      const reactivatedSeats = seatsToReactivate.length > 0 ? await bulkUpdateSeats(seatsToReactivate) : [];
+      const deletedSeats = seatsToDelete.length > 0 ? await bulkUpdateSeats(seatsToDelete) : [];
+      
+      // 6. Refresh seats and stats
+      const updatedSeatsList = await getSeatsByProperty(selectedProperty._id);
+      setSeats(updatedSeatsList);
+      
       const stats = await getSeatStats(selectedProperty._id);
       setStats(stats);
       
       toast({
         title: "Success",
-        description: `Layout saved and ${createdSeats.length} seats created`,
+        description: `Layout saved. Created ${createdSeats.length}, updated ${updatedSeats.length}, reactivated ${reactivatedSeats.length}, deleted ${deletedSeats.length} seats.`,
       });
     } catch (error) {
       toast({
@@ -201,7 +251,7 @@ const SeatsPage = () => {
       setIsLoading(false);
     }
   };
-
+  
   const handleUpdateSeat = async (seatId, seatData) => {
     if (!selectedProperty) return;
     

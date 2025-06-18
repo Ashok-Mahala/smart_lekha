@@ -56,6 +56,49 @@ export const bulkCreateSeats = async (seatsData) => {
   }
 };
 
+// New function for bulk updating seats
+export const bulkUpdateSeats = async (updates) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/bulk-update`, { updates });
+    
+    // Enhanced success message based on operation types
+    const reactivatedCount = updates.filter(u => 
+      u.updates.status === 'available' && u.updates.deletedAt === undefined
+    ).length;
+    
+    const deletedCount = updates.filter(u => 
+      u.updates.status === 'deleted'
+    ).length;
+    
+    const updatedCount = updates.length - reactivatedCount - deletedCount;
+
+    let message = '';
+    if (reactivatedCount > 0) message += `Reactivated ${reactivatedCount} seats. `;
+    if (deletedCount > 0) message += `Deleted ${deletedCount} seats. `;
+    if (updatedCount > 0) message += `Updated ${updatedCount} seats.`;
+    
+    toast.success(message.trim() || 'No changes were needed');
+    return response.data;
+  } catch (error) {
+    // More specific error message based on response
+    const errorMessage = error.response?.data?.error || 'Failed to update seats';
+    toast.error(errorMessage);
+    throw error;
+  }
+};
+
+// New function for bulk deleting seats
+export const bulkDeleteSeats = async (seatIds) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/bulk-delete`, { seatIds });
+    toast.success(`Deleted ${seatIds.length} seats`);
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to delete seats');
+    throw error;
+  }
+};
+
 export const bookSeat = async (seatId, bookingData) => {
   try {
     const response = await axios.post(`${API_BASE_URL}/${seatId}/book`, bookingData);
@@ -131,10 +174,11 @@ export const deleteSeat = async (seatId) => {
   }
 };
 
-
 export default {
   getSeatsByProperty,
   bulkCreateSeats,
+  bulkUpdateSeats,  // Added
+  bulkDeleteSeats,  // Added
   bookSeat,
   reserveSeat,
   releaseSeat,
