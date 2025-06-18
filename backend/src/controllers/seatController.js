@@ -159,6 +159,18 @@ const updateSeatStatus = asyncHandler(async (req, res) => {
   res.json(seat);
 });
 
+// Delete a seat by ID
+const deleteSeat = asyncHandler(async (req, res) => {
+  const seat = await Seat.findByIdAndDelete(req.params.id);
+
+  if (!seat) {
+    throw new ApiError(404, 'Seat not found');
+  }
+
+  res.json({ message: 'Seat deleted successfully', seatId: req.params.id });
+});
+
+
 module.exports = {
   getSeatsByProperty,
   bulkCreateSeats,
@@ -167,5 +179,6 @@ module.exports = {
   releaseSeat,
   getSeatStats,
   getShifts,
-  updateSeatStatus
+  updateSeatStatus,
+  deleteSeat
 };

@@ -11,19 +11,23 @@ import { toast } from "@/components/ui/use-toast";
 import { getLayout, saveLayout } from "@/api/layouts";
 import { 
   getSeatsByProperty,
-  bulkCreateSeats, // aliased to match your existing code
+  bulkCreateSeats,
   bookSeat,
   reserveSeat,
   releaseSeat,
   getSeatStats,
   getShifts,
-  updateSeatStatus
+  updateSeatStatus,
+  deleteSeat
 } from "@/api/seats";
 
 // Generate default layout configuration based on total seats
 const generateDefaultLayout = (propertyId, totalSeats = 50) => {
   const columns = Math.min(7, Math.ceil(Math.sqrt(totalSeats)));
   const rows = Math.ceil(totalSeats / columns);
+  
+  // Create a layout with all seats initially available
+  const layout = Array(rows).fill().map(() => Array(columns).fill(true));
   
   return {
     rows,
@@ -34,7 +38,7 @@ const generateDefaultLayout = (propertyId, totalSeats = 50) => {
     gap: 1,
     showNumbers: true,
     showStatus: true,
-    layout: Array(rows).fill().map(() => Array(columns).fill(true)),
+    layout, // This 2D array defines where seats can exist (true) and where they can't (false)
     propertyId
   };
 };
@@ -60,19 +64,16 @@ const SeatsPage = () => {
       try {
         setIsLoading(true);
         
-        // Get selected property ID from localStorage
         const selectedPropertyId = localStorage.getItem('selected_property');
         if (!selectedPropertyId) {
           throw new Error('No property selected');
         }
 
-        // Get properties from localStorage
         const storedProperties = localStorage.getItem('properties');
         if (!storedProperties) {
           throw new Error('No properties found');
         }
 
-        // Parse properties and find selected one
         const properties = JSON.parse(storedProperties);
         const property = properties.find(p => p._id === selectedPropertyId);
         
@@ -91,21 +92,31 @@ const SeatsPage = () => {
         // If no layout exists, create a default one
         if (!layoutData) {
           const defaultLayout = generateDefaultLayout(property._id, property.totalSeats);
-          await saveLayout(property._id, defaultLayout);
-          setLayoutConfig(defaultLayout);
+          const savedLayout = await saveLayout(property._id, defaultLayout);
+          setLayoutConfig(savedLayout);
           
-          // Create default seats
-          const seatsToCreate = Array.from({ length: property.totalSeats }, (_, i) => ({
-            seatId: `seat-${i+1}`,
-            propertyId: property._id,
-            number: i+1,
-            status: 'available',
-            row: Math.floor(i / defaultLayout.columns),
-            column: i % defaultLayout.columns
-          }));
+          // Create only seats where layout allows (where layout[row][col] is true)
+          const seatsToCreate = [];
+          let seatNumber = 1;
           
-          await Promise.all(seatsToCreate.map(seat => createSeat(seat)));
-          setSeats(seatsToCreate);
+          for (let row = 0; row < savedLayout.rows; row++) {
+            for (let col = 0; col < savedLayout.columns; col++) {
+              if (savedLayout.layout[row][col]) {
+                seatsToCreate.push({
+                  seatId: `seat-${seatNumber}`,
+                  propertyId: property._id,
+                  number: seatNumber,
+                  status: 'available',
+                  row,
+                  column: col
+                });
+                seatNumber++;
+              }
+            }
+          }
+          
+          const createdSeats = await bulkCreateSeats(seatsToCreate);
+          setSeats(createdSeats);
         } else {
           setLayoutConfig(layoutData);
           setSeats(seatsData);
@@ -149,17 +160,23 @@ const SeatsPage = () => {
       
       // 2. Prepare seats data for bulk creation
       const seatsToCreate = [];
-      const totalSeats = savedConfig.rows * savedConfig.columns;
+      let seatNumber = 1;
       
-      for (let i = 0; i < totalSeats; i++) {
-        seatsToCreate.push({
-          propertyId: selectedProperty._id,
-          seatNumber: `seat-${i+1}`,
-          row: Math.floor(i / savedConfig.columns).toString(),
-          column: i % savedConfig.columns,
-          status: 'available',
-          type: 'standard'
-        });
+      for (let row = 0; row < savedConfig.rows; row++) {
+        for (let col = 0; col < savedConfig.columns; col++) {
+          if (savedConfig.layout[row][col]) {
+            seatsToCreate.push({
+              propertyId: selectedProperty._id,
+              seatNumber: `seat-${seatNumber}`, // Make sure seatNumber is provided
+              number: seatNumber, // Add this if needed
+              row: row.toString(), // Ensure row is string if required
+              column: col.toString(), // Ensure column is string if required
+              status: 'available',
+              type: 'standard'
+            });
+            seatNumber++;
+          }
+        }
       }
   
       // 3. Bulk create seats
@@ -249,6 +266,11 @@ const SeatsPage = () => {
       </DashboardLayout>
     );
   }
+
+  // Filter seats based on status if filter is applied
+  const filteredSeats = filterStatus && filterStatus !== 'total' 
+    ? seats.filter(seat => seat.status === filterStatus)
+    : seats;
 
   return (
     <DashboardLayout>
@@ -357,7 +379,7 @@ const SeatsPage = () => {
                 {layoutConfig ? (
                   <InteractiveSeatMap 
                     config={layoutConfig}
-                    seats={seats}
+                    seats={filteredSeats}
                     showOnlyAvailable={filterStatus === 'available'}
                     onSeatSelect={handleSeatSelect}
                     onSeatUpdate={handleUpdateSeat}

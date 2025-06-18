@@ -9,7 +9,8 @@ const {
   releaseSeat,
   getSeatStats,
   getShifts,
-  updateSeatStatus
+  updateSeatStatus,
+  deleteSeat
 } = require('../controllers/seatController');
 // const {
 //   bulkCreateValidation,
@@ -30,6 +31,7 @@ router.use(protect);
 router.post('/:id/book', bookSeat);
 router.post('/:id/reserve', reserveSeat);
 router.post('/:id/release', releaseSeat);
+router.delete('/:id', deleteSeat);
 
 // Admin routes
 // router.use(authorize('admin'));

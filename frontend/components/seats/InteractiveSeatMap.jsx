@@ -29,7 +29,11 @@ const normalizeSeats = (rawSeats) => {
 
 const InteractiveSeatMap = ({ 
   className, 
-  config = { rows: 6, columns: 20 }, // Default config if not provided
+  config = { 
+    rows: 6, 
+    columns: 20,
+    layout: Array(6).fill().map(() => Array(20).fill(true)) // Default layout if not provided
+  },
   seats: initialSeats = [],
   onSeatSelect, 
   onSeatUpdate,
@@ -283,20 +287,40 @@ const InteractiveSeatMap = ({
   };
 
   const renderSeats = () => {
-    if (!seats.length) return null;
-
-    const { rows = 6, columns = 20 } = config || {};
+    const { rows = 6, columns = 20, layout = Array(rows).fill().map(() => Array(columns).fill(true)) } = config || {};
     const seatGrid = [];
 
     for (let row = 0; row < rows; row++) {
-      const rowSeats = seats.filter(seat => seat.row === row);
       const seatRow = [];
 
       for (let col = 0; col < columns; col++) {
-        const seat = rowSeats.find(s => s.column === col);
+        // Check if this position should have a seat based on layout config
+        const hasSeat = layout[row]?.[col] !== false; // Default to true if undefined
+        
+        if (!hasSeat) {
+          // Empty space (no seat)
+          seatRow.push(
+            <div 
+              key={`empty-${row}-${col}`} 
+              className="w-full aspect-square bg-gray-100 rounded-sm"
+            />
+          );
+          continue;
+        }
+
+        // Find seat for this position
+        const seat = seats.find(s => s.row === row && s.column === col);
         
         if (!seat) {
-          seatRow.push(<div key={`empty-${row}-${col}`} className="w-full aspect-square" />);
+          // Position should have a seat but no seat data exists
+          seatRow.push(
+            <div 
+              key={`missing-${row}-${col}`} 
+              className="w-full aspect-square bg-red-100 border border-red-300 rounded-sm flex items-center justify-center"
+            >
+              <Lock className="h-3 w-3 text-red-500" />
+            </div>
+          );
           continue;
         }
 
@@ -433,6 +457,10 @@ const InteractiveSeatMap = ({
           <div className="w-4 h-4 bg-gray-100 border-2 border-gray-400 rounded-sm"></div>
           <span className="text-xs">Locked</span>
         </div>
+        <div className="flex items-center gap-1">
+          <div className="w-4 h-4 bg-gray-100 rounded-sm"></div>
+          <span className="text-xs">Empty Space</span>
+        </div>
       </div>
 
       {/* Dialogs */}
@@ -465,6 +493,7 @@ InteractiveSeatMap.propTypes = {
   config: PropTypes.shape({
     rows: PropTypes.number,
     columns: PropTypes.number,
+    layout: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.bool)),
   }),
   seats: PropTypes.arrayOf(PropTypes.shape({
     id: PropTypes.string,

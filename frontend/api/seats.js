@@ -120,6 +120,18 @@ export const updateSeatStatus = async (seatId, status) => {
   }
 };
 
+export const deleteSeat = async (seatId) => {
+  try {
+    const response = await axios.delete(`${API_BASE_URL}/${seatId}`);
+    toast.success('Seat deleted successfully');
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to delete seat');
+    throw error;
+  }
+};
+
+
 export default {
   getSeatsByProperty,
   bulkCreateSeats,
@@ -128,5 +140,6 @@ export default {
   releaseSeat,
   getSeatStats,
   getShifts,
-  updateSeatStatus
+  updateSeatStatus,
+  deleteSeat
 };
