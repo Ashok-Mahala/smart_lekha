@@ -2,11 +2,18 @@ const { asyncHandler } = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const Shift = require('../models/Shift');
 
-// @desc    Get all shifts
-// @route   GET /shifts
-// @access  Public
+// @desc    Get shifts by property
+// @route   GET /shifts?property=propertyId
+// @access  Public or Protected
 exports.getShifts = asyncHandler(async (req, res) => {
-  const shifts = await Shift.find().sort('startTime');
+  const { property } = req.query;
+
+  if (!property) {
+    throw new ApiError(400, 'Property ID is required');
+  }
+
+  const shifts = await Shift.find({ property }).sort('startTime');
+
   res.status(200).json({
     success: true,
     data: shifts
@@ -17,9 +24,9 @@ exports.getShifts = asyncHandler(async (req, res) => {
 // @route   POST /shifts
 // @access  Private/Admin
 exports.createShift = asyncHandler(async (req, res) => {
-  const { name, startTime, endTime, property } = req.body;
+  const { name, startTime, endTime, property, fee } = req.body;
   
-  if (!name || !startTime || !endTime || !property) {
+  if (!name || !startTime || !endTime || !property || !fee) {
     throw new ApiError(400, 'Please provide name, start time, end time');
   }
 
@@ -27,6 +34,7 @@ exports.createShift = asyncHandler(async (req, res) => {
     name, 
     startTime, 
     endTime,
+    fee,
     property // Automatically included from localStorage
   });
   
@@ -40,7 +48,7 @@ exports.createShift = asyncHandler(async (req, res) => {
 // @route   PUT /shifts/:id
 // @access  Private/Admin
 exports.updateShift = asyncHandler(async (req, res) => {
-  const { name, startTime, endTime } = req.body;
+  const { name, startTime, endTime, fee } = req.body;
   
   const shift = await Shift.findById(req.params.id);
   if (!shift) {
@@ -49,7 +57,7 @@ exports.updateShift = asyncHandler(async (req, res) => {
 
   const updatedShift = await Shift.findByIdAndUpdate(
     req.params.id,
-    { name, startTime, endTime },
+    { name, startTime, endTime, fee },
     {
       new: true,
       runValidators: true

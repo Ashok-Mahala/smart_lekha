@@ -48,7 +48,7 @@ const InteractiveSeatMap = ({
     day: 'numeric' 
   }));
   const [shifts, setShifts] = useState([]);
-  const [selectedShift, setSelectedShift] = useState(null);
+  const [selectedShift, setSelectedShift] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [isPreBookDialogOpen, setIsPreBookDialogOpen] = useState(false);
@@ -67,15 +67,20 @@ const InteractiveSeatMap = ({
   useEffect(() => {
     const loadShifts = async () => {
       try {
-        const shiftsData = await getShifts();
-        setShifts(shiftsData);
-        if (shiftsData.length > 0) {
-          setSelectedShift(shiftsData[0]);
+        const response = await getShifts();
+        console.log("Shifts response:", response); // Debug log
+        
+        if (response.success && response.data) {
+          setShifts(response.data); // Use response.data instead of response
+          if (response.data.length > 0) {
+            setSelectedShift(response.data[0]._id);
+          }
         }
       } catch (error) {
         console.error('Failed to load shifts:', error);
       }
     };
+    
 
     loadShifts();
 
@@ -415,21 +420,28 @@ const InteractiveSeatMap = ({
           {shifts.length > 0 && (
             <div className="w-full md:w-auto">
               <Select 
-                value={selectedShift?.id} 
-                onValueChange={(value) => setSelectedShift(shifts.find(s => s.id === value))}
+                value={selectedShift} 
+                onValueChange={(value) => setSelectedShift(value)}
               >
                 <SelectTrigger className="w-full md:w-[240px]">
-                  <SelectValue placeholder="Select shift" />
+                  <SelectValue placeholder="Select shift">
+                    {selectedShift && shifts.find(s => s._id === selectedShift)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {shifts.map(shift => (
-                    <SelectItem key={shift.id} value={shift.id}>
-                      {shift.name}
+                    <SelectItem key={shift._id} value={shift._id}>
+                      {shift.name} ({shift.startTime} - {shift.endTime})
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">{selectedShift?.time || 'Select a shift'}</p>
+              {selectedShift && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {shifts.find(s => s._id === selectedShift)?.startTime} - 
+                  {shifts.find(s => s._id === selectedShift)?.endTime}
+                </p>
+              )}
             </div>
           )}
         </div>

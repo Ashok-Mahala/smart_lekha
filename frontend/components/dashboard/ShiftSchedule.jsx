@@ -144,6 +144,7 @@ const ShiftSchedule = ({ className }) => {
                 <TableHead>Name</TableHead>
                 <TableHead>Start Time</TableHead>
                 <TableHead>End Time</TableHead>
+                <TableHead>Fee</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -153,6 +154,7 @@ const ShiftSchedule = ({ className }) => {
                   <TableCell>{shift.name || "—"}</TableCell>
                   <TableCell>{formatTime(shift.startTime)}</TableCell>
                   <TableCell>{formatTime(shift.endTime)}</TableCell>
+                  <TableCell>{shift.fee ?? '—'}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button

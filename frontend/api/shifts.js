@@ -27,7 +27,8 @@ export const createShift = async (shiftData) => {
 // Get all shifts
 export const getShifts = async () => {
   try {
-    const response = await axios.get(API_BASE_URL);
+    const propertyId = localStorage.getItem('selected_property');
+    const response = await axios.get(`${API_BASE_URL}?property=${propertyId}`);
     return response.data;
   } catch (error) {
     toast.error('Failed to fetch shifts');

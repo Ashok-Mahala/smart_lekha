@@ -8,11 +8,10 @@ const {
   deleteShift
 } = require('../controllers/shiftControllers');
 
-// Public routes
-router.get('/', getShifts);
-
 // Protected routes
 router.use(protect);
+
+router.get('/', getShifts);
 router.post('/', createShift);
 router.put('/:id', updateShift);
 router.delete('/:id', deleteShift);

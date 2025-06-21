@@ -14,6 +14,10 @@ const shiftSchema = new mongoose.Schema({
     type: String,  // Store as string (e.g., "17:00")
     required: true
   },
+  fee: {
+    type: Number,  // Store as Number (e.g., 1700)
+    required: true
+  },
   property: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Property',
