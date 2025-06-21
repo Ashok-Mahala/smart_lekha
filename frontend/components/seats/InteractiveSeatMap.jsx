@@ -66,10 +66,9 @@ const InteractiveSeatMap = ({
     const loadShifts = async () => {
       try {
         const response = await getShifts();
-        console.log("Shifts response:", response); // Debug log
         
         if (response.success && response.data) {
-          setShifts(response.data); // Use response.data instead of response
+          setShifts(response.data);
           if (response.data.length > 0) {
             setSelectedShift(response.data[0]._id);
           }
@@ -292,30 +291,22 @@ const InteractiveSeatMap = ({
   const renderSeats = () => {
     const { rows = 6, columns = 20, layout = Array(rows).fill().map(() => Array(columns).fill(true)) } = config || {};
     const seatGrid = [];
-
+  
     for (let row = 0; row < rows; row++) {
       const seatRow = [];
-
+  
       for (let col = 0; col < columns; col++) {
-        // Check if this position should have a seat based on layout config
-        const hasSeat = layout[row]?.[col] !== false; // Default to true if undefined
+        const hasSeat = layout[row]?.[col] !== false;
         
         if (!hasSeat) {
-          // Empty space (no seat)
-          seatRow.push(
-            <div 
-              key={`empty-${row}-${col}`} 
-              className="w-full aspect-square bg-gray-100 rounded-sm"
-            />
-          );
+          // For empty spaces, render nothing (or a div with no styling)
+          seatRow.push(<div key={`empty-${row}-${col}`} className="w-full aspect-square" />);
           continue;
         }
-
-        // Find seat for this position
+  
         const seat = seats.find(s => s.row === row && s.column === col);
         
         if (!seat) {
-          // Position should have a seat but no seat data exists
           seatRow.push(
             <div 
               key={`missing-${row}-${col}`} 
@@ -326,11 +317,11 @@ const InteractiveSeatMap = ({
           );
           continue;
         }
-
+  
         if (showOnlyAvailable && seat.status !== 'available') {
           continue;
         }
-
+  
         seatRow.push(
           <TooltipProvider key={seat.id}>
             <Tooltip>
@@ -342,7 +333,7 @@ const InteractiveSeatMap = ({
                 >
                   <div className="flex flex-col items-center justify-center h-full">
                     {getSeatIcon(seat)}
-                    <span className="text-xs mt-1">{seat.number}</span>
+                    <span className="text-xs mt-1">{seat.seatNumber}</span> {/* Changed to seat.seatNumber */}
                     {seat.student && (
                       <span className="text-[10px] truncate max-w-full px-1">
                         {seat.student.name?.split(' ')[0] || 'Student'}
@@ -354,7 +345,7 @@ const InteractiveSeatMap = ({
               </TooltipTrigger>
               <TooltipContent side="top">
                 <div className="text-xs">
-                  <p className="font-semibold">Seat #{seat.number}</p>
+                  <p className="font-semibold">Seat #{seat.seatNumber}</p> {/* Changed to seat.seatNumber */}
                   <p>Status: {getSeatStatus(seat)}</p>
                   {seat.student && <p>Student: {seat.student.name || 'Unknown'}</p>}
                 </div>
@@ -363,7 +354,7 @@ const InteractiveSeatMap = ({
           </TooltipProvider>
         );
       }
-
+  
       seatGrid.push(
         <div key={`row-${row}`} className="grid gap-2" style={{ 
           gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` 
@@ -372,7 +363,7 @@ const InteractiveSeatMap = ({
         </div>
       );
     }
-
+  
     return seatGrid;
   };
 
