@@ -97,26 +97,22 @@ const InteractiveSeatMap = ({
     return () => clearInterval(interval);
   }, []);
 
-  const handleSeatClick = (seat) => {
-    if (seat.status === 'locked') {
-      return;
-    }
+const handleSeatClick = (seat) => {
+  if (seat.status === 'locked') return;
 
-    if (seat.status === 'reserved') {
-      setSelectedSeatForPreBook(seat);
-      setIsPreBookDialogOpen(true);
-    } else if (seat.status === 'occupied') {
-      setSelectedStudent(seat.student);
-      setIsStudentDialogOpen(true);
-    } else if (seat.status === 'available') {
-      setSelectedAvailableSeat(seat);
-      setIsAvailableDialogOpen(true);
-    }
-    
-    if (onSeatSelect) {
-      onSeatSelect(seat.id);
-    }
-  };
+  if (seat.status === 'reserved') {
+    setSelectedSeatForPreBook(seat);
+    setIsPreBookDialogOpen(true);
+  } else if (seat.status === 'occupied') {
+    setSelectedStudent(seat.student);
+    setIsStudentDialogOpen(true);
+  } else if (seat.status === 'available') {
+    setSelectedAvailableSeat(seat);
+    setIsAvailableDialogOpen(true);
+  }
+  
+  if (onSeatSelect) onSeatSelect(seat.id);
+};
 
   const handlePreBookConfirm = async (bookingDetails) => {
     if (!bookingDetails.name || !bookingDetails.email || !bookingDetails.phone || !bookingDetails.date) {
@@ -464,27 +460,27 @@ const InteractiveSeatMap = ({
         </div>
       </div>
 
-      {/* Dialogs */}
-      <StudentInfoDialog
-        isOpen={isStudentDialogOpen} 
-        onClose={handleStudentDialogClose} 
-        student={selectedStudent}
-      />
+    {/* Dialogs */}
+    <StudentInfoDialog
+      open={isStudentDialogOpen}
+      onOpenChange={(open) => setIsStudentDialogOpen(open)}
+      student={selectedStudent}
+    />
 
-      <PreBookedSeatDialog
-        isOpen={isPreBookDialogOpen} 
-        onClose={handlePreBookDialogClose} 
-        onConfirm={handlePreBookConfirm}
-        seatNumber={selectedSeatForPreBook?.number}
-      />
+    <PreBookedSeatDialog
+      open={isPreBookDialogOpen}
+      onOpenChange={setIsPreBookDialogOpen}
+      onConfirm={handlePreBookConfirm}
+      seatNumber={selectedSeatForPreBook?.seatNumber}
+    />
 
-      <AvailableSeatDialog
-        open={isAvailableDialogOpen}
-        onOpenChange={setIsAvailableDialogOpen}
-        onConfirm={handleAvailableSeatConfirm}
-        seatNumber={selectedAvailableSeat?.number}
-        shifts={shifts}
-      />
+    <AvailableSeatDialog
+      open={isAvailableDialogOpen}
+      onOpenChange={setIsAvailableDialogOpen}
+      onConfirm={handleAvailableSeatConfirm}
+      seatNumber={selectedAvailableSeat?.seatNumber}
+      shifts={shifts}
+    />
     </div>
   );
 };

@@ -140,8 +140,8 @@ const StudentInfoDialog = ({ isOpen, onClose, student, seatNumber }) => {
 };
 
 StudentInfoDialog.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
+  open: PropTypes.bool.isRequired,
+  onOpenChange: PropTypes.func.isRequired,
   student: PropTypes.shape({
     id: PropTypes.string.isRequired,
     name: PropTypes.string.isRequired,
