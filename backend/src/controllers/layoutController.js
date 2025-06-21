@@ -5,17 +5,6 @@ const saveLayout = async (req, res) => {
     try {
       const propertyId = req.params.propertyId; // Get from URL params
       const { rows, columns, aisleWidth, seatWidth, seatHeight, gap, layout } = req.body;
-      
-      console.log('Received layout data:', {
-        propertyId,
-        rows,
-        columns,
-        aisleWidth,
-        seatWidth,
-        seatHeight,
-        gap,
-        layout
-      });
   
       // Validate input
       if (!rows || !columns || !layout) {

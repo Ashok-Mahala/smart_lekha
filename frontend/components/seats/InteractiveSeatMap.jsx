@@ -15,9 +15,9 @@ import { getShifts } from "@/api/shifts";
 
 const normalizeSeats = (rawSeats) => {
   return rawSeats.map((seat) => ({
-    id: seat._id || `seat-${seat.row}-${seat.column}`, // Fallback ID if _id is missing
+    id: seat._id || `${seat.row}-${seat.column}`, // Fallback ID if _id is missing
     _id: seat._id, // Keep original _id
-    number: seat.seatNumber || `seat-${seat.row}-${seat.column}`,
+    number: seat.seatNumber || `${seat.row}-${seat.column}`,
     row: Number(seat.row),
     column: Number(seat.column),
     status: seat.status || 'available',

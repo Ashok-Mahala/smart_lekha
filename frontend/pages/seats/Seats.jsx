@@ -12,6 +12,7 @@ import { getLayout, saveLayout } from "@/api/layouts";
 import { 
   getSeatsByProperty,
   bulkCreateSeats,
+  bulkUpdateSeats,
   bookSeat,
   reserveSeat,
   releaseSeat,
@@ -103,7 +104,7 @@ const SeatsPage = () => {
             for (let col = 0; col < savedLayout.columns; col++) {
               if (savedLayout.layout[row][col]) {
                 seatsToCreate.push({
-                  seatId: `seat-${seatNumber}`,
+                  seatId: seatNumber,
                   propertyId: property._id,
                   number: seatNumber,
                   status: 'available',
@@ -151,100 +152,51 @@ const SeatsPage = () => {
     try {
       setIsLoading(true);
       
-      // 1. Save the layout first
-      const savedConfig = await saveLayout(selectedProperty._id, {
-        ...config,
-        propertyId: selectedProperty._id
-      });
+      // 1. Save layout configuration
+      const savedConfig = await saveLayout(selectedProperty._id, config);
       setLayoutConfig(savedConfig);
       
-      // 2. Get existing seats for this property
+      // 2. Get current seats
       const existingSeats = await getSeatsByProperty(selectedProperty._id);
-      const existingSeatsMap = new Map();
-      existingSeats.forEach(seat => {
-        existingSeatsMap.set(`${seat.row}-${seat.column}`, seat);
-      });
       
-      // 3. Prepare seats data for operations
-      const seatsToCreate = [];
-      const seatsToUpdate = [];
-      const seatsToReactivate = []; // For seats that were previously deleted
-      let seatNumber = 1;
-      
-      for (let row = 0; row < savedConfig.rows; row++) {
-        for (let col = 0; col < savedConfig.columns; col++) {
-          if (savedConfig.layout[row][col]) {
-            const seatKey = `${row}-${col}`;
-            const existingSeat = existingSeatsMap.get(seatKey);
-            
-            if (existingSeat) {
-              if (existingSeat.status === 'deleted') {
-                // Seat exists but was previously deleted - reactivate it
-                seatsToReactivate.push({
-                  id: existingSeat._id,
-                  updates: {
-                    status: 'available',
-                    deletedAt: null // Clear deletion marker if you have one
-                  }
-                });
-              } else {
-                // Seat exists and is active - update if needed
-                seatsToUpdate.push({
-                  id: existingSeat._id,
-                  updates: {
-                    // Add any fields that might need updating
-                  }
-                });
-              }
-            } else {
-              // New seat - create
-              seatsToCreate.push({
-                propertyId: selectedProperty._id,
-                seatNumber: `seat-${seatNumber}`,
-                number: seatNumber,
-                row: row,
-                column: col,
-                status: 'available',
-                type: 'standard'
-              });
-              seatNumber++;
-            }
-          }
-        }
-      }
-      
-      // 4. Mark seats that are no longer in the layout as deleted
-      const seatsToDelete = existingSeats.filter(seat => {
-        return !savedConfig.layout[seat.row]?.[seat.column] && seat.status !== 'deleted';
-      }).map(seat => ({
+      // 3. Prepare updates - create a plain array of updates
+      const updates = existingSeats.map(seat => ({
         id: seat._id,
         updates: {
-          status: 'deleted',
-          deletedAt: new Date() // Optional: track when it was deleted
+          status: 'available',
+          deletedAt: null,
+          propertyId: selectedProperty._id,
+          seatNumber: seat.seatNumber,
+          row: seat.row,
+          column: seat.column
         }
       }));
+  
+      console.log('Prepared updates:', updates);
       
-      // 5. Perform all operations
-      const createdSeats = seatsToCreate.length > 0 ? await bulkCreateSeats(seatsToCreate) : [];
-      const updatedSeats = seatsToUpdate.length > 0 ? await bulkUpdateSeats(seatsToUpdate) : [];
-      const reactivatedSeats = seatsToReactivate.length > 0 ? await bulkUpdateSeats(seatsToReactivate) : [];
-      const deletedSeats = seatsToDelete.length > 0 ? await bulkUpdateSeats(seatsToDelete) : [];
+      // 4. Call bulkUpdateSeats with the array directly
+      const response = await bulkUpdateSeats(updates);
+      console.log('Update response:', response);
+  
+      // 5. Refresh data
+      const [updatedSeats, newStats] = await Promise.all([
+        getSeatsByProperty(selectedProperty._id),
+        getSeatStats(selectedProperty._id)
+      ]);
       
-      // 6. Refresh seats and stats
-      const updatedSeatsList = await getSeatsByProperty(selectedProperty._id);
-      setSeats(updatedSeatsList);
-      
-      const stats = await getSeatStats(selectedProperty._id);
-      setStats(stats);
+      setSeats(updatedSeats);
+      setStats(newStats);
       
       toast({
         title: "Success",
-        description: `Layout saved. Created ${createdSeats.length}, updated ${updatedSeats.length}, reactivated ${reactivatedSeats.length}, deleted ${deletedSeats.length} seats.`,
+        description: `Updated ${updates.length} seats successfully.`,
       });
+  
     } catch (error) {
+      console.error('Update failed:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to save layout",
+        description: error.response?.data?.message || "Failed to update seats",
         variant: "destructive",
       });
     } finally {

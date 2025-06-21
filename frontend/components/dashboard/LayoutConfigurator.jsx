@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import PropTypes from 'prop-types';
 
 const LayoutConfigurator = ({ 
@@ -31,18 +33,25 @@ const LayoutConfigurator = ({
     };
   });
 
-  // Calculate seat numbers while skipping unavailable seats (false values)
-  const seatNumbers = useMemo(() => {
-    let seatCounter = 0;
-    return config.layout?.map(row => 
-      row.map(seat => {
+  // State for seat number editing
+  const [editingSeat, setEditingSeat] = useState(null);
+  const [seatNumberInput, setSeatNumberInput] = useState('');
+  const [seatNumbers, setSeatNumbers] = useState({});
+
+  // Initialize seat numbers from layout
+  useEffect(() => {
+    const initialSeatNumbers = {};
+    let counter = 1;
+    
+    config.layout?.forEach((row, rowIndex) => {
+      row.forEach((seat, colIndex) => {
         if (seat) {
-          seatCounter++;
-          return seatCounter;
+          initialSeatNumbers[`${rowIndex}-${colIndex}`] = counter++;
         }
-        return 0; // 0 represents unavailable seats (pillars)
-      })
-    ) || [];
+      });
+    });
+    
+    setSeatNumbers(initialSeatNumbers);
   }, [config.layout]);
 
   // Update grid when rows/columns change
@@ -70,9 +79,49 @@ const LayoutConfigurator = ({
     setConfig(prev => ({ ...prev, layout: newLayout }));
   };
 
+  const handleSeatNumberClick = (e, row, col) => {
+    e.stopPropagation();
+    if (!config.layout[row][col]) return;
+    
+    setEditingSeat({ row, col });
+    setSeatNumberInput(seatNumbers[`${row}-${col}`] || '');
+  };
+
+  const handleSaveSeatNumber = () => {
+    if (editingSeat) {
+      const { row, col } = editingSeat;
+      const newNumber = parseInt(seatNumberInput) || 0;
+      
+      if (newNumber > 0) {
+        setSeatNumbers(prev => ({
+          ...prev,
+          [`${row}-${col}`]: newNumber
+        }));
+      }
+      
+      setEditingSeat(null);
+    }
+  };
+
   const handleSave = () => {
     if (config.layout) {
-      onSave(config);
+      // Convert seat numbers to sequential if showNumbers is true
+      const finalSeatNumbers = {};
+      let counter = 1;
+      
+      config.layout.forEach((row, rowIndex) => {
+        row.forEach((seat, colIndex) => {
+          if (seat) {
+            finalSeatNumbers[`${rowIndex}-${colIndex}`] = 
+              config.showNumbers ? counter++ : seatNumbers[`${rowIndex}-${colIndex}`] || counter++;
+          }
+        });
+      });
+      
+      onSave({
+        ...config,
+        seatNumbers: finalSeatNumbers
+      });
     }
   };
 
@@ -83,20 +132,23 @@ const LayoutConfigurator = ({
       row?.map((seat, colIndex) => (
         <button
           key={`${rowIndex}-${colIndex}`}
-          className={`aspect-square rounded-md flex items-center justify-center ${
+          className={`aspect-square rounded-md flex items-center justify-center relative ${
             seat
               ? 'bg-primary hover:bg-primary/90'
               : 'bg-gray-400 hover:bg-gray-500 cursor-not-allowed'
           }`}
           onClick={() => handleGridClick(rowIndex, colIndex)}
           style={{
-            minWidth: '24px', // Minimum size for seats
-            maxWidth: '100%', // Prevent overflow
+            minWidth: '24px',
+            maxWidth: '100%',
           }}
         >
-          {config.showNumbers && seatNumbers[rowIndex]?.[colIndex] > 0 && (
-            <span className="text-xs text-primary-foreground">
-              {seatNumbers[rowIndex][colIndex]}
+          {seat && config.showNumbers && (
+            <span 
+              className="text-xs text-primary-foreground hover:underline cursor-pointer"
+              onClick={(e) => handleSeatNumberClick(e, rowIndex, colIndex)}
+            >
+              {seatNumbers[`${rowIndex}-${colIndex}`] || ''}
             </span>
           )}
           {!seat && (
@@ -190,6 +242,32 @@ const LayoutConfigurator = ({
           Save Layout
         </Button>
       </div>
+
+      {/* Seat Number Edit Dialog */}
+      <Dialog open={!!editingSeat} onOpenChange={(open) => !open && setEditingSeat(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Seat Number</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              type="number"
+              min="1"
+              value={seatNumberInput}
+              onChange={(e) => setSeatNumberInput(e.target.value)}
+              placeholder="Enter seat number"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingSeat(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveSeatNumber}>
+                Save
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

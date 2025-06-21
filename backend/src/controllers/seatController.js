@@ -170,77 +170,46 @@ const deleteSeat = asyncHandler(async (req, res) => {
   res.json({ message: 'Seat deleted successfully', seatId: req.params.id });
 });
 
-// To update bulk seats
 const bulkUpdateSeats = async (req, res) => {
   try {
-    const { updates } = req.body;
+    console.log('Received bulk update request:', req.body);
     
-    const bulkOps = updates.map(update => {
-      const operation = {
+    // 1. Validate input is an array
+    if (!Array.isArray(req.body)) {
+      return res.status(400).json({ 
+        error: "Invalid request format",
+        details: "Expected an array of updates" 
+      });
+    }
+
+    // 2. Process each update
+    const bulkOps = req.body.map(update => {
+      if (!update.id || !update.updates) {
+        throw new Error(`Invalid update format: ${JSON.stringify(update)}`);
+      }
+      
+      return {
         updateOne: {
           filter: { _id: update.id },
-          update: {}
+          update: { $set: update.updates }
         }
       };
-      
-      // Handle reactivation (status change to available)
-      if (update.updates.status === 'available') {
-        operation.updateOne.update = {
-          $set: {
-            ...update.updates,
-            status: 'available'
-          },
-          $unset: {
-            deletedAt: 1  // Remove deletedAt field when reactivating
-          }
-        };
-      } 
-      // Handle soft deletion
-      else if (update.updates.status === 'deleted') {
-        operation.updateOne.update = {
-          $set: {
-            ...update.updates,
-            status: 'deleted',
-            deletedAt: new Date()
-          }
-        };
-      }
-      // Regular updates
-      else {
-        operation.updateOne.update = {
-          $set: update.updates
-        };
-      }
-      
-      return operation;
     });
-    
+
+    // 3. Execute bulk operation
     const result = await Seat.bulkWrite(bulkOps);
     
-    // Get counts of different operation types
-    const reactivatedCount = updates.filter(u => 
-      u.updates.status === 'available' && u.updates.deletedAt === undefined
-    ).length;
-    
-    const deletedCount = updates.filter(u => 
-      u.updates.status === 'deleted'
-    ).length;
-    
-    const updatedCount = updates.length - reactivatedCount - deletedCount;
-    
     res.json({
-      ...result.toJSON(),
-      operationCounts: {
-        reactivated: reactivatedCount,
-        deleted: deletedCount,
-        updated: updatedCount
-      }
+      success: true,
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount
     });
-    
+
   } catch (error) {
-    res.status(400).json({ 
+    console.error('Bulk update failed:', error);
+    res.status(400).json({
       error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };

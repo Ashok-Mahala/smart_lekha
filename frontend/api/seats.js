@@ -59,30 +59,24 @@ export const bulkCreateSeats = async (seatsData) => {
 // New function for bulk updating seats
 export const bulkUpdateSeats = async (updates) => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/bulk-update`, { updates });
+    console.log('[FRONTEND] Preparing bulk update request with data:', updates);
     
-    // Enhanced success message based on operation types
-    const reactivatedCount = updates.filter(u => 
-      u.updates.status === 'available' && u.updates.deletedAt === undefined
-    ).length;
+    // Send the updates array directly, not wrapped in another object
+    const response = await axios.post(`${API_BASE_URL}/bulk-update`, updates, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
     
-    const deletedCount = updates.filter(u => 
-      u.updates.status === 'deleted'
-    ).length;
-    
-    const updatedCount = updates.length - reactivatedCount - deletedCount;
-
-    let message = '';
-    if (reactivatedCount > 0) message += `Reactivated ${reactivatedCount} seats. `;
-    if (deletedCount > 0) message += `Deleted ${deletedCount} seats. `;
-    if (updatedCount > 0) message += `Updated ${updatedCount} seats.`;
-    
-    toast.success(message.trim() || 'No changes were needed');
+    console.log('[FRONTEND] Bulk update successful:', response.data);
     return response.data;
   } catch (error) {
-    // More specific error message based on response
-    const errorMessage = error.response?.data?.error || 'Failed to update seats';
-    toast.error(errorMessage);
+    console.error('[FRONTEND] Bulk update failed:', {
+      error: error.message,
+      response: error.response?.data,
+      config: error.config
+    });
     throw error;
   }
 };
