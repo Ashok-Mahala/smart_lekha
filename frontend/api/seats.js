@@ -167,8 +167,8 @@ export const deleteSeat = async (seatId) => {
 export default {
   getSeatsByProperty,
   bulkCreateSeats,
-  bulkUpdateSeats,  // Added
-  bulkDeleteSeats,  // Added
+  bulkUpdateSeats,
+  bulkDeleteSeats,
   bookSeat,
   reserveSeat,
   releaseSeat,
