@@ -1,4 +1,7 @@
 const Seat = require('../models/Seat');
+const Student = require('../models/Student');
+const Booking = require('../models/Booking');
+const Payment = require('../models/Payment');
 const { ApiError } = require('../utils/ApiError');
 const { asyncHandler } = require('../utils/asyncHandler');
 const mongoose = require('mongoose');
@@ -40,28 +43,103 @@ const bulkCreateSeats = asyncHandler(async (req, res) => {
 });
 
 // Book a seat
-const bookSeat = asyncHandler(async (req, res) => {
-  const { studentId, until } = req.body;
-  const seat = await Seat.findById(req.params.id);
+const bookSeat = async (req, res) => {
+  try {
+    const { seatId } = req.params;
+    const formData = req.body;
+    const files = req.files;
 
-  if (!seat) {
-    throw new ApiError(404, 'Seat not found');
+    // 1. Verify seat availability
+    const seat = await Seat.findById(seatId);
+    if (!seat) return res.status(404).json({ error: 'Seat not found' });
+    if (!seat.isAvailable()) return res.status(400).json({ error: `Seat is ${seat.status}` });
+
+    // 2. Parse student data
+    const studentData = JSON.parse(formData.studentData);
+    if (!studentData.email) return res.status(400).json({ error: 'Email is required' });
+
+    // 3. Find or create student
+    let student = await Student.findOne({ email: studentData.email });
+    if (!student) {
+      student = new Student({
+        firstName: studentData.firstName,
+        lastName: studentData.lastName || '',
+        email: studentData.email,
+        phone: studentData.phone,
+        institution: studentData.institution || '',
+        course: studentData.course || '',
+        status: 'active'
+      });
+      await student.save();
+    }
+
+    // 4. Create booking first (since payment needs booking reference)
+    const booking = new Booking({
+      seat: seatId,
+      student: student._id,
+      shift: formData.shiftId,
+      startDate: new Date(formData.startDate),
+      feeDetails: {
+        amount: parseFloat(formData.fee || 0),
+        collected: parseFloat(formData.collectedFee || 0),
+        balance: parseFloat(formData.fee || 0) - parseFloat(formData.collectedFee || 0)
+      },
+      createdBy: req.user?._id || student._id // Fallback to student if no user
+    });
+    await booking.save();
+
+    // 5. Create payment with required fields
+    const paymentData = JSON.parse(formData.paymentData);
+    const payment = new Payment({
+      amount: parseFloat(paymentData.amount),
+      paymentMethod: paymentData.method || 'cash',
+      status: 'completed',
+      student: student._id,
+      booking: booking._id, // Required field
+      createdBy: req.user?._id || student._id // Required field
+    });
+    await payment.save();
+
+    // 6. Handle file uploads
+    const documents = [];
+    if (files.profilePhoto) {
+      documents.push({
+        type: 'profile_photo',
+        url: `/uploads/${files.profilePhoto[0].filename}`,
+        originalName: files.profilePhoto[0].originalname
+      });
+    }
+    if (files.identityProof) {
+      documents.push({
+        type: 'identity_proof',
+        url: `/uploads/${files.identityProof[0].filename}`,
+        originalName: files.identityProof[0].originalname
+      });
+    }
+
+    // 7. Update booking with documents
+    booking.documents = documents;
+    await booking.save();
+
+    // 8. Update seat status
+    seat.status = 'occupied';
+    seat.currentStudent = student._id;
+    await seat.save();
+
+    res.status(201).json({
+      success: true,
+      data: { booking, payment }
+    });
+
+  } catch (error) {
+    console.error('Booking error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Booking failed',
+      message: error.message
+    });
   }
-
-  if (!seat.isAvailable()) {
-    throw new ApiError(400, 'Seat is not available for booking');
-  }
-
-  seat.currentStudent = studentId;
-  seat.status = 'occupied';
-  if (until) {
-    seat.reservedUntil = new Date(until);
-  }
-
-  await seat.save();
-  res.json(seat);
-});
-
+};
 // Reserve a seat
 const reserveSeat = asyncHandler(async (req, res) => {
   const { studentId, until } = req.body;

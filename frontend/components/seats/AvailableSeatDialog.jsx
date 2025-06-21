@@ -33,7 +33,7 @@ import {
   deleteSeat
 } from "@/api/seats";
 
-const AvailableSeatDialog = ({ open, onOpenChange, onConfirm, seatNumber, shifts = [] }) => {
+const AvailableSeatDialog = ({ open, onOpenChange, onConfirm, seatNumber, seatId, shifts = [] }) => {
   const [date, setDate] = React.useState(new Date());
   const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -66,22 +66,53 @@ const AvailableSeatDialog = ({ open, onOpenChange, onConfirm, seatNumber, shifts
     }
   }, [shift, shifts]);
 
-  const handleConfirm = () => {
-    onConfirm({
-      date,
-      name,
-      email,
-      phone,
-      shift,
-      course,
-      institution,
-      aadharNumber,
-      profilePhoto,
-      identityProof,
-      fee: parseFloat(fee) || 0,
-      collectedFee: parseFloat(collectedFee) || 0
-    });
-    onOpenChange(false);
+  const handleConfirm = async () => {
+    try {
+      // Create FormData to handle file uploads
+      const formData = new FormData();
+      
+      // Append student data
+      formData.append('studentData', JSON.stringify({
+        firstName: name.split(' ')[0],
+        lastName: name.split(' ').slice(1).join(' ') || '',
+        email,
+        phone,
+        course,
+        institution,
+        aadharNumber
+      }));
+  
+      // Append payment data
+      formData.append('paymentData', JSON.stringify({
+        amount: collectedFee,
+        method: 'cash' // or whatever payment method you're using
+      }));
+  
+      // Append files if they exist
+      if (profilePhoto) {
+        formData.append('profilePhoto', profilePhoto);
+      }
+      if (identityProof) {
+        formData.append('identityProof', identityProof);
+      }
+  
+      // Append additional booking info
+      formData.append('shiftId', shift);
+      formData.append('startDate', date.toISOString());
+  
+      // Call the API with FormData
+      await bookSeat(seatId, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+  
+      onOpenChange(false);
+      // Optionally refresh seat data
+    } catch (error) {
+      console.error('Booking failed:', error);
+      // You might want to show an error message to the user here
+    }
   };
 
   const handleFileChange = (e, setFile) => {
@@ -396,6 +427,7 @@ AvailableSeatDialog.propTypes = {
   onOpenChange: PropTypes.func.isRequired,
   onConfirm: PropTypes.func.isRequired,
   seatNumber: PropTypes.string.isRequired,
+  seatId: PropTypes.string.isRequired,
   shifts: PropTypes.arrayOf(
     PropTypes.shape({
       _id: PropTypes.string.isRequired,

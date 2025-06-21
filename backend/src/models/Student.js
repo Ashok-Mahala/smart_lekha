@@ -1,102 +1,115 @@
 const mongoose = require('mongoose');
 
 const studentSchema = new mongoose.Schema({
-  studentId: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
   firstName: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    maxlength: 50
   },
   lastName: {
     type: String,
-    required: false,
-    trim: true
+    required: true,
+    trim: true,
+    maxlength: 50
   },
   email: {
     type: String,
     required: true,
     unique: true,
     trim: true,
-    lowercase: true
+    lowercase: true,
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please fill a valid email address']
   },
   phone: {
     type: String,
-    trim: true
+    required: true,
+    trim: true,
+    validate: {
+      validator: function(v) {
+        return /^[0-9]{10,15}$/.test(v);
+      },
+      message: props => `${props.value} is not a valid phone number!`
+    }
   },
-  dateOfBirth: {
-    type: Date,
-    required: true
-  },
-  gender: {
-    type: String,
-    enum: ['male', 'female', 'other'],
-    required: true
-  },
-  address: {
-    street: String,
-    city: String,
-    state: String,
-    zipCode: String,
-    country: String
-  },
-  enrollmentDate: {
-    type: Date,
-    default: Date.now
+  currentSeat: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Seat',
+    default: null
   },
   status: {
     type: String,
-    enum: ['active', 'inactive', 'suspended'],
+    enum: ['active', 'inactive'],
     default: 'active'
   },
-  course: {
+  notes: {
     type: String,
-    required: true
-  },
-  batch: {
-    type: String,
-    required: true
-  },
-  emergencyContact: {
-    name: String,
-    relationship: String,
-    phone: String
-  },
-  documents: [{
-    type: {
-      type: String,
-      enum: ['id', 'certificate', 'other']
-    },
-    url: String,
-    uploadedAt: Date
-  }],
-  notes: String
+    maxlength: 500
+  }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: function(doc, ret) {
+      delete ret.__v;
+      return ret;
+    }
+  }
 });
-
-// Indexes
-studentSchema.index({ studentId: 1 });
-studentSchema.index({ email: 1 });
-studentSchema.index({ status: 1 });
-studentSchema.index({ course: 1, batch: 1 });
 
 // Virtual for full name
 studentSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
 
-// Method to get public profile
-studentSchema.methods.getPublicProfile = function() {
-  const student = this.toObject();
-  delete student.__v;
-  return student;
+// Indexes
+studentSchema.index({ email: 1 }, { unique: true });
+studentSchema.index({ currentSeat: 1 });
+studentSchema.index({ status: 1 });
+
+// Middleware to clear seat assignment when student is deleted or deactivated
+studentSchema.pre('save', async function(next) {
+  if (this.isModified('status') && this.status === 'inactive' && this.currentSeat) {
+    const Seat = mongoose.model('Seat');
+    await Seat.findByIdAndUpdate(this.currentSeat, { 
+      $set: { currentStudent: null, status: 'available' }
+    });
+    this.currentSeat = null;
+  }
+  next();
+});
+
+// Static method to find active students
+studentSchema.statics.findActive = function() {
+  return this.find({ status: 'active' });
 };
 
-const Student = mongoose.model('Student', studentSchema);
+// Method to assign seat to student
+studentSchema.methods.assignSeat = async function(seatId) {
+  const Seat = mongoose.model('Seat');
+  const seat = await Seat.findById(seatId);
+  
+  if (!seat) throw new Error('Seat not found');
+  if (!seat.isAvailable()) throw new Error('Seat is not available');
+  
+  // Release current seat if exists
+  if (this.currentSeat) {
+    await Seat.findByIdAndUpdate(this.currentSeat, {
+      currentStudent: null,
+      status: 'available'
+    });
+  }
+  
+  // Assign new seat
+  this.currentSeat = seatId;
+  await this.save();
+  
+  // Update seat
+  seat.currentStudent = this._id;
+  seat.status = 'occupied';
+  await seat.save();
+  
+  return this;
+};
 
-module.exports = Student; 
+module.exports = mongoose.model('Student', studentSchema);

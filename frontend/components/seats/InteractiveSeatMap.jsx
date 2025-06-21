@@ -480,6 +480,7 @@ const handleSeatClick = (seat) => {
       onConfirm={handleAvailableSeatConfirm}
       seatNumber={selectedAvailableSeat?.seatNumber}
       shifts={shifts}
+      seatId={selectedAvailableSeat?._id}
     />
     </div>
   );

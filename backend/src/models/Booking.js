@@ -1,118 +1,77 @@
 const mongoose = require('mongoose');
 
 const bookingSchema = new mongoose.Schema({
-  student: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Student',
-    required: true
-  },
   seat: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Seat',
     required: true
   },
+  student: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Student',
+    required: true
+  },
+  shift: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Shift'
+  },
   startDate: {
     type: Date,
     required: true
   },
-  endDate: {
-    type: Date,
-    required: true
-  },
+  endDate: Date,
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'cancelled', 'completed'],
-    default: 'pending'
+    enum: ['active', 'completed', 'cancelled'],
+    default: 'active'
   },
-  type: {
-    type: String,
-    enum: ['regular', 'temporary', 'emergency'],
-    default: 'regular'
-  },
-  paymentStatus: {
-    type: String,
-    enum: ['pending', 'paid', 'refunded'],
-    default: 'pending'
-  },
-  amount: {
-    type: Number,
-    required: true
-  },
-  paymentMethod: {
-    type: String,
-    enum: ['cash', 'card', 'bank_transfer', 'other'],
-    required: true
-  },
-  paymentDetails: {
-    transactionId: String,
-    paymentDate: Date,
-    receiptNumber: String
-  },
-  notes: String,
-  createdBy: {
+  payment: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'Payment'
   },
-  cancelledBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  cancellationReason: String,
-  cancellationDate: Date
+  documents: [{
+    type: {
+      type: String,
+      enum: ['profile_photo', 'identity_proof', 'aadhar_card']
+    },
+    url: String,
+    originalName: String
+  }],
+  feeDetails: {
+    amount: Number,
+    collected: Number,
+    balance: Number
+  }
 }, {
   timestamps: true
 });
 
-// Indexes
-bookingSchema.index({ student: 1 });
+// Add indexes
 bookingSchema.index({ seat: 1 });
+bookingSchema.index({ student: 1 });
 bookingSchema.index({ status: 1 });
-bookingSchema.index({ startDate: 1, endDate: 1 });
-bookingSchema.index({ paymentStatus: 1 });
+bookingSchema.index({ startDate: 1 });
 
-// Method to check if booking is active
-bookingSchema.methods.isActive = function() {
-  const now = new Date();
-  return this.status === 'confirmed' && 
-         this.startDate <= now && 
-         this.endDate >= now;
-};
-
-// Method to cancel booking
-bookingSchema.methods.cancel = async function(userId, reason) {
-  if (this.status !== 'confirmed') {
-    throw new Error('Only confirmed bookings can be cancelled');
+// Middleware to handle seat status changes
+bookingSchema.post('save', async function(doc) {
+  if (doc.status === 'active') {
+    await mongoose.model('Seat').findByIdAndUpdate(doc.seat, {
+      status: 'occupied',
+      currentStudent: doc.student
+    });
   }
+});
 
-  this.status = 'cancelled';
-  this.cancelledBy = userId;
-  this.cancellationReason = reason;
-  this.cancellationDate = new Date();
-
-  // Release the seat
-  const Seat = mongoose.model('Seat');
-  await Seat.findByIdAndUpdate(this.seat, { status: 'available' });
-
-  return this.save();
-};
-
-// Static method to check seat availability
-bookingSchema.statics.checkAvailability = async function(seatId, startDate, endDate) {
-  const conflictingBooking = await this.findOne({
-    seat: seatId,
-    status: 'confirmed',
-    $or: [
-      {
-        startDate: { $lte: endDate },
-        endDate: { $gte: startDate }
-      }
-    ]
-  });
-
-  return !conflictingBooking;
-};
+// Middleware to release seat when booking is completed/cancelled
+bookingSchema.pre('save', async function(next) {
+  if (this.isModified('status') && ['completed', 'cancelled'].includes(this.status)) {
+    await mongoose.model('Seat').findByIdAndUpdate(this.seat, {
+      status: 'available',
+      currentStudent: null
+    });
+  }
+  next();
+});
 
 const Booking = mongoose.model('Booking', bookingSchema);
-
-module.exports = Booking; 
+module.exports = Booking;

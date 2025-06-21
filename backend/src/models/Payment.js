@@ -1,115 +1,71 @@
 const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema({
-  student: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Student',
-    required: true
-  },
   booking: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Booking'
+    ref: 'Booking',
+    required: true,
+    index: true
   },
   amount: {
     type: Number,
-    required: true
-  },
-  currency: {
-    type: String,
-    default: 'USD'
-  },
-  type: {
-    type: String,
-    enum: ['seat_booking', 'membership', 'fine', 'other'],
-    required: true
+    required: true,
+    min: 0
   },
   status: {
     type: String,
     enum: ['pending', 'completed', 'failed', 'refunded'],
-    default: 'pending'
+    default: 'pending',
+    index: true
   },
   paymentMethod: {
     type: String,
-    enum: ['cash', 'card', 'bank_transfer', 'other'],
+    enum: ['cash', 'card', 'online', 'bank_transfer'],
     required: true
   },
-  paymentDetails: {
-    transactionId: String,
-    paymentDate: Date,
-    receiptNumber: String,
-    cardLast4: String,
-    cardBrand: String
+  transactionId: {
+    type: String,
+    trim: true
   },
-  refundDetails: {
-    amount: Number,
-    reason: String,
-    processedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    processedAt: Date
+  paymentDate: {
+    type: Date,
+    default: Date.now
   },
-  notes: String,
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'User'
+  },
+  notes: {
+    type: String,
+    maxlength: 500
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: {
+    transform: function(doc, ret) {
+      delete ret.__v;
+      return ret;
+    }
+  }
 });
 
 // Indexes
-paymentSchema.index({ student: 1 });
-paymentSchema.index({ booking: 1 });
-paymentSchema.index({ status: 1 });
-paymentSchema.index({ 'paymentDetails.transactionId': 1 });
-paymentSchema.index({ createdAt: 1 });
+paymentSchema.index({ booking: 1, status: 1 });
+paymentSchema.index({ paymentDate: 1 });
 
-// Method to process refund
-paymentSchema.methods.processRefund = async function(userId, reason) {
-  if (this.status !== 'completed') {
-    throw new Error('Only completed payments can be refunded');
+// Middleware to update booking when payment is completed
+paymentSchema.post('save', async function(doc) {
+  if (doc.status === 'completed') {
+    const Booking = mongoose.model('Booking');
+    await Booking.findByIdAndUpdate(doc.booking, {
+      $set: { status: 'active' }
+    });
   }
+});
 
-  this.status = 'refunded';
-  this.refundDetails = {
-    amount: this.amount,
-    reason,
-    processedBy: userId,
-    processedAt: new Date()
-  };
-
-  return this.save();
+// Static method to find completed payments
+paymentSchema.statics.findCompleted = function() {
+  return this.find({ status: 'completed' });
 };
 
-// Static method to get payment statistics
-paymentSchema.statics.getStats = async function(startDate, endDate) {
-  const stats = await this.aggregate([
-    {
-      $match: {
-        createdAt: { $gte: startDate, $lte: endDate },
-        status: 'completed'
-      }
-    },
-    {
-      $group: {
-        _id: '$type',
-        totalAmount: { $sum: '$amount' },
-        count: { $sum: 1 }
-      }
-    }
-  ]);
-
-  return stats.reduce((acc, curr) => {
-    acc[curr._id] = {
-      totalAmount: curr.totalAmount,
-      count: curr.count
-    };
-    return acc;
-  }, {});
-};
-
-const Payment = mongoose.model('Payment', paymentSchema);
-
-module.exports = Payment; 
+module.exports = mongoose.model('Payment', paymentSchema);

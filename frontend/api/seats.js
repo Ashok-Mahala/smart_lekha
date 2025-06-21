@@ -89,14 +89,28 @@ export const bulkDeleteSeats = async (seatIds) => {
   }
 };
 
-export const bookSeat = async (seatId, bookingData) => {
+export const bookSeat = async (seatId, formData) => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/${seatId}/book`, bookingData);
-    toast.success('Seat booked successfully');
+    const response = await axios.post(
+      `${API_BASE_URL}/${seatId}/book`, 
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          // Add authorization header if needed
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      }
+    );
+
+    toast.success('Seat booked successfully!');
     return response.data;
   } catch (error) {
-    toast.error(error.response?.data?.message || 'Failed to book seat');
-    throw error;
+    const errorMessage = error.response?.data?.message || 
+                        error.response?.data?.error || 
+                        'Failed to book seat. Please try again.';
+    toast.error(errorMessage);
+    throw new Error(errorMessage);
   }
 };
 
