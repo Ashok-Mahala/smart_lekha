@@ -59,9 +59,6 @@ export const bulkCreateSeats = async (seatsData) => {
 // New function for bulk updating seats
 export const bulkUpdateSeats = async (updates) => {
   try {
-    console.log('[FRONTEND] Preparing bulk update request with data:', updates);
-    
-    // Send the updates array directly, not wrapped in another object
     const response = await axios.post(`${API_BASE_URL}/bulk-update`, updates, {
       headers: {
         'Content-Type': 'application/json',
@@ -69,7 +66,6 @@ export const bulkUpdateSeats = async (updates) => {
       }
     });
     
-    console.log('[FRONTEND] Bulk update successful:', response.data);
     return response.data;
   } catch (error) {
     console.error('[FRONTEND] Bulk update failed:', {

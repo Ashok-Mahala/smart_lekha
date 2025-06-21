@@ -22,12 +22,9 @@ import {
   deleteSeat
 } from "@/api/seats";
 
-// Generate default layout configuration based on total seats
 const generateDefaultLayout = (propertyId, totalSeats = 50) => {
   const columns = Math.min(7, Math.ceil(Math.sqrt(totalSeats)));
   const rows = Math.ceil(totalSeats / columns);
-  
-  // Create a layout with all seats initially available
   const layout = Array(rows).fill().map(() => Array(columns).fill(true));
   
   return {
@@ -39,7 +36,7 @@ const generateDefaultLayout = (propertyId, totalSeats = 50) => {
     gap: 1,
     showNumbers: true,
     showStatus: true,
-    layout, // This 2D array defines where seats can exist (true) and where they can't (false)
+    layout,
     propertyId
   };
 };
@@ -59,44 +56,33 @@ const SeatsPage = () => {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [seats, setSeats] = useState([]);
 
-  // Load data from localStorage
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
         
         const selectedPropertyId = localStorage.getItem('selected_property');
-        if (!selectedPropertyId) {
-          throw new Error('No property selected');
-        }
+        if (!selectedPropertyId) throw new Error('No property selected');
 
         const storedProperties = localStorage.getItem('properties');
-        if (!storedProperties) {
-          throw new Error('No properties found');
-        }
+        if (!storedProperties) throw new Error('No properties found');
 
         const properties = JSON.parse(storedProperties);
         const property = properties.find(p => p._id === selectedPropertyId);
-        
-        if (!property) {
-          throw new Error('Selected property not found');
-        }
+        if (!property) throw new Error('Selected property not found');
 
         setSelectedProperty(property);
 
-        // Load layout and seats
         const [layoutData, seatsData] = await Promise.all([
           getLayout(property._id).catch(() => null),
           getSeatsByProperty(property._id).catch(() => [])
         ]);
 
-        // If no layout exists, create a default one
         if (!layoutData) {
           const defaultLayout = generateDefaultLayout(property._id, property.totalSeats);
           const savedLayout = await saveLayout(property._id, defaultLayout);
           setLayoutConfig(savedLayout);
           
-          // Create only seats where layout allows (where layout[row][col] is true)
           const seatsToCreate = [];
           let seatNumber = 1;
           
@@ -104,9 +90,8 @@ const SeatsPage = () => {
             for (let col = 0; col < savedLayout.columns; col++) {
               if (savedLayout.layout[row][col]) {
                 seatsToCreate.push({
-                  seatId: seatNumber,
                   propertyId: property._id,
-                  number: seatNumber,
+                  seatNumber: seatNumber.toString(),
                   status: 'available',
                   row,
                   column: col
@@ -123,7 +108,6 @@ const SeatsPage = () => {
           setSeats(seatsData);
         }
 
-        // Load stats
         const statsData = await getSeatStats(property._id);
         setStats(statsData);
       } catch (error) {
@@ -146,38 +130,41 @@ const SeatsPage = () => {
     console.log('Selected seat:', seatId);
   };
 
-  const handleSaveLayout = async (config) => {
+  const handleSaveLayout = async (newConfig) => {
     if (!selectedProperty) return;
     
     try {
       setIsLoading(true);
       
-      // 1. Save layout configuration
-      const savedConfig = await saveLayout(selectedProperty._id, config);
+      // 1. Save layout configuration (without seat numbers)
+      const { seatNumbers: userSeatNumbers, ...configWithoutNumbers } = newConfig;
+      const savedConfig = await saveLayout(selectedProperty._id, configWithoutNumbers);
       setLayoutConfig(savedConfig);
       
       // 2. Get current seats
       const existingSeats = await getSeatsByProperty(selectedProperty._id);
       
-      // 3. Prepare updates - create a plain array of updates
-      const updates = existingSeats.map(seat => ({
-        id: seat._id,
-        updates: {
-          status: 'available',
-          deletedAt: null,
-          propertyId: selectedProperty._id,
-          seatNumber: seat.seatNumber,
-          row: seat.row,
-          column: seat.column
-        }
-      }));
-  
-      console.log('Prepared updates:', updates);
-      
-      // 4. Call bulkUpdateSeats with the array directly
-      const response = await bulkUpdateSeats(updates);
-      console.log('Update response:', response);
-  
+      // 3. Prepare updates with user-entered or generated numbers
+      const updates = existingSeats.map(seat => {
+        const seatKey = `${seat.row}-${seat.column}`;
+        const newSeatNumber = userSeatNumbers?.[seatKey] || (seat.row * savedConfig.columns + seat.column + 1).toString();
+        
+        return {
+          id: seat._id,
+          updates: {
+            status: 'available',
+            deletedAt: null,
+            propertyId: selectedProperty._id,
+            seatNumber: newSeatNumber,
+            row: seat.row,
+            column: seat.column
+          }
+        };
+      });
+
+      // 4. Call bulkUpdateSeats
+      await bulkUpdateSeats(updates);
+
       // 5. Refresh data
       const [updatedSeats, newStats] = await Promise.all([
         getSeatsByProperty(selectedProperty._id),
@@ -189,9 +176,8 @@ const SeatsPage = () => {
       
       toast({
         title: "Success",
-        description: `Updated ${updates.length} seats successfully.`,
+        description: `Updated ${updates.length} seats with new configuration.`,
       });
-  
     } catch (error) {
       console.error('Update failed:', error);
       toast({
@@ -209,12 +195,7 @@ const SeatsPage = () => {
     
     try {
       const updatedSeat = await updateSeatStatus(seatId, seatData.status);
-      
-      setSeats(prevSeats => 
-        prevSeats.map(s => s.id === seatId ? updatedSeat : s)
-      );
-      
-      // Refresh stats
+      setSeats(prevSeats => prevSeats.map(s => s.id === seatId ? updatedSeat : s));
       const stats = await getSeatStats(selectedProperty._id);
       setStats(stats);
     } catch (error) {
@@ -231,10 +212,7 @@ const SeatsPage = () => {
     
     try {
       await deleteSeat(seatId);
-      
       setSeats(prevSeats => prevSeats.filter(s => s.id !== seatId));
-      
-      // Refresh stats
       const stats = await getSeatStats(selectedProperty._id);
       setStats(stats);
     } catch (error) { 
@@ -269,7 +247,6 @@ const SeatsPage = () => {
     );
   }
 
-  // Filter seats based on status if filter is applied
   const filteredSeats = filterStatus && filterStatus !== 'total' 
     ? seats.filter(seat => seat.status === filterStatus)
     : seats;
@@ -279,90 +256,43 @@ const SeatsPage = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Seat Management - {selectedProperty.name}</h1>
-          {error && (
-            <p className="text-sm text-yellow-600 mt-2">
-              {error}
-            </p>
-          )}
+          {error && <p className="text-sm text-yellow-600 mt-2">{error}</p>}
         </div>
 
         {/* Seat Status Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card 
-            className={cn(
-              "bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 cursor-pointer transition-all duration-200 hover:shadow-lg",
-              filterStatus === 'total' && "ring-2 ring-blue-500"
-            )}
-            onClick={() => handleCardClick('total')}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-blue-900">Total Seats</CardTitle>
-                <Sofa className="w-5 h-5 text-blue-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-600">{stats.total || selectedProperty.totalSeats}</div>
-              <p className="text-xs text-blue-700 mt-2">Library capacity</p>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={cn(
-              "bg-gradient-to-br from-green-50 to-green-100 border-green-200 cursor-pointer transition-all duration-200 hover:shadow-lg",
-              filterStatus === 'available' && "ring-2 ring-green-500"
-            )}
-            onClick={() => handleCardClick('available')}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-green-900">Available Seats</CardTitle>
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-600">{stats.available}</div>
-              <p className="text-xs text-green-700 mt-2">Ready for use</p>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={cn(
-              "bg-gradient-to-br from-red-50 to-red-100 border-red-200 cursor-pointer transition-all duration-200 hover:shadow-lg",
-              filterStatus === 'occupied' && "ring-2 ring-red-500"
-            )}
-            onClick={() => handleCardClick('occupied')}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-red-900">Occupied Seats</CardTitle>
-                <Users className="w-5 h-5 text-red-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-600">{stats.occupied}</div>
-              <p className="text-xs text-red-700 mt-2">Currently in use</p>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={cn(
-              "bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 cursor-pointer transition-all duration-200 hover:shadow-lg",
-              filterStatus === 'prebooked' && "ring-2 ring-purple-500"
-            )}
-            onClick={() => handleCardClick('prebooked')}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-purple-900">Pre-booked</CardTitle>
-                <Calendar className="w-5 h-5 text-purple-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-600">{stats.prebooked}</div>
-              <p className="text-xs text-purple-700 mt-2">Reserved for later</p>
-            </CardContent>
-          </Card>
+          {['total', 'available', 'occupied', 'prebooked'].map((type) => (
+            <Card 
+              key={type}
+              className={cn(
+                `bg-gradient-to-br from-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-50 to-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-100 border-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-200 cursor-pointer transition-all duration-200 hover:shadow-lg`,
+                filterStatus === type && `ring-2 ring-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-500`
+              )}
+              onClick={() => handleCardClick(type)}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className={`text-sm font-medium text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-900`}>
+                    {type === 'total' ? 'Total' : type === 'available' ? 'Available' : type === 'occupied' ? 'Occupied' : 'Pre-booked'} Seats
+                  </CardTitle>
+                  {type === 'total' ? <Sofa className={`w-5 h-5 text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-600`} /> :
+                   type === 'available' ? <CheckCircle2 className={`w-5 h-5 text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-600`} /> :
+                   type === 'occupied' ? <Users className={`w-5 h-5 text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-600`} /> :
+                   <Calendar className={`w-5 h-5 text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-600`} />}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-amber-600">
+                  {stats[type === 'total' ? 'total' : type === 'available' ? 'available' : type === 'occupied' ? 'occupied' : 'prebooked'] || (type === 'total' ? selectedProperty.totalSeats : 0)}
+                </div>
+                <p className={`text-xs text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-700 mt-2`}>
+                  {type === 'total' ? 'Library capacity' : 
+                   type === 'available' ? 'Ready for use' : 
+                   type === 'occupied' ? 'Currently in use' : 'Reserved for later'}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         {/* View/Configure Tabs */}
@@ -399,7 +329,13 @@ const SeatsPage = () => {
             {layoutConfig ? (
               <LayoutConfigurator 
                 onSave={handleSaveLayout}
-                initialConfig={layoutConfig}
+                initialConfig={{
+                  ...layoutConfig,
+                  seatNumbers: seats.reduce((acc, seat) => {
+                    acc[`${seat.row}-${seat.column}`] = seat.seatNumber;
+                    return acc;
+                  }, {})
+                }}
               />
             ) : (
               <p className="text-muted-foreground">No layout configuration available to edit</p>

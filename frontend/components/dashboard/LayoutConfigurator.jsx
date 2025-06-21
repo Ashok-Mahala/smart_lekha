@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,8 @@ const LayoutConfigurator = ({
     gap: 2,
     showNumbers: true,
     showStatus: true,
-    layout: Array(5).fill().map(() => Array(5).fill(true))
+    layout: Array(5).fill().map(() => Array(5).fill(true)),
+    seatNumbers: {}
   }, 
   onSave 
 }) => {
@@ -33,12 +34,11 @@ const LayoutConfigurator = ({
     };
   });
 
-  // State for seat number editing
   const [editingSeat, setEditingSeat] = useState(null);
   const [seatNumberInput, setSeatNumberInput] = useState('');
-  const [seatNumbers, setSeatNumbers] = useState({});
+  const [seatNumbers, setSeatNumbers] = useState(initialConfig.seatNumbers || {});
 
-  // Initialize seat numbers from layout
+  // Initialize seat numbers
   useEffect(() => {
     const initialSeatNumbers = {};
     let counter = 1;
@@ -46,15 +46,15 @@ const LayoutConfigurator = ({
     config.layout?.forEach((row, rowIndex) => {
       row.forEach((seat, colIndex) => {
         if (seat) {
-          initialSeatNumbers[`${rowIndex}-${colIndex}`] = counter++;
+          const existingNumber = initialConfig.seatNumbers?.[`${rowIndex}-${colIndex}`];
+          initialSeatNumbers[`${rowIndex}-${colIndex}`] = existingNumber || counter++;
         }
       });
     });
     
     setSeatNumbers(initialSeatNumbers);
-  }, [config.layout]);
+  }, [config.layout, initialConfig.seatNumbers]);
 
-  // Update grid when rows/columns change
   useEffect(() => {
     const newLayout = Array(config.rows).fill().map((_, rowIndex) => 
       Array(config.columns).fill().map((_, colIndex) => {
@@ -90,9 +90,19 @@ const LayoutConfigurator = ({
   const handleSaveSeatNumber = () => {
     if (editingSeat) {
       const { row, col } = editingSeat;
-      const newNumber = parseInt(seatNumberInput) || 0;
+      const newNumber = seatNumberInput.trim();
       
-      if (newNumber > 0) {
+      if (newNumber) {
+        // Check for duplicates
+        const isDuplicate = Object.entries(seatNumbers).some(
+          ([key, num]) => key !== `${row}-${col}` && num.toString() === newNumber
+        );
+        
+        if (isDuplicate) {
+          alert("Seat number must be unique");
+          return;
+        }
+        
         setSeatNumbers(prev => ({
           ...prev,
           [`${row}-${col}`]: newNumber
@@ -105,22 +115,9 @@ const LayoutConfigurator = ({
 
   const handleSave = () => {
     if (config.layout) {
-      // Convert seat numbers to sequential if showNumbers is true
-      const finalSeatNumbers = {};
-      let counter = 1;
-      
-      config.layout.forEach((row, rowIndex) => {
-        row.forEach((seat, colIndex) => {
-          if (seat) {
-            finalSeatNumbers[`${rowIndex}-${colIndex}`] = 
-              config.showNumbers ? counter++ : seatNumbers[`${rowIndex}-${colIndex}`] || counter++;
-          }
-        });
-      });
-      
       onSave({
         ...config,
-        seatNumbers: finalSeatNumbers
+        seatNumbers: { ...seatNumbers }
       });
     }
   };
@@ -145,7 +142,11 @@ const LayoutConfigurator = ({
         >
           {seat && config.showNumbers && (
             <span 
-              className="text-xs text-primary-foreground hover:underline cursor-pointer"
+              className={`text-xs ${
+                seatNumbers[`${rowIndex}-${colIndex}`] !== (rowIndex * config.columns + colIndex + 1)
+                  ? 'font-bold text-yellow-400'
+                  : 'text-primary-foreground'
+              } hover:underline cursor-pointer`}
               onClick={(e) => handleSeatNumberClick(e, rowIndex, colIndex)}
             >
               {seatNumbers[`${rowIndex}-${colIndex}`] || ''}
@@ -243,7 +244,6 @@ const LayoutConfigurator = ({
         </Button>
       </div>
 
-      {/* Seat Number Edit Dialog */}
       <Dialog open={!!editingSeat} onOpenChange={(open) => !open && setEditingSeat(null)}>
         <DialogContent>
           <DialogHeader>
@@ -251,11 +251,10 @@ const LayoutConfigurator = ({
           </DialogHeader>
           <div className="space-y-4">
             <Input
-              type="number"
-              min="1"
+              type="text"
               value={seatNumberInput}
               onChange={(e) => setSeatNumberInput(e.target.value)}
-              placeholder="Enter seat number"
+              placeholder="e.g., A1, 101, etc."
             />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditingSeat(null)}>
@@ -279,7 +278,8 @@ LayoutConfigurator.propTypes = {
     gap: PropTypes.number,
     showNumbers: PropTypes.bool,
     showStatus: PropTypes.bool,
-    layout: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.bool))
+    layout: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.bool)),
+    seatNumbers: PropTypes.object
   }),
   onSave: PropTypes.func.isRequired
 };
