@@ -119,7 +119,7 @@ const AvailableSeatDialog = ({ open, onOpenChange, seatNumber, seatId, shifts = 
   const handleFileChange = (e, setFile) => {
     const file = e.target.files[0];
     if (file) {
-      setFile(file);
+      setFile(() => file);
     }
   };
 
@@ -340,7 +340,7 @@ const AvailableSeatDialog = ({ open, onOpenChange, seatNumber, seatId, shifts = 
             >
               <span className="text-lg font-semibold flex items-center gap-2">
                 <File className="h-5 w-5 text-primary" />
-                Additional Information (Optional)
+                Additional Information
               </span>
               <ChevronDown className={`h-4 w-4 transition-transform ${showAdditionalInfo ? 'rotate-180' : ''}`} />
             </Button>
@@ -392,7 +392,7 @@ const AvailableSeatDialog = ({ open, onOpenChange, seatNumber, seatId, shifts = 
                       type="file"
                       ref={identityProofRef}
                       onChange={(e) => handleFileChange(e, setIdentityProof)}
-                      accept="image/*,.pdf"
+                      accept="image/*"
                       className="hidden"
                     />
                     <Button
@@ -400,7 +400,7 @@ const AvailableSeatDialog = ({ open, onOpenChange, seatNumber, seatId, shifts = 
                       className="w-full flex items-center gap-2"
                       onClick={() => triggerFileInput(identityProofRef)}
                     >
-                      <File className="h-4 w-4" />
+                      <Camera className="h-4 w-4" />
                       {identityProof ? identityProof.name : 'Upload Identity Proof'}
                     </Button>
                     <p className="text-xs text-muted-foreground mt-1">Upload Aadhar, Passport, or Driving License</p>
