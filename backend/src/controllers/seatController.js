@@ -66,8 +66,10 @@ const bookSeat = async (req, res) => {
         lastName: studentData.lastName || '',
         email: studentData.email,
         phone: studentData.phone,
+        currentSeat: seatId,
         institution: studentData.institution || '',
         course: studentData.course || '',
+        aadharNumber: studentData.aadharNumber || '',
         status: 'active'
       });
       await student.save();

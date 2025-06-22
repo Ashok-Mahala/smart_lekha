@@ -37,6 +37,28 @@ const studentSchema = new mongoose.Schema({
     ref: 'Seat',
     default: null
   },
+  institution: {
+    type: String,
+    trim: true
+  },
+  course: {
+    type: String,
+    trim: true
+  },
+    course: {
+    type: String,
+    trim: true
+  },
+  aadharNumber: {
+    type: Number,
+    trim: true,
+    validate: {
+      validator: function(v) {
+        return /^[0-9]{12}$/.test(v);
+      },
+      message: props => `${props.value} is not a valid Aadhar number!`
+    }
+  },
   status: {
     type: String,
     enum: ['active', 'inactive'],
