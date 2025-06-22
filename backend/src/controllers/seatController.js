@@ -15,12 +15,71 @@ const getSeatsByProperty = asyncHandler(async (req, res) => {
   if (status) query.status = status;
   if (type) query.type = type;
 
-  const seats = await Seat.find(query)
-    .sort({ row: 1, column: 1 })
-    .populate('currentStudent', 'name email studentId')
-    .populate('lastAssigned.student', 'name email studentId');
+  try {
+    // 1. Get all seats with basic student info
+    const seats = await Seat.find(query)
+      .sort({ row: 1, column: 1 })
+      .populate({
+        path: 'currentStudent',
+        select: 'firstName lastName email phone studentId'
+      })
+      .populate({
+        path: 'lastAssigned.student',
+        select: 'firstName lastName email'
+      });
 
-  res.json(seats);
+    // 2. Get all bookings for occupied seats in one query
+    const occupiedSeatIds = seats
+      .filter(seat => seat.status === 'occupied' && seat.currentStudent)
+      .map(seat => seat._id);
+
+    const bookings = await Booking.find({
+      seat: { $in: occupiedSeatIds },
+      status: { $ne: 'cancelled' }
+    })
+    .populate('shift', 'name startTime endTime')
+    .sort({ createdAt: -1 });
+
+    // Group bookings by seat ID
+    const bookingsBySeat = {};
+    bookings.forEach(booking => {
+      if (!bookingsBySeat[booking.seat]) {
+        bookingsBySeat[booking.seat] = booking;
+      }
+    });
+
+    // 3. Combine the data
+    const enhancedSeats = seats.map(seat => {
+      const seatObj = seat.toObject();
+      
+      if (seat.status === 'occupied' && seat.currentStudent) {
+        const booking = bookingsBySeat[seat._id.toString()];
+        if (booking) {
+          seatObj.booking = booking.toObject();
+          seatObj.bookingDate = booking.startDate || seat.updatedAt;
+        }
+        
+        // Format student name properly
+        if (seat.currentStudent) {
+          seatObj.currentStudent.fullName = [
+            seat.currentStudent.firstName,
+            seat.currentStudent.lastName
+          ].filter(Boolean).join(' ');
+        }
+      }
+      
+      return seatObj;
+    });
+
+    res.json(enhancedSeats);
+  } catch (error) {
+    console.error('Error fetching seats:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch seat data',
+      message: error.message 
+    });
+  }
 });
 
 // Create multiple seats
