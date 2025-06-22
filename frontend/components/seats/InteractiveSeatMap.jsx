@@ -36,7 +36,8 @@ const InteractiveSeatMap = ({
   onSeatSelect, 
   onSeatUpdate,
   onSeatDelete,
-  showOnlyAvailable = false 
+  showOnlyAvailable = false ,
+  onConfirm
 }) => {
   const [seats, setSeats] = useState(normalizeSeats(initialSeats));
   const [currentDate, setCurrentDate] = useState(new Date().toLocaleDateString('en-US', { 
@@ -170,47 +171,10 @@ const handleSeatClick = (seat) => {
   };
 
   const handleAvailableSeatConfirm = async (bookingDetails) => {
-    if (!bookingDetails.name || !bookingDetails.email || !bookingDetails.phone || !bookingDetails.shift || !bookingDetails.date) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
       setIsLoading(true);
-      const updatedSeat = await bookSeat(selectedAvailableSeat._id || selectedAvailableSeat.id, {
-        studentId: `temp-${Date.now()}`,
-        until: bookingDetails.date,
-        name: bookingDetails.name,
-        email: bookingDetails.email,
-        phone: bookingDetails.phone,
-        shift: bookingDetails.shift,
-        date: bookingDetails.date
-      });
+      if (onConfirm) await onConfirm();
 
-      // Update local state
-      const updatedSeats = seats.map(s => 
-        s.id === selectedAvailableSeat.id ? { ...s, status: 'occupied', student: {
-          id: `temp-${Date.now()}`,
-          name: bookingDetails.name,
-          email: bookingDetails.email,
-          phone: bookingDetails.phone
-        }} : s
-      );
-      
-      setSeats(updatedSeats);
-      
-      if (onSeatUpdate) {
-        onSeatUpdate(selectedAvailableSeat.id, updatedSeat);
-      }
-
-      toast({
-        title: "Success",
-        description: `Seat ${selectedAvailableSeat.number} booked successfully for ${bookingDetails.name}`,
-      });
     } catch (error) {
       console.error('Error booking seat:', error);
       toast({
@@ -477,7 +441,7 @@ const handleSeatClick = (seat) => {
     <AvailableSeatDialog
       open={isAvailableDialogOpen}
       onOpenChange={setIsAvailableDialogOpen}
-      onConfirm={handleAvailableSeatConfirm}
+      onConfirm={onConfirm}
       seatNumber={selectedAvailableSeat?.seatNumber}
       shifts={shifts}
       seatId={selectedAvailableSeat?._id}
@@ -503,6 +467,7 @@ InteractiveSeatMap.propTypes = {
     student: PropTypes.object,
   })),
   onSeatSelect: PropTypes.func,
+  onConfirm: PropTypes.func.isRequired,
   onSeatUpdate: PropTypes.func,
   onSeatDelete: PropTypes.func,
   showOnlyAvailable: PropTypes.bool

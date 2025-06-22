@@ -362,6 +362,12 @@ const SeatsPage = () => {
                     onSeatSelect={handleSeatSelect}
                     onSeatUpdate={handleUpdateSeat}
                     onSeatDelete={handleDeleteSeat}
+                    onConfirm={async () => {
+                      const freshSeats = await getSeatsByProperty(selectedProperty._id);
+                      setSeats(freshSeats);
+                      const stats = await getSeatStats(selectedProperty._id);
+                      setStats(stats);
+                    }}
                     className="mt-4"
                   />
                 ) : (

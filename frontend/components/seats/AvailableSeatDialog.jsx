@@ -33,7 +33,7 @@ import {
   deleteSeat
 } from "@/api/seats";
 
-const AvailableSeatDialog = ({ open, onOpenChange, onConfirm, seatNumber, seatId, shifts = [] }) => {
+const AvailableSeatDialog = ({ open, onOpenChange, seatNumber, seatId, shifts = [], onConfirm }) => {
   const [date, setDate] = React.useState(new Date());
   const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -108,6 +108,7 @@ const AvailableSeatDialog = ({ open, onOpenChange, onConfirm, seatNumber, seatId
       });
   
       onOpenChange(false);
+      onConfirm();
       // Optionally refresh seat data
     } catch (error) {
       console.error('Booking failed:', error);
