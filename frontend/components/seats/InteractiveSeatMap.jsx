@@ -216,34 +216,34 @@ const handleSeatClick = (seat) => {
     return cn(
       "transition-colors duration-200 border-2",
       seat.status === 'available' && 'bg-green-50 border-green-500 hover:bg-green-100',
-      seat.status === 'occupied' && 'bg-red-50 border-red-500',
-      seat.status === 'reserved' && 'bg-amber-50 border-amber-500',
-      seat.status === 'locked' && 'bg-gray-100 border-gray-400'
+      seat.status === 'occupied' && 'bg-red-200 border-red-800', // More prominent red
+      seat.status === 'reserved' && 'bg-amber-100 border-amber-600 border-2 border-dashed', // Dashed border + stronger color
+      seat.status === 'locked' && 'bg-gray-200 border-gray-500' // More visible gray
     );
   };
 
   const getSeatBorderColor = (seat) => {
     return cn(
       "absolute inset-0 opacity-0 border-2 rounded-md transition-opacity duration-200",
-      seat.status === 'available' && 'border-green-500 group-hover:opacity-100',
-      seat.status === 'occupied' && 'border-red-500 group-hover:opacity-100',
-      seat.status === 'reserved' && 'border-amber-500 group-hover:opacity-100',
-      seat.status === 'locked' && 'border-gray-400'
+      seat.status === 'available' && 'border-green-600 group-hover:opacity-100',
+      seat.status === 'occupied' && 'border-red-700 group-hover:opacity-100',
+      seat.status === 'reserved' && 'border-amber-700 group-hover:opacity-100 border-dashed',
+      seat.status === 'locked' && 'border-gray-600'
     );
   };
 
   const getSeatIcon = (seat) => {
     if (seat.status === 'available') {
-      return <Sofa className="h-4 w-4 text-green-500" />;
+      return <Sofa className="h-5 w-5 text-green-600" />; // Larger and brighter
     }
     if (seat.status === 'occupied') {
-      return <User className="h-4 w-4 text-red-500" />;
+      return <User className="h-5 w-5 text-red-600" />; // Larger and brighter
     }
     if (seat.status === 'reserved') {
-      return <Calendar className="h-4 w-4 text-amber-500" />;
+      return <Calendar className="h-5 w-5 text-amber-600" />; // Larger and brighter
     }
     if (seat.status === 'locked') {
-      return <Lock className="h-4 w-4 text-gray-500" />;
+      return <Lock className="h-5 w-5 text-gray-600" />; // Larger and brighter
     }
     return null;
   };
@@ -286,22 +286,22 @@ const handleSeatClick = (seat) => {
           <TooltipProvider key={seat.id}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
-                  className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`}
-                  onClick={() => handleSeatClick(seat)}
-                  disabled={seat.status === 'locked'}
-                >
-                  <div className="flex flex-col items-center justify-center h-full">
-                    {getSeatIcon(seat)}
-                    <span className="text-xs mt-1">{seat.seatNumber}</span> {/* Changed to seat.seatNumber */}
-                    {seat.student && (
-                      <span className="text-[10px] truncate max-w-full px-1">
-                        {seat.student.name?.split(' ')[0] || 'Student'}
-                      </span>
-                    )}
-                  </div>
-                  <div className={getSeatBorderColor(seat)}></div>
-                </button>
+              <button
+  className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`}
+  onClick={() => handleSeatClick(seat)}
+  disabled={seat.status === 'locked'}
+>
+  <div className="flex flex-col items-center justify-center h-full p-1">
+    {getSeatIcon(seat)}
+    <span className="text-xs mt-1 font-medium">{seat.seatNumber}</span>
+    {seat.student && (
+      <span className="text-[10px] font-medium truncate max-w-full px-1">
+        {seat.student.name?.split(' ')[0] || 'Student'}
+      </span>
+    )}
+  </div>
+  <div className={getSeatBorderColor(seat)}></div>
+              </button>
               </TooltipTrigger>
               <TooltipContent side="top">
                 <div className="text-xs">
