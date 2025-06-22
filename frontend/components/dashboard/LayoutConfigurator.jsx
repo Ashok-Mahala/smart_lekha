@@ -38,23 +38,32 @@ const LayoutConfigurator = ({
   const [seatNumberInput, setSeatNumberInput] = useState('');
   const [seatNumbers, setSeatNumbers] = useState(initialConfig.seatNumbers || {});
 
-  // Initialize seat numbers
-  useEffect(() => {
-    const initialSeatNumbers = {};
-    let counter = 1;
+  // Calculate seat numbers in continuous sequence
+  const calculateContinuousNumbers = (layout, existingNumbers) => {
+    const newSeatNumbers = {};
+    let seatCounter = 1;
     
-    config.layout?.forEach((row, rowIndex) => {
+    // First pass: assign numbers in row-major order
+    layout?.forEach((row, rowIndex) => {
       row.forEach((seat, colIndex) => {
         if (seat) {
-          const existingNumber = initialConfig.seatNumbers?.[`${rowIndex}-${colIndex}`];
-          initialSeatNumbers[`${rowIndex}-${colIndex}`] = existingNumber || counter++;
+          const key = `${rowIndex}-${colIndex}`;
+          newSeatNumbers[key] = seatCounter.toString();
+          seatCounter++;
         }
       });
     });
     
-    setSeatNumbers(initialSeatNumbers);
-  }, [config.layout, initialConfig.seatNumbers]);
+    return newSeatNumbers;
+  };
 
+  // Update seat numbers whenever layout changes
+  useEffect(() => {
+    const newSeatNumbers = calculateContinuousNumbers(config.layout, seatNumbers);
+    setSeatNumbers(newSeatNumbers);
+  }, [config.layout]);
+
+  // Update layout when rows/columns change
   useEffect(() => {
     const newLayout = Array(config.rows).fill().map((_, rowIndex) => 
       Array(config.columns).fill().map((_, colIndex) => {

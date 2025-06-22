@@ -44,17 +44,18 @@ const generateDefaultLayout = (propertyId, totalSeats = 50) => {
 const SeatsPage = () => {
   const [activeTab, setActiveTab] = useState("view");
   const [layoutConfig, setLayoutConfig] = useState(null);
-  const [filterStatus, setFilterStatus] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState({
     total: 0,
     available: 0,
     occupied: 0,
-    prebooked: 0,
+    reserved: 0,
   });
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [seats, setSeats] = useState([]);
+  const [selectedSeat, setSelectedSeat] = useState(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -73,9 +74,15 @@ const SeatsPage = () => {
 
         setSelectedProperty(property);
 
-        const [layoutData, seatsData] = await Promise.all([
+        const [layoutData, seatsData, statsData] = await Promise.all([
           getLayout(property._id).catch(() => null),
-          getSeatsByProperty(property._id).catch(() => [])
+          getSeatsByProperty(property._id).catch(() => []),
+          getSeatStats(property._id).catch(() => ({
+            total: 0,
+            available: 0,
+            occupied: 0,
+            reserved: 0,
+          }))
         ]);
 
         if (!layoutData) {
@@ -103,13 +110,17 @@ const SeatsPage = () => {
           
           const createdSeats = await bulkCreateSeats(seatsToCreate);
           setSeats(createdSeats);
+          setStats({
+            total: createdSeats.length,
+            available: createdSeats.length,
+            occupied: 0,
+            reserved: 0,
+          });
         } else {
           setLayoutConfig(layoutData);
           setSeats(seatsData);
+          setStats(statsData);
         }
-
-        const statsData = await getSeatStats(property._id);
-        setStats(statsData);
       } catch (error) {
         setError(error.message);
         console.error('Error loading seat data:', error);
@@ -123,11 +134,27 @@ const SeatsPage = () => {
 
   const handleCardClick = (type) => {
     setActiveTab("view");
-    setFilterStatus(type);
+    setFilterStatus(type === "total" ? "all" : type);
+    setSelectedSeat(null); // Clear selection when changing filters
   };
 
-  const handleSeatSelect = (seatId) => {
-    console.log('Selected seat:', seatId);
+  const handleSeatSelect = (seat) => {
+    setSelectedSeat(seat);
+  };
+
+  const refreshSeatData = async () => {
+    if (!selectedProperty) return;
+    
+    try {
+      const [seatsData, statsData] = await Promise.all([
+        getSeatsByProperty(selectedProperty._id),
+        getSeatStats(selectedProperty._id)
+      ]);
+      setSeats(seatsData);
+      setStats(statsData);
+    } catch (error) {
+      console.error('Error refreshing seat data:', error);
+    }
   };
 
   const handleSaveLayout = async (newConfig) => {
@@ -136,45 +163,37 @@ const SeatsPage = () => {
     try {
       setIsLoading(true);
       
-      // 1. Save layout configuration
       const savedConfig = await saveLayout(selectedProperty._id, newConfig);
       setLayoutConfig(savedConfig);
       
-      // 2. Prepare all seat operations
       const seatsToCreate = [];
       const seatsToUpdate = [];
       const seatsToDelete = [];
       let seatNumber = 1;
       
-      // Create a map of existing seats by position
       const existingSeatsMap = new Map();
       seats.forEach(seat => {
         existingSeatsMap.set(`${seat.row}-${seat.column}`, seat);
       });
       
-      // 3. Process all seats in new layout
       for (let row = 0; row < savedConfig.rows; row++) {
         for (let col = 0; col < savedConfig.columns; col++) {
           const positionKey = `${row}-${col}`;
           const existingSeat = existingSeatsMap.get(positionKey);
           
           if (savedConfig.layout[row][col]) {
-            // Seat exists in new layout
             if (existingSeat) {
-              // Update existing seat if needed
               seatsToUpdate.push({
                 id: existingSeat._id,
                 updates: {
-                  status: 'available', // or keep existing status
+                  status: existingSeat.status,
                   seatNumber: existingSeat.seatNumber || seatNumber.toString()
                 }
               });
             } else {
-              // Create new seat
               seatsToCreate.push({
                 propertyId: selectedProperty._id,
                 seatNumber: seatNumber.toString(),
-                number: seatNumber,
                 row,
                 column: col,
                 status: 'available'
@@ -182,48 +201,23 @@ const SeatsPage = () => {
             }
             seatNumber++;
           } else if (existingSeat) {
-            // Seat exists but not in new layout - mark for deletion
-            seatsToDelete.push({
-              id: existingSeat._id,
-              updates: {
-                status: 'deleted'
-              }
-            });
+            seatsToDelete.push(existingSeat._id);
           }
         }
       }
   
-      // 4. Execute all operations
-      const creationPromise = seatsToCreate.length > 0 
-        ? bulkCreateSeats(seatsToCreate)
-        : Promise.resolve([]);
-        
-      const updatePromise = seatsToUpdate.length > 0 
-        ? bulkUpdateSeats(seatsToUpdate)
-        : Promise.resolve([]);
-        
-      const deletePromise = seatsToDelete.length > 0 
-        ? bulkUpdateSeats(seatsToDelete)
-        : Promise.resolve([]);
-  
-      const [createdSeats, updatedSeats, deletedSeats] = await Promise.all([
-        creationPromise,
-        updatePromise,
-        deletePromise
+      await Promise.all([
+        seatsToCreate.length > 0 ? bulkCreateSeats(seatsToCreate) : Promise.resolve(),
+        seatsToUpdate.length > 0 ? bulkUpdateSeats(seatsToUpdate) : Promise.resolve(),
+        seatsToDelete.length > 0 ? Promise.all(seatsToDelete.map(id => deleteSeat(id))) : Promise.resolve()
       ]);
   
-      // 5. Refresh all data
-      const updatedSeatsList = await getSeatsByProperty(selectedProperty._id);
-      setSeats(updatedSeatsList);
-      
-      const statsData = await getSeatStats(selectedProperty._id);
-      setStats(statsData);
+      await refreshSeatData();
       
       toast({
         title: "Success",
-        description: `Layout saved. Created ${createdSeats.length}, updated ${updatedSeats.length}, deleted ${deletedSeats.length} seats.`,
+        description: `Layout saved. Created ${seatsToCreate.length}, updated ${seatsToUpdate.length}, deleted ${seatsToDelete.length} seats.`,
       });
-  
     } catch (error) {
       console.error('Save failed:', error);
       toast({
@@ -236,14 +230,16 @@ const SeatsPage = () => {
     }
   };
   
-  const handleUpdateSeat = async (seatId, seatData) => {
+  const handleUpdateSeat = async (seatId, updates) => {
     if (!selectedProperty) return;
     
     try {
-      const updatedSeat = await updateSeatStatus(seatId, seatData.status);
-      setSeats(prevSeats => prevSeats.map(s => s.id === seatId ? updatedSeat : s));
-      const stats = await getSeatStats(selectedProperty._id);
-      setStats(stats);
+      await updateSeatStatus(seatId, updates);
+      await refreshSeatData();
+      toast({
+        title: "Success",
+        description: "Seat status updated successfully",
+      });
     } catch (error) {
       toast({
         title: "Error",
@@ -258,9 +254,11 @@ const SeatsPage = () => {
     
     try {
       await deleteSeat(seatId);
-      setSeats(prevSeats => prevSeats.filter(s => s.id !== seatId));
-      const stats = await getSeatStats(selectedProperty._id);
-      setStats(stats);
+      await refreshSeatData();
+      toast({
+        title: "Success",
+        description: "Seat deleted successfully",
+      });
     } catch (error) { 
       toast({
         title: "Error",
@@ -269,6 +267,10 @@ const SeatsPage = () => {
       });
     }
   };
+
+  const filteredSeats = filterStatus === "all" 
+    ? seats 
+    : seats.filter(seat => seat.status === filterStatus);
 
   if (isLoading) {
     return (
@@ -293,10 +295,6 @@ const SeatsPage = () => {
     );
   }
 
-  const filteredSeats = filterStatus && filterStatus !== 'total' 
-    ? seats.filter(seat => seat.status === filterStatus)
-    : seats;
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -307,34 +305,56 @@ const SeatsPage = () => {
 
         {/* Seat Status Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {['total', 'available', 'occupied', 'prebooked'].map((type) => (
+          {[
+            { type: "total", label: "Total Seats", icon: <Sofa className="w-5 h-5" /> },
+            { type: "available", label: "Available", icon: <CheckCircle2 className="w-5 h-5" /> },
+            { type: "occupied", label: "Occupied", icon: <Users className="w-5 h-5" /> },
+            { type: "reserved", label: "Reserved", icon: <Calendar className="w-5 h-5" /> }
+          ].map((card) => (
             <Card 
-              key={type}
+              key={card.type}
               className={cn(
-                `bg-gradient-to-br from-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-50 to-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-100 border-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-200 cursor-pointer transition-all duration-200 hover:shadow-lg`,
-                filterStatus === type && `ring-2 ring-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-500`
+                "cursor-pointer transition-all duration-200 hover:shadow-lg",
+                filterStatus === (card.type === "total" ? "all" : card.type) && "ring-2 ring-primary",
+                card.type === "total" ? "bg-blue-50 border-blue-200" :
+                card.type === "available" ? "bg-green-50 border-green-200" :
+                card.type === "occupied" ? "bg-red-50 border-red-200" : "bg-purple-50 border-purple-200"
               )}
-              onClick={() => handleCardClick(type)}
+              onClick={() => handleCardClick(card.type)}
             >
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className={`text-sm font-medium text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-900`}>
-                    {type === 'total' ? 'Total' : type === 'available' ? 'Available' : type === 'occupied' ? 'Occupied' : 'Pre-booked'} Seats
+                  <CardTitle className={cn(
+                    "text-sm font-medium",
+                    card.type === "total" ? "text-blue-900" :
+                    card.type === "available" ? "text-green-900" :
+                    card.type === "occupied" ? "text-red-900" : "text-purple-900"
+                  )}>
+                    {card.label}
                   </CardTitle>
-                  {type === 'total' ? <Sofa className={`w-5 h-5 text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-600`} /> :
-                   type === 'available' ? <CheckCircle2 className={`w-5 h-5 text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-600`} /> :
-                   type === 'occupied' ? <Users className={`w-5 h-5 text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-600`} /> :
-                   <Calendar className={`w-5 h-5 text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-600`} />}
+                  {React.cloneElement(card.icon, {
+                    className: cn(
+                      "w-5 h-5",
+                      card.type === "total" ? "text-blue-600" :
+                      card.type === "available" ? "text-green-600" :
+                      card.type === "occupied" ? "text-red-600" : "text-purple-600"
+                    )
+                  })}
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-amber-600">
-                  {stats[type === 'total' ? 'total' : type === 'available' ? 'available' : type === 'occupied' ? 'occupied' : 'prebooked'] || (type === 'total' ? selectedProperty.totalSeats : 0)}
+                  {stats[card.type] || 0}
                 </div>
-                <p className={`text-xs text-${type === 'total' ? 'blue' : type === 'available' ? 'green' : type === 'occupied' ? 'red' : 'purple'}-700 mt-2`}>
-                  {type === 'total' ? 'Library capacity' : 
-                   type === 'available' ? 'Ready for use' : 
-                   type === 'occupied' ? 'Currently in use' : 'Reserved for later'}
+                <p className={cn(
+                  "text-xs mt-2",
+                  card.type === "total" ? "text-blue-700" :
+                  card.type === "available" ? "text-green-700" :
+                  card.type === "occupied" ? "text-red-700" : "text-purple-700"
+                )}>
+                  {card.type === "total" ? "Library capacity" : 
+                   card.type === "available" ? "Ready for use" : 
+                   card.type === "occupied" ? "Currently in use" : "Reserved for later"}
                 </p>
               </CardContent>
             </Card>
@@ -358,16 +378,11 @@ const SeatsPage = () => {
                   <InteractiveSeatMap 
                     config={layoutConfig}
                     seats={filteredSeats}
-                    showOnlyAvailable={filterStatus === 'available'}
+                    selectedSeat={selectedSeat}
                     onSeatSelect={handleSeatSelect}
                     onSeatUpdate={handleUpdateSeat}
                     onSeatDelete={handleDeleteSeat}
-                    onConfirm={async () => {
-                      const freshSeats = await getSeatsByProperty(selectedProperty._id);
-                      setSeats(freshSeats);
-                      const stats = await getSeatStats(selectedProperty._id);
-                      setStats(stats);
-                    }}
+                    onConfirm={refreshSeatData}
                     className="mt-4"
                   />
                 ) : (
