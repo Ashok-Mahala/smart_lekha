@@ -30,6 +30,19 @@ const seatLayoutSchema = new mongoose.Schema({
     type: Number,
     default: 1
   },
+  showNumbers: {
+    type: Boolean,
+    default: true
+  },
+  showStatus: {
+    type: Boolean,
+    default: true
+  },
+  numberingDirection: {
+    type: String,
+    enum: ['horizontal', 'vertical'],
+    default: 'horizontal'
+  },
   layout: {
     type: [[Boolean]],
     required: true

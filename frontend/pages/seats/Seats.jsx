@@ -36,6 +36,7 @@ const generateDefaultLayout = (propertyId, totalSeats = 50) => {
     gap: 1,
     showNumbers: true,
     showStatus: true,
+    numberingDirection: 'horizontal',
     layout,
     propertyId
   };
