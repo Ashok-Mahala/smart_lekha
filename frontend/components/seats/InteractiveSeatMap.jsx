@@ -13,24 +13,63 @@ import { toast } from "@/components/ui/use-toast";
 import { bookSeat, reserveSeat } from "@/api/seats";
 import { getShifts } from "@/api/shifts";
 
-const normalizeSeats = (rawSeats) => rawSeats.map(seat => ({
-  id: seat._id, _id: seat._id,
-  seatNumber: seat.seatNumber || `${seat.row}-${seat.column}`,
-  row: Number(seat.row), column: Number(seat.column),
-  status: seat.status || 'available',
-  student: seat.currentStudent || null,
-  booking: seat.booking || null,
-  bookingDate: seat.bookingDate || seat.updatedAt,
-  propertyId: seat.propertyId,
-}));
-
 const InteractiveSeatMap = ({ 
   className, 
-  config = { rows: 6, columns: 20, layout: Array(6).fill().map(() => Array(20).fill(true)) },
+  config: propConfig = {},
+  //config = { rows: 6, columns: 20, layout: Array(6).fill().map(() => Array(20).fill(true)),numberingDirection: 'horizontal',...propConfig },
   seats: initialSeats = [],
   onSeatSelect, onSeatUpdate, onSeatDelete,
   showOnlyAvailable = false, onConfirm
-}) => {
+  }) => {
+  const config = { rows: 6,columns: 20,numberingDirection: 'horizontal',layout: Array(6).fill().map(() => Array(20).fill(true)), ...propConfig};
+
+  const calculateSeatNumbers = useMemo(() => {
+    const seatNumbers = {};
+    let counter = 1;
+    
+    // Use the numberingDirection from config
+    if (config.numberingDirection === 'horizontal') {
+      // Horizontal numbering (left to right, top to bottom)
+      for (let row = 0; row < config.rows; row++) {
+        for (let col = 0; col < config.columns; col++) {
+          if (config.layout[row]?.[col]) {
+            seatNumbers[`${row}-${col}`] = counter++;
+          }
+        }
+      }
+    } else {
+      // Vertical numbering (top to bottom, left to right)
+      for (let col = 0; col < config.columns; col++) {
+        for (let row = 0; row < config.rows; row++) {
+          if (config.layout[row]?.[col]) {
+            seatNumbers[`${row}-${col}`] = counter++;
+          }
+        }
+      }
+    }
+    
+    return seatNumbers;
+  }, [config.rows, config.columns, config.layout, config.numberingDirection]); // Add numberingDirection to dependencies
+    
+  // normalizeSeats to use calculated seat numbers if not provided
+  const normalizeSeats = (rawSeats) => {
+    return rawSeats.map(seat => {
+      const calculatedNumber = calculateSeatNumbers[`${seat.row}-${seat.column}`];
+      return {
+        id: seat._id, 
+        _id: seat._id,
+        seatNumber: seat.seatNumber || calculatedNumber?.toString() || `${seat.row}-${seat.column}`,
+        row: Number(seat.row), 
+        column: Number(seat.column),
+        status: seat.status || 'available',
+        student: seat.currentStudent || null,
+        booking: seat.booking || null,
+        bookingDate: seat.bookingDate || seat.updatedAt,
+        propertyId: seat.propertyId,
+      };
+    });
+  };
+
   const [seats, setSeats] = useState(normalizeSeats(initialSeats));
   const [currentDate] = useState(new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
   const [shifts, setShifts] = useState([]);
@@ -44,7 +83,10 @@ const InteractiveSeatMap = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => { initialSeats?.length && setSeats(normalizeSeats(initialSeats)); }, [initialSeats]);
+
+  useEffect(() => { 
+    initialSeats?.length && setSeats(normalizeSeats(initialSeats)); 
+  }, [initialSeats, calculateSeatNumbers]);
 
   useEffect(() => {
     const loadShifts = async () => {
@@ -124,16 +166,80 @@ const InteractiveSeatMap = ({
 
   const renderSeats = () => {
     const { rows = 6, columns = 20, layout = Array(rows).fill().map(() => Array(columns).fill(true)) } = config || {};
-    return Array(rows).fill().map((_, row) => (
-      <div key={`row-${row}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {Array(columns).fill().map((_, col) => {
-          if (layout[row]?.[col] === false) return <div key={`empty-${row}-${col}`} className="w-full aspect-square" />;
-          const seat = filteredSeats.find(s => s.row === row && s.column === col);
+    
+    // Create a 2D array of seats based on numbering direction
+    const seatGrid = Array(rows).fill().map((_, row) => 
+      Array(columns).fill().map((_, col) => {
+        if (layout[row]?.[col] === false) return null;
+        return filteredSeats.find(s => s.row === row && s.column === col);
+      })
+    );
+  
+    // For vertical numbering, we need to transpose the grid when rendering
+    if (config.numberingDirection === 'vertical') {
+      return Array(columns).fill().map((_, col) => (
+        <div key={`col-${col}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${rows}, minmax(0, 1fr))` }}>
+          {Array(rows).fill().map((_, row) => {
+            const seat = seatGrid[row]?.[col];
+            if (seat === null) return <div key={`empty-${row}-${col}`} className="w-full aspect-square" />;
+            if (!seat) return (
+              <div key={`missing-${row}-${col}`} className="w-full aspect-square bg-red-100 border border-red-300 rounded-sm flex items-center justify-center">
+                <Lock className="h-3 w-3 text-red-500" />
+              </div>
+            );
+  
+            const expectedNumber = calculateSeatNumbers[`${row}-${col}`];
+            const hasCustomNumber = seat.seatNumber !== expectedNumber?.toString();
+            
+            return (
+              <TooltipProvider key={seat.id}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`} 
+                      onClick={() => handleSeatClick(seat)} disabled={seat.status === 'locked'}>
+                      <div className="flex flex-col items-center justify-center h-full p-1">
+                        {getSeatIcon(seat)}
+                        <span className={cn(
+                          "text-xs mt-1 font-medium",
+                          hasCustomNumber && "text-yellow-600 font-bold"
+                        )}>
+                          {seat.seatNumber}
+                        </span>
+                        {seat.student && <span className="text-[10px] font-medium truncate max-w-full px-1">{seat.student.firstName || 'Student'}</span>}
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[300px]">
+                    <div className="text-xs space-y-1">
+                      <p className="font-semibold">Seat #{seat.seatNumber} - {getSeatStatus(seat)}</p>
+                      {hasCustomNumber && (
+                        <p className="text-yellow-600">Custom numbering (default: {expectedNumber})</p>
+                      )}
+                      <p className="text-blue-500">Vertical numbering (Column {col + 1})</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })}
+        </div>
+      ));
+    }
+  
+    // Default horizontal numbering rendering
+    return seatGrid.map((row, rowIndex) => (
+      <div key={`row-${rowIndex}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+        {row.map((seat, colIndex) => {
+          if (seat === null) return <div key={`empty-${rowIndex}-${colIndex}`} className="w-full aspect-square" />;
           if (!seat) return (
-            <div key={`missing-${row}-${col}`} className="w-full aspect-square bg-red-100 border border-red-300 rounded-sm flex items-center justify-center">
+            <div key={`missing-${rowIndex}-${colIndex}`} className="w-full aspect-square bg-red-100 border border-red-300 rounded-sm flex items-center justify-center">
               <Lock className="h-3 w-3 text-red-500" />
             </div>
           );
+  
+          const expectedNumber = calculateSeatNumbers[`${rowIndex}-${colIndex}`];
+          const hasCustomNumber = seat.seatNumber !== expectedNumber?.toString();
+          
           return (
             <TooltipProvider key={seat.id}>
               <Tooltip>
@@ -142,7 +248,12 @@ const InteractiveSeatMap = ({
                     onClick={() => handleSeatClick(seat)} disabled={seat.status === 'locked'}>
                     <div className="flex flex-col items-center justify-center h-full p-1">
                       {getSeatIcon(seat)}
-                      <span className="text-xs mt-1 font-medium">{seat.seatNumber}</span>
+                      <span className={cn(
+                        "text-xs mt-1 font-medium",
+                        hasCustomNumber && "text-yellow-600 font-bold"
+                      )}>
+                        {seat.seatNumber}
+                      </span>
                       {seat.student && <span className="text-[10px] font-medium truncate max-w-full px-1">{seat.student.firstName || 'Student'}</span>}
                     </div>
                   </button>
@@ -150,19 +261,10 @@ const InteractiveSeatMap = ({
                 <TooltipContent side="top" className="max-w-[300px]">
                   <div className="text-xs space-y-1">
                     <p className="font-semibold">Seat #{seat.seatNumber} - {getSeatStatus(seat)}</p>
-                    {seat.student && (
-                      <>
-                        <p>Student: {seat.student.firstName} {seat.student.lastName}</p>
-                        <p>Contact: {seat.student.phone}</p>
-                      </>
+                    {hasCustomNumber && (
+                      <p className="text-yellow-600">Custom numbering (default: {expectedNumber})</p>
                     )}
-                    {seat.booking && (
-                      <>
-                        <p>Shift: {seat.booking.shift?.name} ({seat.booking.shift?.startTime}-{seat.booking.shift?.endTime})</p>
-                        <p>Booked on: {new Date(seat.bookingDate).toLocaleDateString()}</p>
-                        <p>Status: {seat.booking.status}</p>
-                      </>
-                    )}
+                    <p className="text-blue-500">Horizontal numbering (Row {rowIndex + 1})</p>
                   </div>
                 </TooltipContent>
               </Tooltip>
