@@ -175,58 +175,6 @@ const InteractiveSeatMap = ({
       })
     );
   
-    // For vertical numbering, we need to transpose the grid when rendering
-    if (config.numberingDirection === 'vertical') {
-      return Array(columns).fill().map((_, col) => (
-        <div key={`col-${col}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${rows}, minmax(0, 1fr))` }}>
-          {Array(rows).fill().map((_, row) => {
-            const seat = seatGrid[row]?.[col];
-            if (seat === null) return <div key={`empty-${row}-${col}`} className="w-full aspect-square" />;
-            if (!seat) return (
-              <div key={`missing-${row}-${col}`} className="w-full aspect-square bg-red-100 border border-red-300 rounded-sm flex items-center justify-center">
-                <Lock className="h-3 w-3 text-red-500" />
-              </div>
-            );
-  
-            const expectedNumber = calculateSeatNumbers[`${row}-${col}`];
-            const hasCustomNumber = seat.seatNumber !== expectedNumber?.toString();
-            
-            return (
-              <TooltipProvider key={seat.id}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`} 
-                      onClick={() => handleSeatClick(seat)} disabled={seat.status === 'locked'}>
-                      <div className="flex flex-col items-center justify-center h-full p-1">
-                        {getSeatIcon(seat)}
-                        <span className={cn(
-                          "text-xs mt-1 font-medium",
-                          hasCustomNumber && "text-yellow-600 font-bold"
-                        )}>
-                          {seat.seatNumber}
-                        </span>
-                        {seat.student && <span className="text-[10px] font-medium truncate max-w-full px-1">{seat.student.firstName || 'Student'}</span>}
-                      </div>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[300px]">
-                    <div className="text-xs space-y-1">
-                      <p className="font-semibold">Seat #{seat.seatNumber} - {getSeatStatus(seat)}</p>
-                      {hasCustomNumber && (
-                        <p className="text-yellow-600">Custom numbering (default: {expectedNumber})</p>
-                      )}
-                      <p className="text-blue-500">Vertical numbering (Column {col + 1})</p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          })}
-        </div>
-      ));
-    }
-  
-    // Default horizontal numbering rendering
     return seatGrid.map((row, rowIndex) => (
       <div key={`row-${rowIndex}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {row.map((seat, colIndex) => {
@@ -237,9 +185,6 @@ const InteractiveSeatMap = ({
             </div>
           );
   
-          const expectedNumber = calculateSeatNumbers[`${rowIndex}-${colIndex}`];
-          const hasCustomNumber = seat.seatNumber !== expectedNumber?.toString();
-          
           return (
             <TooltipProvider key={seat.id}>
               <Tooltip>
@@ -248,10 +193,7 @@ const InteractiveSeatMap = ({
                     onClick={() => handleSeatClick(seat)} disabled={seat.status === 'locked'}>
                     <div className="flex flex-col items-center justify-center h-full p-1">
                       {getSeatIcon(seat)}
-                      <span className={cn(
-                        "text-xs mt-1 font-medium",
-                        hasCustomNumber && "text-yellow-600 font-bold"
-                      )}>
+                      <span className="text-xs mt-1 font-medium">
                         {seat.seatNumber}
                       </span>
                       {seat.student && <span className="text-[10px] font-medium truncate max-w-full px-1">{seat.student.firstName || 'Student'}</span>}
@@ -260,11 +202,16 @@ const InteractiveSeatMap = ({
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-[300px]">
                   <div className="text-xs space-y-1">
-                    <p className="font-semibold">Seat #{seat.seatNumber} - {getSeatStatus(seat)}</p>
-                    {hasCustomNumber && (
-                      <p className="text-yellow-600">Custom numbering (default: {expectedNumber})</p>
+                    <p className="font-semibold">Seat #{seat.seatNumber}</p>
+                    {seat.student && (
+                      <>
+                        <p>Student: {seat.student.firstName} {seat.student.lastName}</p>
+                        <p>Contact: {seat.student.phone}</p>
+                        {seat.booking || (
+                          <p>Booked on: {new Date(seat.bookingDate).toLocaleDateString()}</p>
+                        )}
+                      </>
                     )}
-                    <p className="text-blue-500">Horizontal numbering (Row {rowIndex + 1})</p>
                   </div>
                 </TooltipContent>
               </Tooltip>

@@ -311,7 +311,6 @@ const deleteSeat = asyncHandler(async (req, res) => {
 
 const bulkUpdateSeats = async (req, res) => {
   try {
-    console.log('Received bulk update request:', req.body);
     
     // 1. Validate input is an array
     if (!Array.isArray(req.body)) {
@@ -321,19 +320,34 @@ const bulkUpdateSeats = async (req, res) => {
       });
     }
 
-    // 2. Process each update
-    const bulkOps = req.body.map(update => {
+    // 2. Process each update while preserving status
+    const bulkOps = await Promise.all(req.body.map(async (update) => {
       if (!update.id || !update.updates) {
         throw new Error(`Invalid update format: ${JSON.stringify(update)}`);
       }
+
+      // Get current seat status
+      const currentSeat = await Seat.findById(update.id);
+      if (!currentSeat) {
+        throw new Error(`Seat not found with ID: ${update.id}`);
+      }
+
+      // Remove status from updates if present
+      const { status, ...safeUpdates } = update.updates;
       
+      // Create update operation with preserved status
       return {
         updateOne: {
           filter: { _id: update.id },
-          update: { $set: update.updates }
+          update: { 
+            $set: {
+              ...safeUpdates,
+              status: currentSeat.status // Preserve original status
+            }
+          }
         }
       };
-    });
+    }));
 
     // 3. Execute bulk operation
     const result = await Seat.bulkWrite(bulkOps);
