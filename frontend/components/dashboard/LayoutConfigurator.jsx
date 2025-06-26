@@ -6,6 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import PropTypes from 'prop-types';
 
 const LayoutConfigurator = ({ 
@@ -15,6 +16,7 @@ const LayoutConfigurator = ({
     gap: 2,
     showNumbers: true,
     showStatus: true,
+    numberingDirection: 'horizontal', // 'horizontal' or 'vertical'
     layout: Array(5).fill().map(() => Array(5).fill(true)),
     seatNumbers: {}
   }, 
@@ -30,6 +32,7 @@ const LayoutConfigurator = ({
       gap: initialConfig?.gap || 2,
       showNumbers: initialConfig?.showNumbers ?? true,
       showStatus: initialConfig?.showStatus ?? true,
+      numberingDirection: initialConfig?.numberingDirection || 'horizontal',
       layout: safeLayout
     };
   });
@@ -38,30 +41,41 @@ const LayoutConfigurator = ({
   const [seatNumberInput, setSeatNumberInput] = useState('');
   const [seatNumbers, setSeatNumbers] = useState(initialConfig.seatNumbers || {});
 
-  // Calculate seat numbers in continuous sequence
-  const calculateContinuousNumbers = (layout, existingNumbers) => {
+  // Calculate seat numbers based on numbering direction
+  const calculateSeatNumbers = () => {
     const newSeatNumbers = {};
     let seatCounter = 1;
-    
-    // First pass: assign numbers in row-major order
-    layout?.forEach((row, rowIndex) => {
-      row.forEach((seat, colIndex) => {
-        if (seat) {
-          const key = `${rowIndex}-${colIndex}`;
-          newSeatNumbers[key] = seatCounter.toString();
-          seatCounter++;
-        }
+
+    if (config.numberingDirection === 'horizontal') {
+      // Horizontal numbering (left to right, top to bottom)
+      config.layout?.forEach((row, rowIndex) => {
+        row.forEach((seat, colIndex) => {
+          if (seat) {
+            newSeatNumbers[`${rowIndex}-${colIndex}`] = seatCounter.toString();
+            seatCounter++;
+          }
+        });
       });
-    });
-    
+    } else {
+      // Vertical numbering (top to bottom, left to right)
+      for (let colIndex = 0; colIndex < config.columns; colIndex++) {
+        for (let rowIndex = 0; rowIndex < config.rows; rowIndex++) {
+          if (config.layout?.[rowIndex]?.[colIndex]) {
+            newSeatNumbers[`${rowIndex}-${colIndex}`] = seatCounter.toString();
+            seatCounter++;
+          }
+        }
+      }
+    }
+
     return newSeatNumbers;
   };
 
-  // Update seat numbers whenever layout changes
+  // Update seat numbers when layout or numbering direction changes
   useEffect(() => {
-    const newSeatNumbers = calculateContinuousNumbers(config.layout, seatNumbers);
+    const newSeatNumbers = calculateSeatNumbers();
     setSeatNumbers(newSeatNumbers);
-  }, [config.layout]);
+  }, [config.layout, config.numberingDirection]);
 
   // Update layout when rows/columns change
   useEffect(() => {
@@ -122,6 +136,13 @@ const LayoutConfigurator = ({
     }
   };
 
+  const handleNumberingDirectionChange = (value) => {
+    setConfig(prev => ({
+      ...prev,
+      numberingDirection: value
+    }));
+  };
+
   const handleSave = () => {
     if (config.layout) {
       onSave({
@@ -152,7 +173,7 @@ const LayoutConfigurator = ({
           {seat && config.showNumbers && (
             <span 
               className={`text-xs ${
-                seatNumbers[`${rowIndex}-${colIndex}`] !== (rowIndex * config.columns + colIndex + 1)
+                seatNumbers[`${rowIndex}-${colIndex}`] !== calculateSeatNumbers()[`${rowIndex}-${colIndex}`]
                   ? 'font-bold text-yellow-400'
                   : 'text-primary-foreground'
               } hover:underline cursor-pointer`}
@@ -204,6 +225,21 @@ const LayoutConfigurator = ({
               max={5}
               step={1}
             />
+          </div>
+          <div>
+            <Label>Numbering Direction</Label>
+            <Select 
+              value={config.numberingDirection} 
+              onValueChange={handleNumberingDirectionChange}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select direction" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="horizontal">Horizontal</SelectItem>
+                <SelectItem value="vertical">Vertical</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -287,6 +323,7 @@ LayoutConfigurator.propTypes = {
     gap: PropTypes.number,
     showNumbers: PropTypes.bool,
     showStatus: PropTypes.bool,
+    numberingDirection: PropTypes.oneOf(['horizontal', 'vertical']),
     layout: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.bool)),
     seatNumbers: PropTypes.object
   }),
