@@ -13,11 +13,6 @@ import {
   getSeatsByProperty,
   bulkCreateSeats,
   bulkUpdateSeats,
-  bookSeat,
-  reserveSeat,
-  releaseSeat,
-  getSeatStats,
-  getShifts,
   updateSeatStatus,
   deleteSeat
 } from "@/api/seats";
@@ -75,16 +70,18 @@ const SeatsPage = () => {
 
         setSelectedProperty(property);
 
-        const [layoutData, seatsData, statsData] = await Promise.all([
+        const [layoutData, seatsData] = await Promise.all([
           getLayout(property._id).catch(() => null),
           getSeatsByProperty(property._id).catch(() => []),
-          getSeatStats(property._id).catch(() => ({
-            total: 0,
-            available: 0,
-            occupied: 0,
-            reserved: 0,
-          }))
         ]);
+        
+        // Calculate stats from seatsData
+        const calculatedStats = {
+          total: seatsData.length,
+          available: seatsData.filter(s => s.status === 'available').length,
+          occupied: seatsData.filter(s => s.status === 'occupied').length,
+          reserved: seatsData.filter(s => s.status === 'reserved').length,
+        };
 
         if (!layoutData) {
           const defaultLayout = generateDefaultLayout(property._id, property.totalSeats);
@@ -120,7 +117,12 @@ const SeatsPage = () => {
         } else {
           setLayoutConfig(layoutData);
           setSeats(seatsData);
-          setStats(statsData);
+          setStats({
+            total: seatsData.length,
+            available: seatsData.filter(s => s.status === 'available').length,
+            occupied: seatsData.filter(s => s.status === 'occupied').length,
+            reserved: seatsData.filter(s => s.status === 'reserved').length,
+          });
         }
       } catch (error) {
         setError(error.message);
@@ -147,12 +149,15 @@ const SeatsPage = () => {
     if (!selectedProperty) return;
     
     try {
-      const [seatsData, statsData] = await Promise.all([
-        getSeatsByProperty(selectedProperty._id),
-        getSeatStats(selectedProperty._id)
-      ]);
+      const seatsData = await getSeatsByProperty(selectedProperty._id);
+      const calculatedStats = {
+        total: seatsData.length,
+        available: seatsData.filter(s => s.status === 'available').length,
+        occupied: seatsData.filter(s => s.status === 'occupied').length,
+        reserved: seatsData.filter(s => s.status === 'reserved').length,
+      };
       setSeats(seatsData);
-      setStats(statsData);
+      setStats(calculatedStats);
     } catch (error) {
       console.error('Error refreshing seat data:', error);
     }
