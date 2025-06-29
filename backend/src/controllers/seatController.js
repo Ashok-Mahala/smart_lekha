@@ -20,12 +20,12 @@ const getSeatsByProperty = asyncHandler(async (req, res) => {
     const seats = await Seat.find(query)
       .sort({ row: 1, column: 1 })
       .populate({
-        path: 'currentStudent',
+        path: 'currentStudents.student',
         select: 'firstName lastName email phone studentId'
       })
       .populate({
-        path: 'lastAssigned.student',
-        select: 'firstName lastName email'
+        path: 'currentStudents.shift',
+        select: 'name startTime endTime'
       });
 
     // 2. Get all bookings for occupied seats in one query
@@ -108,16 +108,12 @@ const bookSeat = async (req, res) => {
     const formData = req.body;
     const files = req.files;
 
-    // 1. Verify seat availability
     const seat = await Seat.findById(seatId);
     if (!seat) return res.status(404).json({ error: 'Seat not found' });
-    //if (!seat.isAvailable()) return res.status(400).json({ error: `Seat isss ${seat.status}` });
 
-    // 2. Parse student data
     const studentData = JSON.parse(formData.studentData);
     if (!studentData.email) return res.status(400).json({ error: 'Email is required' });
 
-    // 3. Find or create student
     let student = await Student.findOne({ email: studentData.email });
     if (!student) {
       student = new Student({
@@ -134,34 +130,34 @@ const bookSeat = async (req, res) => {
       await student.save();
     }
 
-    // 4. Create booking first (since payment needs booking reference)
+    formData.idempotencyKey = formData.idempotencyKey || `${seatId}-${formData.shiftId}-${Date.now()}`;
+
     const booking = new Booking({
       seat: seatId,
       student: student._id,
       shift: formData.shiftId,
       startDate: new Date(formData.startDate),
+      idempotencyKey: formData.idempotencyKey,
       feeDetails: {
         amount: parseFloat(formData.fee || 0),
         collected: parseFloat(formData.collectedFee || 0),
         balance: parseFloat(formData.fee || 0) - parseFloat(formData.collectedFee || 0)
       },
-      createdBy: req.user?._id || student._id // Fallback to student if no user
-    });
+      createdBy: req.user?._id || student._id
+    });    
     await booking.save();
 
-    // 5. Create payment with required fields
     const paymentData = JSON.parse(formData.paymentData);
     const payment = new Payment({
       amount: parseFloat(paymentData.amount),
       paymentMethod: paymentData.method || 'cash',
       status: 'completed',
       student: student._id,
-      booking: booking._id, // Required field
-      createdBy: req.user?._id || student._id // Required field
+      booking: booking._id,
+      createdBy: req.user?._id || student._id
     });
     await payment.save();
 
-    // 6. Handle file uploads
     const documents = [];
     if (files.profilePhoto) {
       documents.push({
@@ -178,14 +174,8 @@ const bookSeat = async (req, res) => {
       });
     }
 
-    // 7. Update booking with documents
     booking.documents = documents;
     await booking.save();
-
-    // 8. Update seat status
-    seat.status = 'occupied';
-    seat.currentStudent = student._id;
-    await seat.save();
 
     res.status(201).json({
       success: true,
@@ -201,6 +191,7 @@ const bookSeat = async (req, res) => {
     });
   }
 };
+
 // Reserve a seat
 const reserveSeat = asyncHandler(async (req, res) => {
   const { studentId, until } = req.body;

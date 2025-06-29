@@ -9,7 +9,6 @@ const studentSchema = new mongoose.Schema({
   },
   lastName: {
     type: String,
-    required: true,
     trim: true,
     maxlength: 50
   },

@@ -1,4 +1,3 @@
-// models/Seat.js
 const mongoose = require('mongoose');
 
 const seatSchema = new mongoose.Schema({
@@ -16,16 +15,11 @@ const seatSchema = new mongoose.Schema({
   seatNumber: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    unique: true
   },
-  row: {
-    type: Number,
-    required: true,
-  },
-  column: {
-    type: Number,
-    required: true
-  },
+  row: { type: Number, required: true },
+  column: { type: Number, required: true },
   type: {
     type: String,
     enum: ['standard', 'premium', 'handicap', 'other'],
@@ -35,15 +29,13 @@ const seatSchema = new mongoose.Schema({
     type: String,
     enum: ['power_outlet', 'table', 'extra_space', 'window', 'aisle']
   }],
-  currentStudent: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Student'
-  },
+  currentStudents: [{
+    student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+    booking: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' },
+    shift: { type: mongoose.Schema.Types.ObjectId, ref: 'Shift' }
+  }],
   lastAssigned: {
-    student: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Student'
-    },
+    student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
     date: Date
   },
   maintenanceHistory: [{
@@ -62,12 +54,13 @@ const seatSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// REMOVE broken array uniqueness index
+// seatSchema.index({ _id: 1, "currentStudents.shift": 1 }, { unique: true, partialFilterExpression: { "currentStudents.shift": { $exists: true } } });
+
 // Indexes
 seatSchema.index({ propertyId: 1 });
-seatSchema.index({ seatNumber: 1 });
 seatSchema.index({ status: 1 });
 seatSchema.index({ type: 1 });
-seatSchema.index({ currentStudent: 1 });
 seatSchema.index({ deletedAt: 1 });
 
 seatSchema.virtual('bookings', {
@@ -76,7 +69,6 @@ seatSchema.virtual('bookings', {
   foreignField: 'seat'
 });
 
-// Query helper to exclude deleted seats by default
 seatSchema.pre(/^find/, function(next) {
   if (!this.getOptions().includeDeleted) {
     this.where({ deletedAt: null });
@@ -88,17 +80,16 @@ seatSchema.methods.isAvailable = function() {
   return this.status === 'available' && !this.deletedAt;
 };
 
-seatSchema.methods.assignStudent = async function(studentId) {
-  if (!this.isAvailable()) {
-    throw new Error('Seat is not available');
+seatSchema.methods.addCurrentStudent = async function(studentId, bookingId, shiftId) {
+  const exists = this.currentStudents.some(cs =>
+    cs.booking.toString() === bookingId.toString() ||
+    (cs.student.toString() === studentId.toString() && cs.shift.toString() === shiftId.toString())
+  );
+  if (!exists) {
+    this.currentStudents.push({ student: studentId, booking: bookingId, shift: shiftId });
+    this.status = 'occupied';
+    await this.save();
   }
-  this.currentStudent = studentId;
-  this.status = 'occupied';
-  this.lastAssigned = {
-    student: studentId,
-    date: new Date()
-  };
-  return this.save();
 };
 
 seatSchema.methods.release = function() {
@@ -133,5 +124,4 @@ seatSchema.statics.bulkSoftDelete = async function(seatIds) {
   );
 };
 
-const Seat = mongoose.model('Seat', seatSchema);
-module.exports = Seat;
+module.exports = mongoose.model('Seat', seatSchema);
