@@ -102,25 +102,31 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
 
   const filteredSeats = useMemo(() => {
     const currentShift = shifts.find(s => s._id === selectedShift);
-
+  
     return seats.map(seat => {
-      const has24hBooking = seat.currentStudents.some(cs => {
+      const bookingInfo = seat.currentStudents.find(cs => {
         const shift = shifts.find(s => s._id === cs.shift._id);
         return isFullDayShift(shift);
       });
-
+  
+      const has24hBooking = !!bookingInfo;
+  
       const currentShiftBooking = seat.currentStudents.find(cs => cs.shift._id === selectedShift);
-
+  
       const isIn24hShiftView = currentShift && isFullDayShift(currentShift);
-
+  
       if (has24hBooking) {
         return {
           ...seat,
           status: 'occupied',
-          isPrebookOnly: true
+          isPrebookOnly: true,
+          student: bookingInfo.student,
+          booking: {
+            shift: bookingInfo.shift
+          }
         };
       }
-
+  
       if (isIn24hShiftView && seat.currentStudents.length > 0) {
         return {
           ...seat,
@@ -128,7 +134,7 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
           isPrebookOnly: true
         };
       }
-
+  
       if (currentShiftBooking) {
         return {
           ...seat,
@@ -140,7 +146,7 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
           }
         };
       }
-
+  
       return {
         ...seat,
         status: 'available',
@@ -148,7 +154,7 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
       };
     }).filter(seat => !showOnlyAvailable || seat.status === 'available');
   }, [seats, showOnlyAvailable, selectedShift, shifts]);
-
+  
   const handleSeatClick = (seat) => {
     if (seat.status === 'locked') return;
     if (seat.isPrebookOnly || seat.status === 'reserved') {
