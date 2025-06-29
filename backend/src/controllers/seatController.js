@@ -111,7 +111,7 @@ const bookSeat = async (req, res) => {
     // 1. Verify seat availability
     const seat = await Seat.findById(seatId);
     if (!seat) return res.status(404).json({ error: 'Seat not found' });
-    if (!seat.isAvailable()) return res.status(400).json({ error: `Seat is ${seat.status}` });
+    //if (!seat.isAvailable()) return res.status(400).json({ error: `Seat isss ${seat.status}` });
 
     // 2. Parse student data
     const studentData = JSON.parse(formData.studentData);

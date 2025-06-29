@@ -101,13 +101,82 @@ const InteractiveSeatMap = ({
     loadShifts();
   }, []);
 
+  // Helper to round time to nearest hour (e.g., "07:58" becomes "08:00")
+  const roundTimeToHour = (time) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    if (minutes >= 30) {
+      return `${String(hours + 1).padStart(2, '0')}:00`;
+    }
+    return `${String(hours).padStart(2, '0')}:00`;
+  };
+
+  // Check if shift is full day (00:00-23:59 or spans midnight)
+  const isFullDayShift = (shift) => {
+    if (!shift) return false;
+    const start = shift.startTime;
+    const end = shift.endTime;
+    return (start === '00:00' && end === '23:59') || 
+          (start === '00:00' && end === '24:00');
+  };
+
   const filteredSeats = useMemo(() => {
-    return seats.filter(seat => 
+    const currentShift = shifts.find(s => s._id === selectedShift);
+    
+    return seats.map(seat => {
+      // If seat has no booking, return as-is
+      if (!seat.booking || !seat.booking.shift) return seat;
+  
+      const bookingShift = shifts.find(s => s._id === seat.booking.shift._id);
+      if (!bookingShift) return seat;
+  
+      const isFullDay = isFullDayShift(bookingShift);
+      const isCurrentShift = bookingShift._id === selectedShift;
+      const is24HourShift = currentShift && isFullDayShift(currentShift);
+  
+      if (isFullDay) {
+        // Full-day bookings should show as occupied in all shifts (red)
+        return {
+          ...seat,
+          status: 'occupied',
+          booking: {
+            ...seat.booking,
+            isFullDay: true
+          }
+        };
+      }
+  
+      if (isCurrentShift) {
+        // Seat is booked for this specific shift (red)
+        return {
+          ...seat,
+          status: 'occupied'
+        };
+      }
+  
+      if (is24HourShift) {
+        // In 24-hour shift view, show partially booked seats as reserved (orange)
+        return {
+          ...seat,
+          status: 'reserved',
+          student: null, // Don't show student details for other shifts
+          booking: {
+            ...seat.booking,
+            isPartiallyBooked: true
+          }
+        };
+      }
+  
+      // Seat is booked for another shift - show as available (green)
+      return {
+        ...seat,
+        status: 'available',
+        student: null,
+        booking: null
+      };
+    }).filter(seat => 
       !showOnlyAvailable || seat.status === 'available'
-    ).filter(seat => 
-      !selectedShift || !seat.booking || seat.booking.shift?._id === selectedShift
     );
-  }, [seats, showOnlyAvailable, selectedShift]);
+  }, [seats, showOnlyAvailable, selectedShift, shifts]);
 
   const handleSeatClick = (seat) => {
     if (seat.status === 'locked') return;
@@ -148,13 +217,19 @@ const InteractiveSeatMap = ({
     seat.status === 'reserved' ? 'Reserved' : 
     seat.status === 'locked' ? 'Locked' : 'Unknown';
 
-  const getSeatColor = (seat) => cn(
-    "transition-colors duration-200 border-2",
-    seat.status === 'available' && 'bg-green-50 border-green-500 hover:bg-green-100',
-    seat.status === 'occupied' && 'bg-red-200 border-red-800',
-    seat.status === 'reserved' && 'bg-amber-100 border-amber-600 border-2 border-dashed',
-    seat.status === 'locked' && 'bg-gray-200 border-gray-500'
-  );
+  const getSeatColor = (seat) => {
+    const isFullDay = seat.booking?.isFullDay;
+    const isPartiallyBooked = seat.booking?.isPartiallyBooked;
+    
+    return cn(
+      "transition-colors duration-200 border-2",
+      seat.status === 'available' && 'bg-green-50 border-green-500 hover:bg-green-100',
+      seat.status === 'occupied' && 'bg-red-200 border-red-800',
+      seat.status === 'reserved' && isPartiallyBooked && 'bg-amber-100 border-amber-600',
+      seat.status === 'reserved' && !isPartiallyBooked && 'bg-amber-100 border-amber-600 border-2 border-dashed',
+      seat.status === 'locked' && 'bg-gray-200 border-gray-500'
+    );
+  };
 
   const getSeatIcon = (seat) => {
     if (seat.status === 'available') return <Sofa className="h-5 w-5 text-green-600" />;
@@ -203,14 +278,19 @@ const InteractiveSeatMap = ({
                 <TooltipContent side="top" className="max-w-[300px]">
                   <div className="text-xs space-y-1">
                     <p className="font-semibold">Seat #{seat.seatNumber}</p>
-                    {seat.student && (
+                    {seat.status === 'occupied' && seat.student && (
                       <>
                         <p>Student: {seat.student.firstName} {seat.student.lastName}</p>
                         <p>Contact: {seat.student.phone}</p>
-                        {seat.booking || (
-                          <p>Booked on: {new Date(seat.bookingDate).toLocaleDateString()}</p>
+                        {seat.booking?.isFullDay ? (
+                          <p>Booked for full day</p>
+                        ) : (
+                          <p>Shift: {seat.booking?.shift?.name} ({seat.booking?.shift?.startTime}-{seat.booking?.shift?.endTime})</p>
                         )}
                       </>
+                    )}
+                    {seat.status === 'reserved' && seat.booking?.isPartiallyBooked && (
+                      <p>Booked in another shift ({seat.booking?.shift?.name})</p>
                     )}
                   </div>
                 </TooltipContent>
@@ -275,15 +355,16 @@ const InteractiveSeatMap = ({
       <div className="space-y-2">{renderSeats()}</div>
 
       <div className="mt-6 flex items-center justify-center gap-4 flex-wrap">
-        {['available', 'occupied', 'reserved', 'locked'].map(status => (
+        {['available', 'occupied', 'partially-booked', 'reserved', 'locked'].map(status => (
           <div key={status} className="flex items-center gap-1">
             <div className={`w-4 h-4 ${
               status === 'available' ? 'bg-green-50 border-green-500' :
               status === 'occupied' ? 'bg-red-200 border-red-800' :
-              status === 'reserved' ? 'bg-amber-100 border-amber-600' :
+              status === 'partially-booked' ? 'bg-amber-100 border-amber-600' :
+              status === 'reserved' ? 'bg-amber-100 border-amber-600 border-2 border-dashed' :
               'bg-gray-200 border-gray-500'
             } border-2 rounded-sm`}></div>
-            <span className="text-xs capitalize">{status}</span>
+            <span className="text-xs capitalize">{status.replace('-', ' ')}</span>
           </div>
         ))}
       </div>

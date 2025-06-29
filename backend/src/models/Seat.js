@@ -1,3 +1,4 @@
+// models/Seat.js
 const mongoose = require('mongoose');
 
 const seatSchema = new mongoose.Schema({
@@ -69,58 +70,55 @@ seatSchema.index({ type: 1 });
 seatSchema.index({ currentStudent: 1 });
 seatSchema.index({ deletedAt: 1 });
 
+seatSchema.virtual('bookings', {
+  ref: 'Booking',
+  localField: '_id',
+  foreignField: 'seat'
+});
+
 // Query helper to exclude deleted seats by default
 seatSchema.pre(/^find/, function(next) {
-  // Only apply to queries that don't explicitly want deleted seats
   if (!this.getOptions().includeDeleted) {
     this.where({ deletedAt: null });
   }
   next();
 });
 
-// Method to check if seat is available
 seatSchema.methods.isAvailable = function() {
   return this.status === 'available' && !this.deletedAt;
 };
 
-// Method to assign student to seat
 seatSchema.methods.assignStudent = async function(studentId) {
   if (!this.isAvailable()) {
     throw new Error('Seat is not available');
   }
-  
   this.currentStudent = studentId;
   this.status = 'occupied';
   this.lastAssigned = {
     student: studentId,
     date: new Date()
   };
-  
   return this.save();
 };
 
-// Method to release seat
 seatSchema.methods.release = function() {
   this.currentStudent = null;
   this.status = 'available';
   return this.save();
 };
 
-// Method to soft delete seat
 seatSchema.methods.softDelete = function() {
   this.status = 'deleted';
   this.deletedAt = new Date();
   return this.save();
 };
 
-// Method to reactivate seat
 seatSchema.methods.reactivate = function() {
   this.status = 'available';
   this.deletedAt = null;
   return this.save();
 };
 
-// Static method for bulk reactivation
 seatSchema.statics.bulkReactivate = async function(seatIds) {
   return this.updateMany(
     { _id: { $in: seatIds } },
@@ -128,7 +126,6 @@ seatSchema.statics.bulkReactivate = async function(seatIds) {
   );
 };
 
-// Static method for bulk soft deletion
 seatSchema.statics.bulkSoftDelete = async function(seatIds) {
   return this.updateMany(
     { _id: { $in: seatIds } },
@@ -137,5 +134,4 @@ seatSchema.statics.bulkSoftDelete = async function(seatIds) {
 };
 
 const Seat = mongoose.model('Seat', seatSchema);
-
 module.exports = Seat;
