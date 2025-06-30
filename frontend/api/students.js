@@ -1,16 +1,14 @@
-// Student API Service
-import { toast } from "sonner";
+// @/api/students.js
+import axios from './axios';
 import { API_CONFIG } from './config';
+import { toast } from 'sonner';
 import PropTypes from 'prop-types';
-import api from './axios';
-import { withErrorHandling } from '@/lib/errorHandler';
 
-// API endpoints configuration
 const API_BASE_URL = `${API_CONFIG.baseURL}/students`;
 
-// PropTypes validation
+// PropTypes matching your Student model
 export const studentPropTypes = PropTypes.shape({
-  id: PropTypes.string.isRequired,
+  _id: PropTypes.string.isRequired,
   name: PropTypes.string.isRequired,
   email: PropTypes.string.isRequired,
   phone: PropTypes.string.isRequired,
@@ -30,200 +28,103 @@ export const studentPropTypes = PropTypes.shape({
   photo: PropTypes.string,
   idProofFront: PropTypes.string,
   idProofBack: PropTypes.string,
-  notes: PropTypes.string
+  notes: PropTypes.string,
+  currentSeat: PropTypes.string
 });
 
-// Get all students
-export const getAllStudents = async (params = {}, options = {}) => {
-    const response = await api.get(API_BASE_URL, { params });
+// Get students by property ID
+export const getStudentsByProperty = async (propertyId, params = {}) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/property/${propertyId}`, { params });
+    return response.data.students || [];
+  } catch (error) {
+    toast.error('Failed to fetch students');
+    throw error;
+  }
+};
+
+/**
+ * Builds full URL for profile photo or identity proof
+ */
+export const getDocumentUrl = (relativePath) => {
+  if (!relativePath) return '/placeholder.svg';
+  const base = API_CONFIG.baseURL.replace(/\/$/, ''); // remove trailing slash if any
+  return `${base}${relativePath}`;
+};
+
+// Get student stats by property ID
+export const getStudentStats = async (propertyId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/stats`, { params: { propertyId } });
     return response.data;
+  } catch (error) {
+    toast.error('Failed to fetch stats');
+    throw error;
+  }
 };
 
 // Get student by ID
-export const getStudentById = async (id, options = {}) => {
-    const response = await api.get(`${API_BASE_URL}/${id}`);
-    return response.data;
-};
-
-// Create student
-export const createStudent = async (studentData, options = {}) => {
-    // Determine if we're dealing with FormData or regular JSON
-    const isFormData = studentData instanceof FormData;
-    
-    const response = await api.post(API_BASE_URL, studentData, {
-      headers: isFormData ? {
-        'Content-Type': 'multipart/form-data',
-      } : undefined
-    });
-    
-    if (options.showToast !== false) {
-      toast.success('Student added successfully');
-    }
-    return response.data;
-};
-
-// Update student
-export const updateStudent = async (id, studentData, options = {}) => {
-    // Determine if we're dealing with FormData or regular JSON
-    const isFormData = studentData instanceof FormData;
-    
-    const response = await api.put(`${API_BASE_URL}/${id}`, studentData, {
-      headers: isFormData ? {
-        'Content-Type': 'multipart/form-data',
-      } : undefined
-    });
-    
-    if (options.showToast !== false) {
-      toast.success('Student updated successfully');
-    }
-    
-    return response.data;
-};
-
-// Delete student
-export const deleteStudent = async (id, options = {}) => {
-    const response = await api.delete(`${API_BASE_URL}/${id}`);
-    
-    if (options.showToast !== false) {
-      toast.success('Student deleted successfully');
-    }
-    
-    return response.data;
-};
-
-export const fetchStudents = async () => {
+export const getStudentById = async (id) => {
   try {
-    const response = await fetch('/smlekha/students');
-    
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('API endpoint not available');
-    }
-    
-    return await response.json();
+    const response = await axios.get(`${API_BASE_URL}/${id}`);
+    return response.data;
   } catch (error) {
-    console.error('Error fetching students:', error);
-    return [];
-  }
-};
-
-export const fetchStudentStats = async () => {
-  try {
-    const response = await fetch('/smlekha/students/stats');
-    
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('API endpoint not available');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching student stats:', error);
-    return {
-      total: 0,
-      active: 0,
-      inactive: 0,
-      male: 0,
-      female: 0,
-      other: 0,
-    };
-  }
-};
-
-export const addStudent = async (studentData) => {
-  try {
-    const response = await fetch('/smlekha/students', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(studentData),
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to add student');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error adding student:', error);
+    toast.error('Failed to fetch student');
     throw error;
   }
 };
 
-export const fetchOldStudents = async () => {
+// Create a new student
+export const createStudent = async (studentData) => {
   try {
-    const response = await fetch('/smlekha/students/old');
-    
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('API endpoint not available');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching old students:', error);
-    return [];
-  }
-};
-
-export const reactivateStudent = async (studentId) => {
-  try {
-    const response = await fetch(`/smlekha/students/${studentId}/reactivate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+    const isFormData = studentData instanceof FormData;
+    const response = await axios.post(API_BASE_URL, studentData, {
+      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {}
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to reactivate student');
-    }
-    
-    return await response.json();
+    toast.success('Student created successfully');
+    return response.data;
   } catch (error) {
-    console.error('Error reactivating student:', error);
+    toast.error('Failed to create student');
     throw error;
   }
 };
 
-export const searchStudents = async (query, options = {}) => {
-    const response = await api.get(`${API_BASE_URL}/search`, {
-      params: { query }
+// Update an existing student
+export const updateStudent = async (id, studentData) => {
+  try {
+    const isFormData = studentData instanceof FormData;
+    const response = await axios.put(`${API_BASE_URL}/${id}`, studentData, {
+      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {}
     });
+    toast.success('Student updated successfully');
     return response.data;
+  } catch (error) {
+    toast.error('Failed to update student');
+    throw error;
+  }
 };
 
-export const getStudentAttendance = async (id, params = {}, options = {}) => {
-    const response = await api.get(`${API_BASE_URL}/${id}/attendance`, { params });
+// Delete a student
+export const deleteStudent = async (id) => {
+  try {
+    const response = await axios.delete(`${API_BASE_URL}/${id}`);
+    toast.success('Student deleted successfully');
     return response.data;
+  } catch (error) {
+    toast.error('Failed to delete student');
+    throw error;
+  }
 };
 
-export const getStudentPayments = async (id, params = {}, options = {}) => {
-    const response = await api.get(`${API_BASE_URL}/${id}/payments`, { params });
-    return response.data;
-};
-
-export const updateStudentStatus = async (id, status, options = {}) => {
-    const response = await api.put(`${API_BASE_URL}/${id}/status`, { status });
-    
-    if (options.showToast !== false) {
-      toast.success(`Student status updated to ${status}`);
-    }
-    return response.data;
-};
-
-export const getStudentStats = async (options = {}) => {
-    const response = await api.get(`${API_BASE_URL}/stats`);
-    return response.data;
+getDocumentUrl.propTypes = {
+  relativePath: PropTypes.string,
 };
 
 export default {
-  getAllStudents,
+  getStudentsByProperty,
+  getStudentStats,
   getStudentById,
   createStudent,
   updateStudent,
-  deleteStudent,
-  updateStudentStatus,
-  getStudentAttendance,
-  getStudentPayments,
-  searchStudents,
-  getStudentStats
+  deleteStudent
 };

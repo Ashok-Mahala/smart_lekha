@@ -1,27 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { protect, authorize } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 const {
-  getStudents,
+  getStudentsByProperty,
   getStudentById,
   createStudent,
   updateStudent,
   deleteStudent,
-  getStudentStats
+  getStudentStatsByProperty
 } = require('../controllers/studentController');
 
-// Public routes
-router.get('/', getStudents);
-router.get('/stats', getStudentStats);
+router.use(protect);
+
+router.get('/property/:propertyId', getStudentsByProperty);
+router.get('/stats', getStudentStatsByProperty);
 router.get('/:id', getStudentById);
-
-// Protected routes (require authentication)
-// router.use(protect);
-
-// Admin only routes
-router.use(authorize('admin'));
 router.post('/', createStudent);
 router.put('/:id', updateStudent);
 router.delete('/:id', deleteStudent);
 
-module.exports = router; 
+module.exports = router;

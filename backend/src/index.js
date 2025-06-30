@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -71,6 +72,9 @@ app.use('/smlekha/financial', financialRoutes);
 app.use('/smlekha/properties', propertyRoutes);
 app.use('/smlekha/layouts', LayoutRoutes);
 app.use('/smlekha/shifts', ShiftRoutes);
+app.use(cors({ origin: '*', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type'] }));
+app.use('/smlekha/uploads', (req, res, next) => { res.header('Access-Control-Allow-Origin', '*');res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'); next(); }, express.static(path.join(__dirname, 'uploads')));
+
 
 // 404 handler for API routes
 app.use('/smlekha/*', (req, res, next) => {
