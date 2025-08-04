@@ -14,7 +14,7 @@ router.use(protect);
 
 router.get('/property/:propertyId', getStudentsByProperty);
 router.get('/stats', getStudentStatsByProperty);
-router.get('/:id', getStudentById);
+router.get('/profile/:id', getStudentById);
 router.post('/', createStudent);
 router.put('/:id', updateStudent);
 router.delete('/:id', deleteStudent);

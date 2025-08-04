@@ -1,4 +1,3 @@
-// @/api/students.js
 import axios from './axios';
 import { API_CONFIG } from './config';
 import { toast } from 'sonner';
@@ -6,33 +5,22 @@ import PropTypes from 'prop-types';
 
 const API_BASE_URL = `${API_CONFIG.baseURL}/students`;
 
-// PropTypes matching your Student model
 export const studentPropTypes = PropTypes.shape({
   _id: PropTypes.string.isRequired,
-  name: PropTypes.string.isRequired,
+  firstName: PropTypes.string.isRequired,
+  lastName: PropTypes.string,
   email: PropTypes.string.isRequired,
   phone: PropTypes.string.isRequired,
-  fatherName: PropTypes.string,
-  dateOfBirth: PropTypes.string,
-  gender: PropTypes.string,
-  studentId: PropTypes.string,
-  admissionDate: PropTypes.string,
+  currentSeat: PropTypes.object,
+  institution: PropTypes.string,
   course: PropTypes.string,
+  aadharNumber: PropTypes.number,
   status: PropTypes.string.isRequired,
-  address: PropTypes.string,
-  city: PropTypes.string,
-  state: PropTypes.string,
-  pincode: PropTypes.string,
-  idProofType: PropTypes.string,
-  idProofNumber: PropTypes.string,
-  photo: PropTypes.string,
-  idProofFront: PropTypes.string,
-  idProofBack: PropTypes.string,
-  notes: PropTypes.string,
-  currentSeat: PropTypes.string
+  booking: PropTypes.object,
+  shift: PropTypes.object,
+  payment: PropTypes.object
 });
 
-// Get students by property ID
 export const getStudentsByProperty = async (propertyId, params = {}) => {
   try {
     const response = await axios.get(`${API_BASE_URL}/property/${propertyId}`, { params });
@@ -43,16 +31,12 @@ export const getStudentsByProperty = async (propertyId, params = {}) => {
   }
 };
 
-/**
- * Builds full URL for profile photo or identity proof
- */
 export const getDocumentUrl = (relativePath) => {
   if (!relativePath) return '/placeholder.svg';
-  const base = API_CONFIG.baseURL.replace(/\/$/, ''); // remove trailing slash if any
+  const base = API_CONFIG.baseURL.replace(/\/$/, '');
   return `${base}${relativePath}`;
 };
 
-// Get student stats by property ID
 export const getStudentStats = async (propertyId) => {
   try {
     const response = await axios.get(`${API_BASE_URL}/stats`, { params: { propertyId } });
@@ -63,10 +47,9 @@ export const getStudentStats = async (propertyId) => {
   }
 };
 
-// Get student by ID
 export const getStudentById = async (id) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/${id}`);
+    const response = await axios.get(`${API_BASE_URL}/profile/${id}`);
     return response.data;
   } catch (error) {
     toast.error('Failed to fetch student');
@@ -74,7 +57,6 @@ export const getStudentById = async (id) => {
   }
 };
 
-// Create a new student
 export const createStudent = async (studentData) => {
   try {
     const isFormData = studentData instanceof FormData;
@@ -89,7 +71,6 @@ export const createStudent = async (studentData) => {
   }
 };
 
-// Update an existing student
 export const updateStudent = async (id, studentData) => {
   try {
     const isFormData = studentData instanceof FormData;
@@ -104,7 +85,6 @@ export const updateStudent = async (id, studentData) => {
   }
 };
 
-// Delete a student
 export const deleteStudent = async (id) => {
   try {
     const response = await axios.delete(`${API_BASE_URL}/${id}`);
@@ -114,10 +94,6 @@ export const deleteStudent = async (id) => {
     toast.error('Failed to delete student');
     throw error;
   }
-};
-
-getDocumentUrl.propTypes = {
-  relativePath: PropTypes.string,
 };
 
 export default {

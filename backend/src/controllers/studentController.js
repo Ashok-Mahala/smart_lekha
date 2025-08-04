@@ -70,6 +70,46 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
   res.json({ students: enriched });
 });
 
+const getStudentById = asyncHandler(async (req, res) => {
+  const student = await Student.findById(req.params.id)
+    .populate({
+      path: 'currentSeat',
+      populate: {
+        path: 'currentStudents',
+        populate: [
+          {
+            path: 'student',
+            select: '_id firstName lastName email phone'
+          },
+          {
+            path: 'booking',
+            populate: {
+              path: 'documents'
+            }
+          },
+          {
+            path: 'shift'
+          }
+        ]
+      }
+    });
+
+  if (!student) throw new ApiError(404, 'Student not found');
+
+  // Find the student's booking and shift from currentSeat
+  const studentBooking = student.currentSeat?.currentStudents?.find(
+    cs => cs.student?._id.toString() === student._id.toString()
+  );
+
+  const payment = await Payment.findOne({ booking: studentBooking?.booking?._id }).lean();
+
+  res.json({
+    ...student.toObject(),
+    booking: studentBooking?.booking,
+    shift: studentBooking?.shift,
+    payment
+  });
+});
 
 const getStudentStatsByProperty = asyncHandler(async (req, res) => {
   const { propertyId } = req.query;
@@ -87,27 +127,33 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
   res.json(stats);
 });
 
+const createStudent = asyncHandler(async (req, res) => {
+  const student = new Student(req.body);
+  await student.save();
+  res.status(201).json(student);
+});
+
+const updateStudent = asyncHandler(async (req, res) => {
+  const student = await Student.findByIdAndUpdate(
+    req.params.id, 
+    req.body, 
+    { new: true, runValidators: true }
+  );
+  if (!student) throw new ApiError(404, 'Student not found');
+  res.json(student);
+});
+
+const deleteStudent = asyncHandler(async (req, res) => {
+  const student = await Student.findByIdAndDelete(req.params.id);
+  if (!student) throw new ApiError(404, 'Student not found');
+  res.json({ message: 'Student deleted successfully' });
+});
+
 module.exports = {
   getStudentsByProperty,
-  getStudentById: asyncHandler(async (req, res) => {
-    const student = await Student.findById(req.params.id).populate('currentSeat');
-    if (!student) throw new ApiError(404, 'Student not found');
-    res.json(student);
-  }),
-  createStudent: asyncHandler(async (req, res) => {
-    const student = new Student(req.body);
-    await student.save();
-    res.status(201).json(student);
-  }),
-  updateStudent: asyncHandler(async (req, res) => {
-    const student = await Student.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!student) throw new ApiError(404, 'Student not found');
-    res.json(student);
-  }),
-  deleteStudent: asyncHandler(async (req, res) => {
-    const student = await Student.findByIdAndDelete(req.params.id);
-    if (!student) throw new ApiError(404, 'Student not found');
-    res.json({ message: 'Deleted' });
-  }),
+  getStudentById,
+  createStudent,
+  updateStudent,
+  deleteStudent,
   getStudentStatsByProperty
 };

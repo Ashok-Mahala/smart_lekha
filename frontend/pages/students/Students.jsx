@@ -28,7 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
-import { getDocumentUrl, getStudentsByProperty, getStudentStats } from "@/api/students";
+import { getDocumentUrl, getStudentById, getStudentsByProperty, getStudentStats } from "@/api/students";
 
 const StudentsPage = () => {
   const navigate = useNavigate();
@@ -78,7 +78,19 @@ const StudentsPage = () => {
     );  
   }, [students, searchTerm]);
 
-  const handleStudentClick = (id) => navigate(`/students/profile/${id}`);
+  const handleStudentClick = async (id) => {
+    try {
+      // First fetch the student data
+      const student = await getStudentById(id);
+      
+      // Then navigate to the profile page with the data
+      navigate(`/students/profile/${id}`, { state: { student } });
+    } catch (error) {
+      console.error("Error fetching student:", error);
+      // Optionally show error toast
+      toast.error("Failed to load student data");
+    }
+  };
 
   const getProfilePhotoUrl = (documents) => {
     const doc = documents?.find(d => d.type === 'profile_photo');
