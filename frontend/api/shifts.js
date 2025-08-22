@@ -27,7 +27,7 @@ export const createShift = async (shiftData) => {
 // Get all shifts
 export const getShifts = async () => {
   try {
-    const propertyId = localStorage.getItem('selected_property');
+    const propertyId = localStorage.getItem('selectedProperty');
     const response = await axios.get(`${API_BASE_URL}?property=${propertyId}`);
     return response.data;
   } catch (error) {

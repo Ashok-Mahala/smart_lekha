@@ -57,33 +57,33 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
   const [error, setError] = useState(null);
   const [initialLoad, setInitialLoad] = useState(true);
   
-  // Load properties from localStorage on component mount
   useEffect(() => {
     const loadProperties = () => {
       try {
         setLoading(true);
         const storedData = localStorage.getItem('properties');
-        
+  
         if (storedData) {
           const parsedData = JSON.parse(storedData);
           const formattedProperties = parsedData.map(property => ({
-            id: property._id,
+            id: property._id || property.id,
             name: property.name,
             logo: Building2,
-            // ... other property mappings ...
           }));
-          
+  
           setProperties(formattedProperties);
-
+  
           // Check for existing selection in localStorage
-          const storedSelected = localStorage.getItem('selected_property');
-          
+          const storedSelected = localStorage.getItem('selectedProperty');
+  
+          // On initial load, select existing or first property
           if (initialLoad) {
             if (storedSelected && storedSelected !== 'default') {
               onPropertyChange(storedSelected);
             } else if (formattedProperties.length > 0) {
               const firstPropertyId = formattedProperties[0].id;
               onPropertyChange(firstPropertyId);
+              localStorage.setItem('selectedProperty', firstPropertyId); // Ensure storage consistency
             }
             setInitialLoad(false);
           }
@@ -94,14 +94,15 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
         setLoading(false);
       }
     };
-
+  
     loadProperties();
-  }, [onPropertyChange, initialLoad]); // Add initialLoad to dependencies
+  }, [onPropertyChange, initialLoad]);
+  
 
   // Update localStorage whenever selectedProperty changes
   useEffect(() => {
     if (selectedProperty && !initialLoad) {
-      localStorage.setItem('selected_property', selectedProperty);
+      localStorage.setItem('selectedProperty', selectedProperty);
     }
   }, [selectedProperty, initialLoad]);
 
@@ -141,7 +142,7 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
   const handleTeamManagement = useCallback(() => {
     navigate("/admin/team");
   }, [navigate]);
-
+  
   const handleLogout = async () => {
   try {
     await authService.signOut();

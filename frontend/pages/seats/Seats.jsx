@@ -58,7 +58,7 @@ const SeatsPage = () => {
       try {
         setIsLoading(true);
         
-        const selectedPropertyId = localStorage.getItem('selected_property');
+        const selectedPropertyId = localStorage.getItem('selectedProperty');
         if (!selectedPropertyId) throw new Error('No property selected');
 
         const storedProperties = localStorage.getItem('properties');

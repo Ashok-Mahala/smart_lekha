@@ -48,7 +48,26 @@ const PropertiesPage = () => {
     try {
       setLoading(true);
       const newProperty = await createProperty(property);
-      setProperties((prev) => [...prev, newProperty]);
+  
+      setProperties((prev) => {
+        const updated = [...prev, {
+          id: newProperty._id,
+          name: newProperty.name,
+          logo: Building2
+        }];
+  
+        // Store updated list in localStorage
+        localStorage.setItem('properties', JSON.stringify(updated));
+  
+        // If no property is selected, set the new one as selected
+        const storedSelected = localStorage.getItem('selectedProperty');
+        if (!storedSelected || storedSelected === 'default') {
+          localStorage.setItem('selectedProperty', newProperty._id);
+        }
+  
+        return updated;
+      });
+  
       toast.success('Property added successfully');
     } catch (error) {
       toast.error('Failed to add property');
@@ -56,6 +75,7 @@ const PropertiesPage = () => {
       setLoading(false);
     }
   };
+  
 
   const handlePropertyClick = (propertyId) => {
     navigate(`/properties/${propertyId}`);

@@ -23,7 +23,7 @@ const ShiftForm = ({ shift, onSubmit, onCancel }) => {
 
   // Load selected property from localStorage
   useEffect(() => {
-    const selectedProperty = localStorage.getItem('selected_property');
+    const selectedProperty = localStorage.getItem('selectedProperty');
     if (!selectedProperty) {
       toast({
         title: "Error",

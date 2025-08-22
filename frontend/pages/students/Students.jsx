@@ -42,7 +42,7 @@ const StudentsPage = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const propertyId = localStorage.getItem("selected_property");
+        const propertyId = localStorage.getItem("selectedProperty");
         if (!propertyId) throw new Error("No property selected");
 
         const [studentList, statInfo] = await Promise.all([
