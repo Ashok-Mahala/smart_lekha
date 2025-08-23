@@ -22,7 +22,7 @@ import AddPropertyDialog from '@/components/properties/AddPropertyDialog';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PropTypes from 'prop-types';
-import { getProperties, createProperty } from '@/api/properties';
+import { getProperties, createProperty, deleteProperty } from '@/api/properties';
 
 const PropertiesPage = () => {
   const navigate = useNavigate();
@@ -77,8 +77,38 @@ const PropertiesPage = () => {
   };
   
 
-  const handlePropertyClick = (propertyId) => {
-    navigate(`/properties/${propertyId}`);
+  const handlePropertyClick = (property) => {
+    navigate(`/properties/${property._id}`);
+  };
+
+  // Delete Property
+  const handleDeleteProperty = async (propertyId, e) => {
+    e.stopPropagation(); // Prevent triggering the card click
+    
+    // Confirmation dialog
+    if (!window.confirm('Are you sure you want to delete this property? This action cannot be undone.')) {
+      return;
+    }
+  
+    try {
+      setLoading(true);
+      await deleteProperty(propertyId);
+      
+      // Update local state
+      setProperties(prev => prev.filter(prop => prop._id !== propertyId));
+      
+      // Update localStorage
+      const updatedProperties = properties.filter(prop => prop._id !== propertyId);
+      localStorage.setItem('properties', JSON.stringify(updatedProperties));
+      
+      toast.success('Property deleted successfully');
+    } catch (error) {
+      console.error('Error deleting property:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete property';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Calculate overview statistics
@@ -138,7 +168,7 @@ const PropertiesPage = () => {
               key={property.id}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => handlePropertyClick(property.id)}
+              onClick={() => handlePropertyClick(property)}
             >
               <Card className="h-full cursor-pointer hover:shadow-lg transition-all duration-300">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -161,12 +191,15 @@ const PropertiesPage = () => {
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
                       <DropdownMenuItem onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/properties/${property.id}`);
+                        navigate(`/properties/${property._id}`);
                       }}>
                         <Edit className="h-4 w-4 mr-2" />
                         View Details
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuItem 
+                        onClick={(e) => handleDeleteProperty(property._id, e)}
+                        className="text-destructive focus:text-destructive"
+                      >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete Property
                       </DropdownMenuItem>

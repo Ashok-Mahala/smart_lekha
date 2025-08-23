@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { updateProperty } from '@/api/properties';
 import { 
   Building2, 
   Users, 
@@ -32,7 +33,6 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { properties } from '@/data/properties';
 import { motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -62,10 +62,58 @@ const PropertyDetails = () => {
   const [showAddFacility, setShowAddFacility] = useState(false);
   const [showAddRule, setShowAddRule] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [propertyDetails, setPropertyDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [newFacility, setNewFacility] = useState('');
+  const [newRule, setNewRule] = useState('');
+  const [newStaff, setNewStaff] = useState({
+    name: '',
+    role: '',
+    email: '',
+    phone: ''
+  });
+  const [newManager, setNewManager] = useState({
+    name: '',
+    role: '',
+    email: '',
+    phone: '',
+    avatar: ''
+  });
 
-  const property = properties.find(p => p.id === id);
+  // Load property from localStorage
+  useEffect(() => {
+    const properties = JSON.parse(localStorage.getItem("properties")) || [];
+    const property = properties.find((p) => (p._id || p.id) === id);
+    
+    if (property) {
+      // Set up property details with API data
+      setPropertyDetails({
+        ...property,
+        manager: Array.isArray(property.manager) ? property.manager : property.manager ? [property.manager] : [],
+        staff: property.staff || [],
+        occupiedSeats: 0, // Will be added in future
+        totalStudents: 0, // Will be added in future
+        monthlyRevenue: 0, // Will be added in future
+      });
+    } else {
+      toast.error("Property not found");
+    }
+    setLoading(false);
+  }, [id]);
 
-  if (!property) {
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-[50vh]">
+          <div className="text-center">
+            <p className="text-muted-foreground">Loading property details...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!propertyDetails) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-[50vh]">
@@ -79,124 +127,118 @@ const PropertyDetails = () => {
     );
   }
 
-  // Mock data for property details
-  const [propertyDetails, setPropertyDetails] = useState({
-    address: "123 Library Street, City Center",
-    phone: "+91 9876543210",
-    email: "contact@sb2library.com",
-    openingHours: "24/7",
-    totalSeats: 98,
-    occupiedSeats: 45,
-    totalStudents: 120,
-    monthlyRevenue: 75000,
-    managers: [
-      {
-        id: 1,
-        name: "John Doe",
-        role: "Property Manager",
-        email: "john@sb2library.com",
-        phone: "+91 9876543211",
-        avatar: "/avatars/01.png"
-      },
-      {
-        id: 2,
-        name: "Jane Smith",
-        role: "Assistant Manager",
-        email: "jane@sb2library.com",
-        phone: "+91 9876543212",
-        avatar: "/avatars/02.png"
+  const handleSave = async () => {
+    try {
+      // Call the API function to update the property
+      const dataToSend = {
+        ...propertyDetails,
+        // Make sure manager is properly formatted as array
+        manager: Array.isArray(propertyDetails.manager) ? propertyDetails.manager : [],
+      };
+      const updatedProperty = await updateProperty(id, dataToSend);
+      
+      // Update localStorage for immediate UI consistency
+      const properties = JSON.parse(localStorage.getItem("properties")) || [];
+      const updatedProperties = properties.map(p => 
+        (p._id || p.id) === id ? updatedProperty : p
+      );
+      localStorage.setItem("properties", JSON.stringify(updatedProperties));
+      
+      // Update state with the returned property data
+      setPropertyDetails(updatedProperty);
+      
+      toast.success("Property details updated successfully");
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error updating property:', error);
+      
+      // Handle specific error cases
+      const errorMessage = error.response?.data?.message || error.message || "Failed to update property details";
+      
+      if (errorMessage.includes('401') || errorMessage.includes('403')) {
+        toast.error("Unauthorized: Please login again");
+      } else if (errorMessage.includes('404')) {
+        toast.error("Property not found");
+      } else {
+        toast.error(errorMessage);
       }
-    ],
-    staff: [
-      {
-        id: 1,
-        name: "Mike Johnson",
-        role: "Librarian",
-        email: "mike@sb2library.com",
-        phone: "+91 9876543213",
-        avatar: "/avatars/03.png"
-      },
-      {
-        id: 2,
-        name: "Sarah Wilson",
-        role: "Security",
-        email: "sarah@sb2library.com",
-        phone: "+91 9876543214",
-        avatar: "/avatars/04.png"
-      }
-    ],
-    facilities: [
-      "Wi-Fi",
-      "Air Conditioning",
-      "Power Outlets",
-      "Printing Services",
-      "Study Rooms",
-      "Cafeteria",
-      "Parking"
-    ],
-    rules: [
-      "No food or drinks in study areas",
-      "Maintain silence in quiet zones",
-      "Keep your belongings with you",
-      "No smoking on premises",
-      "Follow COVID-19 guidelines"
-    ]
-  });
-
-  const handleSave = () => {
-    // Here you would typically make an API call to save the changes
-    toast.success("Property details updated successfully");
-    setIsEditing(false);
+    }
   };
 
-  const handleAddManager = (manager) => {
+  const handleAddManager = (managerData) => {
+    if (!managerData.name.trim() || !managerData.role.trim()) {
+      toast.error("Please fill in name and role fields");
+      return;
+    }
+    
     setPropertyDetails(prev => ({
       ...prev,
-      managers: [...prev.managers, { ...manager, id: prev.managers.length + 1 }]
+      manager: [...(prev.manager || []), managerData] // Add to manager array
     }));
+    
     setShowAddManager(false);
     toast.success("Manager added successfully");
   };
 
-  const handleAddStaff = (staff) => {
+  const handleAddStaff = (staffData) => {
+    if (!staffData.name.trim() || !staffData.role.trim()) {
+      toast.error("Please fill in name and role fields");
+      return;
+    }
+    
     setPropertyDetails(prev => ({
       ...prev,
-      staff: [...prev.staff, { ...staff, id: prev.staff.length + 1 }]
+      staff: [...(prev.staff || []), staffData] // No id field
     }));
+    
     setShowAddStaff(false);
+    setNewStaff({ name: '', role: '', email: '', phone: '' });
     toast.success("Staff member added successfully");
   };
 
-  const handleAddFacility = (facility) => {
+  const handleAddFacility = (facilityName) => {
+    if (!facilityName.trim()) {
+      toast.error("Please enter a facility name");
+      return;
+    }
+    
     setPropertyDetails(prev => ({
       ...prev,
-      facilities: [...prev.facilities, facility]
+      facilities: [...prev.facilities, facilityName.trim()]
     }));
     setShowAddFacility(false);
+    setNewFacility(''); // Reset the input field
     toast.success("Facility added successfully");
   };
 
-  const handleAddRule = (rule) => {
+  const handleAddRule = (ruleText) => {
+    if (!ruleText.trim()) {
+      toast.error("Please enter a rule");
+      return;
+    }
+    
     setPropertyDetails(prev => ({
       ...prev,
-      rules: [...prev.rules, rule]
+      rules: [...prev.rules, ruleText.trim()]
     }));
     setShowAddRule(false);
+    setNewRule(''); // Reset the input field
     toast.success("Rule added successfully");
   };
+  
 
-  const handleDeleteManager = (managerId) => {
+  const handleDeleteManager = (index) => {
     setPropertyDetails(prev => ({
       ...prev,
-      managers: prev.managers.filter(m => m.id !== managerId)
+      manager: prev.manager.filter((_, i) => i !== index)
     }));
     toast.success("Manager removed successfully");
   };
 
-  const handleDeleteStaff = (staffId) => {
+  const handleDeleteStaff = (index) => {
     setPropertyDetails(prev => ({
       ...prev,
-      staff: prev.staff.filter(s => s.id !== staffId)
+      staff: prev.staff.filter((_, i) => i !== index)
     }));
     toast.success("Staff member removed successfully");
   };
@@ -228,9 +270,9 @@ const PropertyDetails = () => {
               Back
             </Button>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">{property.name}</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold">{propertyDetails.name}</h1>
               <p className="text-sm sm:text-base text-muted-foreground">
-                Property Details and Management
+                {propertyDetails.type} • {propertyDetails.address}
               </p>
             </div>
           </div>
@@ -282,7 +324,7 @@ const PropertyDetails = () => {
                 <>
                   <div className="text-2xl font-bold text-blue-700">{propertyDetails.totalSeats}</div>
                   <p className="text-xs text-blue-600/80">
-                    {propertyDetails.occupiedSeats} currently occupied
+                    {propertyDetails.occupiedSeats || 0} currently occupied
                   </p>
                 </>
               )}
@@ -297,21 +339,12 @@ const PropertyDetails = () => {
               </div>
             </CardHeader>
             <CardContent>
-              {isEditing ? (
-                <Input 
-                  type="number" 
-                  value={propertyDetails.totalStudents}
-                  onChange={(e) => setPropertyDetails(prev => ({ ...prev, totalStudents: parseInt(e.target.value) }))}
-                  className="w-24 bg-white/50"
-                />
-              ) : (
-                <>
-                  <div className="text-2xl font-bold text-green-700">{propertyDetails.totalStudents}</div>
-                  <p className="text-xs text-green-600/80">
-                    Active members
-                  </p>
-                </>
-              )}
+              <div className="text-2xl font-bold text-green-700">
+                {propertyDetails.totalStudents}
+              </div>
+              <p className="text-xs text-green-600/80">
+                Active members
+              </p>
             </CardContent>
           </Card>
 
@@ -323,21 +356,12 @@ const PropertyDetails = () => {
               </div>
             </CardHeader>
             <CardContent>
-              {isEditing ? (
-                <Input 
-                  type="number" 
-                  value={propertyDetails.monthlyRevenue}
-                  onChange={(e) => setPropertyDetails(prev => ({ ...prev, monthlyRevenue: parseInt(e.target.value) }))}
-                  className="w-24 bg-white/50"
-                />
-              ) : (
-                <>
-                  <div className="text-2xl font-bold text-purple-700">₹{propertyDetails.monthlyRevenue}</div>
-                  <p className="text-xs text-purple-600/80">
-                    Last 30 days
-                  </p>
-                </>
-              )}
+              <div className="text-2xl font-bold text-purple-700">
+                ₹{propertyDetails.monthlyRevenue}
+              </div>
+              <p className="text-xs text-purple-600/80">
+                Last 30 days
+              </p>
             </CardContent>
           </Card>
 
@@ -357,7 +381,7 @@ const PropertyDetails = () => {
                     className="bg-white/50"
                     placeholder="Enter opening hours"
                   />
-                  <Select>
+                  {/* <Select>
                     <SelectTrigger className="bg-white/50">
                       <SelectValue placeholder="Select schedule type" />
                     </SelectTrigger>
@@ -366,13 +390,13 @@ const PropertyDetails = () => {
                       <SelectItem value="custom">Custom Hours</SelectItem>
                       <SelectItem value="weekday">Weekday Schedule</SelectItem>
                     </SelectContent>
-                  </Select>
+                  </Select> */}
                 </div>
               ) : (
                 <>
                   <div className="text-2xl font-bold text-orange-700">{propertyDetails.openingHours}</div>
                   <p className="text-xs text-orange-600/80">
-                    Always open
+                    {propertyDetails.openingHours === "24" ? "Always open" : "Check schedule"}
                   </p>
                 </>
               )}
@@ -432,6 +456,22 @@ const PropertyDetails = () => {
                             className="bg-muted/50"
                           />
                         </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Website</Label>
+                          <Input 
+                            value={propertyDetails.website}
+                            onChange={(e) => setPropertyDetails(prev => ({ ...prev, website: e.target.value }))}
+                            className="bg-muted/50"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Description</Label>
+                          <Textarea 
+                            value={propertyDetails.description}
+                            onChange={(e) => setPropertyDetails(prev => ({ ...prev, description: e.target.value }))}
+                            className="bg-muted/50"
+                          />
+                        </div>
                       </>
                     ) : (
                       <>
@@ -447,6 +487,19 @@ const PropertyDetails = () => {
                           <Mail className="h-5 w-5 text-primary" />
                           <span className="text-sm">{propertyDetails.email}</span>
                         </div>
+                        {propertyDetails.website && (
+                          <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                            <Building2 className="h-5 w-5 text-primary" />
+                            <a href={propertyDetails.website} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                              {propertyDetails.website}
+                            </a>
+                          </div>
+                        )}
+                        {propertyDetails.description && (
+                          <div className="p-3 bg-muted/50 rounded-lg">
+                            <p className="text-sm">{propertyDetails.description}</p>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -468,73 +521,91 @@ const PropertyDetails = () => {
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="space-y-4">
-                  {propertyDetails.managers.map((manager) => (
-                    <div key={manager.id} className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg hover:bg-muted/70 transition-colors">
-                      <Avatar className="h-12 w-12 border-2 border-primary/20">
-                        <AvatarImage src={manager.avatar} />
-                        <AvatarFallback className="bg-primary/10 text-primary">
-                          {manager.name.split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            {isEditing ? (
-                              <div className="space-y-2">
-                                <Input 
-                                  value={manager.name}
-                                  onChange={(e) => {
-                                    setPropertyDetails(prev => ({
-                                      ...prev,
-                                      managers: prev.managers.map(m => 
-                                        m.id === manager.id ? { ...m, name: e.target.value } : m
-                                      )
-                                    }));
-                                  }}
-                                  className="bg-white/50"
-                                />
-                                <Input 
-                                  value={manager.role}
-                                  onChange={(e) => {
-                                    setPropertyDetails(prev => ({
-                                      ...prev,
-                                      managers: prev.managers.map(m => 
-                                        m.id === manager.id ? { ...m, role: e.target.value } : m
-                                      )
-                                    }));
-                                  }}
-                                  className="bg-white/50"
-                                />
-                              </div>
-                            ) : (
-                              <>
-                                <p className="font-medium">{manager.name}</p>
-                                <p className="text-sm text-muted-foreground">{manager.role}</p>
-                              </>
-                            )}
+                  {propertyDetails.manager && propertyDetails.manager.length > 0 ? (
+                    propertyDetails.manager.map((manager, index) => (
+                      <div key={index} className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg hover:bg-muted/70 transition-colors">
+                        <Avatar className="h-12 w-12 border-2 border-primary/20">
+                          <AvatarImage src={manager.avatar} />
+                          <AvatarFallback className="bg-primary/10 text-primary">
+                            {manager.name ? manager.name.split(' ').map(n => n[0]).join('') : 'M'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              {isEditing ? (
+                                <div className="space-y-2">
+                                  <Input 
+                                    value={manager.name || ''}
+                                    onChange={(e) => {
+                                      setPropertyDetails(prev => ({
+                                        ...prev,
+                                        manager: prev.manager.map((m, i) => 
+                                          i === index ? { ...m, name: e.target.value } : m
+                                        )
+                                      }));
+                                    }}
+                                    className="bg-white/50"
+                                  />
+                                  <Input 
+                                    value={manager.role || ''}
+                                    onChange={(e) => {
+                                      setPropertyDetails(prev => ({
+                                        ...prev,
+                                        manager: prev.manager.map((m, i) => 
+                                          i === index ? { ...m, role: e.target.value } : m
+                                        )
+                                      }));
+                                    }}
+                                    className="bg-white/50"
+                                  />
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="font-medium">{manager.name}</p>
+                                  <p className="text-sm text-muted-foreground">{manager.role}</p>
+                                </>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {manager.phone && (
+                                <Button variant="ghost" size="sm" className="hover:bg-primary/10">
+                                  <Phone className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {manager.email && (
+                                <Button variant="ghost" size="sm" className="hover:bg-primary/10">
+                                  <Mail className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {isEditing && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleDeleteManager(index)}
+                                  className="hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="sm" className="hover:bg-primary/10">
-                              <Phone className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="hover:bg-primary/10">
-                              <Mail className="h-4 w-4" />
-                            </Button>
-                            {isEditing && (
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => handleDeleteManager(manager.id)}
-                                className="hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
+                          {(manager.email || manager.phone) && (
+                            <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+                              {manager.email && <span>{manager.email}</span>}
+                              {manager.email && manager.phone && <span>•</span>}
+                              {manager.phone && <span>{manager.phone}</span>}
+                            </div>
+                          )}
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No managers added yet</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -553,68 +624,85 @@ const PropertyDetails = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {propertyDetails.staff.map((member) => (
-                    <div key={member.id} className="flex items-center gap-4">
-                      <Avatar>
-                        <AvatarImage src={member.avatar} />
-                        <AvatarFallback>{member.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            {isEditing ? (
-                              <div className="space-y-2">
-                                <Input 
-                                  value={member.name}
-                                  onChange={(e) => {
-                                    setPropertyDetails(prev => ({
-                                      ...prev,
-                                      staff: prev.staff.map(s => 
-                                        s.id === member.id ? { ...s, name: e.target.value } : s
-                                      )
-                                    }));
-                                  }}
-                                />
-                                <Input 
-                                  value={member.role}
-                                  onChange={(e) => {
-                                    setPropertyDetails(prev => ({
-                                      ...prev,
-                                      staff: prev.staff.map(s => 
-                                        s.id === member.id ? { ...s, role: e.target.value } : s
-                                      )
-                                    }));
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <>
-                                <p className="font-medium">{member.name}</p>
-                                <p className="text-sm text-muted-foreground">{member.role}</p>
-                              </>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="sm">
-                              <Phone className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm">
-                              <Mail className="h-4 w-4" />
-                            </Button>
-                            {isEditing && (
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => handleDeleteStaff(member.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
+                  {propertyDetails.staff && propertyDetails.staff.length > 0 ? (
+                    propertyDetails.staff.map((member, index) => (
+                      <div key={index} className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+                        <Avatar>
+                          <AvatarImage src={member.avatar} />
+                          <AvatarFallback>
+                            {member.name ? member.name.split(' ').map(n => n[0]).join('') : 'S'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              {isEditing ? (
+                                <div className="space-y-2">
+                                  <Input 
+                                    value={member.name || ''}
+                                    onChange={(e) => {
+                                      setPropertyDetails(prev => ({
+                                        ...prev,
+                                        staff: prev.staff.map((s, i) => 
+                                          i === index ? { ...s, name: e.target.value } : s
+                                        )
+                                      }));
+                                    }}
+                                    className="bg-white"
+                                  />
+                                  <Input 
+                                    value={member.role || ''}
+                                    onChange={(e) => {
+                                      setPropertyDetails(prev => ({
+                                        ...prev,
+                                        staff: prev.staff.map((s, i) => 
+                                          i === index ? { ...s, role: e.target.value } : s
+                                        )
+                                      }));
+                                    }}
+                                    className="bg-white"
+                                  />
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="font-medium">{member.name}</p>
+                                  <p className="text-sm text-muted-foreground">{member.role}</p>
+                                  {member.email && <p className="text-sm text-muted-foreground">{member.email}</p>}
+                                  {member.phone && <p className="text-sm text-muted-foreground">{member.phone}</p>}
+                                </>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {member.phone && (
+                                <Button variant="ghost" size="sm">
+                                  <Phone className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {member.email && (
+                                <Button variant="ghost" size="sm">
+                                  <Mail className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {isEditing && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleDeleteStaff(index)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No staff members added yet</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -632,27 +720,34 @@ const PropertyDetails = () => {
                 )}
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {propertyDetails.facilities.map((facility, index) => (
-                    <Badge 
-                      key={index} 
-                      variant="secondary"
-                      className="flex items-center gap-2"
-                    >
-                      {facility}
-                      {isEditing && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="h-4 w-4 p-0"
-                          onClick={() => handleDeleteFacility(facility)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </Badge>
-                  ))}
-                </div>
+                {propertyDetails.facilities && propertyDetails.facilities.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {propertyDetails.facilities.map((facility, index) => (
+                      <Badge 
+                        key={index} 
+                        variant="secondary"
+                        className="flex items-center gap-2"
+                      >
+                        {facility}
+                        {isEditing && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="h-4 w-4 p-0"
+                            onClick={() => handleDeleteFacility(facility)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No facilities added yet</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -669,25 +764,32 @@ const PropertyDetails = () => {
                 )}
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
-                  {propertyDetails.rules.map((rule, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <div className="mt-1">•</div>
-                      <div className="flex-1 flex items-center justify-between">
-                        <span>{rule}</span>
-                        {isEditing && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleDeleteRule(rule)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                {propertyDetails.rules && propertyDetails.rules.length > 0 ? (
+                  <ul className="space-y-2">
+                    {propertyDetails.rules.map((rule, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <div className="mt-1">•</div>
+                        <div className="flex-1 flex items-center justify-between">
+                          <span>{rule}</span>
+                          {isEditing && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleDeleteRule(rule)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No rules added yet</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -727,40 +829,61 @@ const PropertyDetails = () => {
       </div>
 
       {/* Add Manager Dialog */}
-      <Dialog open={showAddManager} onOpenChange={setShowAddManager}>
+      <Dialog open={showAddManager} onOpenChange={(open) => {
+        setShowAddManager(open);
+        if (!open) setNewManager({ name: '', role: '', email: '', phone: '', avatar: '' });
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Manager</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" placeholder="Enter manager name" />
+              <Label htmlFor="manager-name">Name *</Label>
+              <Input 
+                id="manager-name" 
+                placeholder="Enter manager name" 
+                value={newManager.name}
+                onChange={(e) => setNewManager(prev => ({ ...prev, name: e.target.value }))}
+              />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="role">Role</Label>
-              <Input id="role" placeholder="Enter manager role" />
+              <Label htmlFor="manager-role">Role *</Label>
+              <Input 
+                id="manager-role" 
+                placeholder="Enter manager role" 
+                value={newManager.role}
+                onChange={(e) => setNewManager(prev => ({ ...prev, role: e.target.value }))}
+              />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="Enter manager email" />
+              <Label htmlFor="manager-email">Email</Label>
+              <Input 
+                id="manager-email" 
+                type="email"
+                placeholder="Enter manager email" 
+                value={newManager.email}
+                onChange={(e) => setNewManager(prev => ({ ...prev, email: e.target.value }))}
+              />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" placeholder="Enter manager phone" />
+              <Label htmlFor="manager-phone">Phone</Label>
+              <Input 
+                id="manager-phone" 
+                placeholder="Enter manager phone" 
+                value={newManager.phone}
+                onChange={(e) => setNewManager(prev => ({ ...prev, phone: e.target.value }))}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddManager(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowAddManager(false);
+              setNewManager({ name: '', role: '', email: '', phone: '', avatar: '' });
+            }}>
               Cancel
             </Button>
-            <Button onClick={() => handleAddManager({
-              name: "New Manager",
-              role: "Manager",
-              email: "manager@example.com",
-              phone: "+91 9876543210",
-              avatar: "/avatars/default.png"
-            })}>
+            <Button onClick={() => handleAddManager(newManager)}>
               Add Manager
             </Button>
           </DialogFooter>
@@ -768,40 +891,61 @@ const PropertyDetails = () => {
       </Dialog>
 
       {/* Add Staff Dialog */}
-      <Dialog open={showAddStaff} onOpenChange={setShowAddStaff}>
+      <Dialog open={showAddStaff} onOpenChange={(open) => {
+        setShowAddStaff(open);
+        if (!open) setNewStaff({ name: '', role: '', email: '', phone: '' });
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Staff Member</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" placeholder="Enter staff name" />
+              <Label htmlFor="staff-name">Name *</Label>
+              <Input 
+                id="staff-name" 
+                placeholder="Enter staff name" 
+                value={newStaff.name}
+                onChange={(e) => setNewStaff(prev => ({ ...prev, name: e.target.value }))}
+              />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="role">Role</Label>
-              <Input id="role" placeholder="Enter staff role" />
+              <Label htmlFor="staff-role">Role *</Label>
+              <Input 
+                id="staff-role" 
+                placeholder="Enter staff role" 
+                value={newStaff.role}
+                onChange={(e) => setNewStaff(prev => ({ ...prev, role: e.target.value }))}
+              />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="Enter staff email" />
+              <Label htmlFor="staff-email">Email</Label>
+              <Input 
+                id="staff-email" 
+                type="email"
+                placeholder="Enter staff email" 
+                value={newStaff.email}
+                onChange={(e) => setNewStaff(prev => ({ ...prev, email: e.target.value }))}
+              />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" placeholder="Enter staff phone" />
+              <Label htmlFor="staff-phone">Phone</Label>
+              <Input 
+                id="staff-phone" 
+                placeholder="Enter staff phone" 
+                value={newStaff.phone}
+                onChange={(e) => setNewStaff(prev => ({ ...prev, phone: e.target.value }))}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddStaff(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowAddStaff(false);
+              setNewStaff({ name: '', role: '', email: '', phone: '' });
+            }}>
               Cancel
             </Button>
-            <Button onClick={() => handleAddStaff({
-              name: "New Staff",
-              role: "Staff",
-              email: "staff@example.com",
-              phone: "+91 9876543210",
-              avatar: "/avatars/default.png"
-            })}>
+            <Button onClick={() => handleAddStaff(newStaff)}>
               Add Staff
             </Button>
           </DialogFooter>
@@ -809,7 +953,10 @@ const PropertyDetails = () => {
       </Dialog>
 
       {/* Add Facility Dialog */}
-      <Dialog open={showAddFacility} onOpenChange={setShowAddFacility}>
+      <Dialog open={showAddFacility} onOpenChange={(open) => {
+        setShowAddFacility(open);
+        if (!open) setNewFacility(''); // Reset when dialog closes
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Facility</DialogTitle>
@@ -817,14 +964,27 @@ const PropertyDetails = () => {
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="facility">Facility Name</Label>
-              <Input id="facility" placeholder="Enter facility name" />
+              <Input 
+                id="facility" 
+                placeholder="Enter facility name" 
+                value={newFacility}
+                onChange={(e) => setNewFacility(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddFacility(newFacility);
+                  }
+                }}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddFacility(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowAddFacility(false);
+              setNewFacility('');
+            }}>
               Cancel
             </Button>
-            <Button onClick={() => handleAddFacility("New Facility")}>
+            <Button onClick={() => handleAddFacility(newFacility)}>
               Add Facility
             </Button>
           </DialogFooter>
@@ -832,7 +992,10 @@ const PropertyDetails = () => {
       </Dialog>
 
       {/* Add Rule Dialog */}
-      <Dialog open={showAddRule} onOpenChange={setShowAddRule}>
+      <Dialog open={showAddRule} onOpenChange={(open) => {
+        setShowAddRule(open);
+        if (!open) setNewRule(''); // Reset when dialog closes
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Rule</DialogTitle>
@@ -840,14 +1003,23 @@ const PropertyDetails = () => {
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="rule">Rule</Label>
-              <Textarea id="rule" placeholder="Enter property rule" />
+              <Textarea 
+                id="rule" 
+                placeholder="Enter property rule" 
+                value={newRule}
+                onChange={(e) => setNewRule(e.target.value)}
+                rows={3}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddRule(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowAddRule(false);
+              setNewRule('');
+            }}>
               Cancel
             </Button>
-            <Button onClick={() => handleAddRule("New Rule")}>
+            <Button onClick={() => handleAddRule(newRule)}>
               Add Rule
             </Button>
           </DialogFooter>
@@ -898,4 +1070,4 @@ PropertyDetails.propTypes = {
   })
 };
 
-export default PropertyDetails; 
+export default PropertyDetails;

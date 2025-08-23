@@ -44,7 +44,7 @@ const AddPropertyDialog = ({ open, onOpenChange, onAddProperty }) => {
     }
 
     const location = {
-      lat: parseFloat(propertyDetails.latitude) || 0,
+      lat: propertyDetails.latitude || "",
       lng: parseFloat(propertyDetails.longitude) || 0
     };
 
@@ -87,7 +87,7 @@ const AddPropertyDialog = ({ open, onOpenChange, onAddProperty }) => {
               <div className="space-y-2">
                 <Label htmlFor="type">Property Type *</Label>
                 <Select
-                  value={propertyDetails.type}
+                  value={propertyDetails.type || "library"}
                   onValueChange={(value) => setPropertyDetails(prev => ({ ...prev, type: value }))}
                 >
                   <SelectTrigger>
@@ -159,15 +159,15 @@ const AddPropertyDialog = ({ open, onOpenChange, onAddProperty }) => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="latitude">Latitude</Label>
+                <Label htmlFor="latitude">Google Map Location</Label>
                 <Input
                   id="latitude"
                   value={propertyDetails.latitude}
                   onChange={(e) => setPropertyDetails(prev => ({ ...prev, latitude: e.target.value }))}
-                  placeholder="Enter latitude (optional)"
+                  placeholder="Enter Google Map Location Link (optional)"
                 />
               </div>
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label htmlFor="longitude">Longitude</Label>
                 <Input
                   id="longitude"
@@ -175,7 +175,7 @@ const AddPropertyDialog = ({ open, onOpenChange, onAddProperty }) => {
                   onChange={(e) => setPropertyDetails(prev => ({ ...prev, longitude: e.target.value }))}
                   placeholder="Enter longitude (optional)"
                 />
-              </div>
+              </div> */}
             </div>
           </TabsContent>
 
