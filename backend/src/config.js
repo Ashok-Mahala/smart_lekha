@@ -32,7 +32,8 @@ const config = {
   
   // JWT configuration
   jwtSecret: process.env.JWT_SECRET,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
+  refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRATION || '24h',
   
   // CORS configuration
   corsOrigin: process.env.CORS_ORIGIN || (NODE_ENV === 'production' 

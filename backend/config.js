@@ -1,13 +1,18 @@
+// /root/pg_node/smart_lekha/SB2-Library-/backend/config.js
 require('dotenv').config();
 
 const config = {
   port: process.env.PORT || 5000,
   mongoURI: process.env.MONGODB_URI || 'mongodb://localhost:27017/seatflow',
   jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
-  jwtExpiration: process.env.JWT_EXPIRATION || '24h',
+//  jwtExpiration: process.env.JWT_EXPIRES_IN || '1m',
+// refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRATION || '2m',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1m',
+  refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRATION || '2m',
+
   email: {
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: process.env.EMAIL_PORT || 587,
+    port: process.env.EMAIL_PORT || 587,  
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },

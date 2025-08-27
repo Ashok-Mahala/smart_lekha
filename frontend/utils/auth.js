@@ -19,7 +19,7 @@ export const setRefreshToken = (token) => {
 
 export const removeToken = () => {
   localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem('userid');
 };
 
 export const isAuthenticated = () => {

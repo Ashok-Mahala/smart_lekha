@@ -1,12 +1,12 @@
 const express = require('express');
 const path = require('path');
 const mongoose = require('mongoose');
-const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const { config: { mongoURI, ...otherConfig } } = require('./config');
-// Then use mongoURI directly
 const { errorHandler } = require('./middleware/errorHandler');
+const { corsMiddleware } = require('./middleware/cors'); // Only import corsMiddleware
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -21,28 +21,24 @@ const financialRoutes = require('./routes/financialRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
 const LayoutRoutes = require('./routes/layoutRoutes');
 const ShiftRoutes = require('./routes/shiftRoutes');
+
 // Initialize express app
 const app = express();
 
+// ==================== CORS CONFIGURATION ====================
+// Apply CORS middleware to all routes - this handles preflight automatically
+app.use(corsMiddleware);
+// ==================== END CORS CONFIGURATION ====================
+
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cookieParser());
 app.use(morgan('dev'));
 app.use(helmet());
 
 // Connect to MongoDB
+console.log('MongoDB Connection URI:', mongoURI);
 
-// Add this right before your mongoose.connect()
-//console.log('Attempting to connect to MongoDB with URI:', config.mongoURI);
-//console.log('Full config object:', config);
-console.log('Environment variables:', {
-  MONGODB_URI: process.env.MONGODB_URI,
-  MONGODB_USERNAME: process.env.MONGODB_USERNAME,
-  MONGODB_PASSWORD: process.env.MONGODB_PASSWORD,
-  MONGODB_HOST: process.env.MONGODB_HOST,
-  MONGODB_PORT: process.env.MONGODB_PORT,
-  MONGODB_DATABASE: process.env.MONGODB_DATABASE
-});
 mongoose
   .connect(mongoURI, {
     useNewUrlParser: true,
@@ -72,9 +68,22 @@ app.use('/smlekha/financial', financialRoutes);
 app.use('/smlekha/properties', propertyRoutes);
 app.use('/smlekha/layouts', LayoutRoutes);
 app.use('/smlekha/shifts', ShiftRoutes);
-app.use(cors({ origin: '*', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type'] }));
-app.use('/smlekha/uploads', (req, res, next) => { res.header('Access-Control-Allow-Origin', '*');res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'); next(); }, express.static(path.join(__dirname, 'uploads')));
 
+// Static files with proper CORS headers
+app.use('/smlekha/uploads', (req, res, next) => { 
+  // Check if origin is in whitelist
+  const origin = req.headers.origin;
+  if (origin && [
+    'http://62.72.58.243:5173',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ].includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'); 
+  next(); 
+}, express.static(path.join(__dirname, 'uploads')));
 
 // 404 handler for API routes
 app.use('/smlekha/*', (req, res, next) => {
@@ -100,4 +109,4 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-module.exports = app; 
+module.exports = app;

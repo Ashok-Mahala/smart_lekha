@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',     // <- Accept connections from any IP
-    port: 5173,          // <- Optional: set custom port
+    port: 5174,          // <- Optional: set custom port
     strictPort: true     // <- Optional: fail if port is taken
   }
 })

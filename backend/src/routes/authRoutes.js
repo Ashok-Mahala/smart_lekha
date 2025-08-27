@@ -4,13 +4,17 @@ const { protect, authorize } = require('../middleware/auth');
 const {
   register,
   login,
+  logout,
   getMe,
   updateProfile,
-  changePassword
+  changePassword,
+  refreshToken
 } = require('../controllers/authController');
 
 router.post('/register', register);
 router.post('/login', login);
+router.post('/logout', logout);
+router.post('/refresh', refreshToken);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.put('/change-password', protect, changePassword);

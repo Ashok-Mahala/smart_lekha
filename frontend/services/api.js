@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types';
 import axios from 'axios';
+import { getToken, setToken, removeToken } from '../utils/auth';
 import { 
   ApiError, 
   ERROR_CODES, 
@@ -10,8 +11,9 @@ import {
 // Get API URL from environment variables with a fallback
 // const API_URL = import.meta.env.VITE_API_URL || 'http://62.72.58.243:5000/smlekha';
 const API_URL = 'http://62.72.58.243:5000/smlekha';
+
 // Log the API URL being used (helpful for debugging)
-console.log('API URL:', API_URL);
+//console.log('API URL:', API_URL);
 
 // Axios timeout configuration (10 seconds)
 const TIMEOUT = 10000;
@@ -21,6 +23,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // ADD THIS - Important for cookies
   timeout: TIMEOUT,
 });
 
@@ -55,6 +58,8 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }else {
+      console.warn('No token available for secured request');
   }
   return config;
 });

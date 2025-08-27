@@ -52,27 +52,37 @@ api.interceptors.response.use(
     console.error('[AXIOS] Response error:', error);
     
     const originalRequest = error.config;
-    console.log('Original request:', originalRequest.url);
+    console.log('Original request:', originalRequest?.url);
 
-    // Handle token refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Handle token refresh for 401 errors
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       console.log('Attempting token refresh...');
       originalRequest._retry = true;
 
       try {
-        const response = await api.post('/smlekha/auth/refresh-token');
-        const { token } = response.data;
-        console.log('New token received:', token ? '*****' : 'NULL');
+        // Use the authService refreshToken method
+        const refreshResponse = await api.post('/auth/refresh', {}, {
+          withCredentials: true
+        });
+        
+        const { accessToken } = refreshResponse.data;
+        console.log('New access token received:', accessToken ? '*****' : 'NULL');
 
-        setToken(token);
-        originalRequest.headers.Authorization = `Bearer ${token}`;
+        setToken(accessToken);
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         
         console.log('Retrying original request with new token');
         return api(originalRequest);
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
         removeToken();
-        window.location.href = '/login';
+        
+        // Don't redirect if already on login page
+        const currentPath = window.location.pathname;
+        if (!['/login', '/signup', '/register'].includes(currentPath)) {
+          window.location.href = '/login';
+        }
+        
         return Promise.reject(refreshError);
       }
     }

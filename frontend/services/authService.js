@@ -59,7 +59,7 @@ export const authService = {
 
   async signOut(options = {}) {
       const token = localStorage.getItem('token'); // Get token before removing
-      localStorage.removeItem('token'); // Remove immediately for UI
+      localStorage.clear();
 
       try {
         const response = await api.post('/auth/logout', {}, {
@@ -92,6 +92,15 @@ export const authService = {
         newPassword,
       });
       return response.data;
+  },
+
+   isAuthenticated() {
+    return !!localStorage.getItem('token');
+  },
+
+  clearAuth() {
+    localStorage.removeItem('token'); 
+    localStorage.removeItem('userid');
   },
 
   isAuthenticated() {
