@@ -24,7 +24,7 @@ The API documentation is organized into multiple YAML files, each focusing on a 
 
 The Swagger documentation is available at `/smlekha-docs` when the server is running. For example:
 
-- Development: `http://62.72.58.243:5000/smlekha-docs`
+- Development: `http://192.168.1.20:5000/smlekha-docs`
 - Production: `https://yourdomain.com/smlekha-docs`
 
 ## Authentication
