@@ -38,7 +38,7 @@ const config = {
   // CORS configuration
   corsOrigin: process.env.CORS_ORIGIN || (NODE_ENV === 'production' 
     ? 'https://seatflow-frontend.example.com' 
-    : 'http://172.20.10.3:5173'),
+    : 'http://10.242.95.105:5173'),
   
   // File upload configuration
   uploadDir: process.env.UPLOAD_DIR || 'uploads',

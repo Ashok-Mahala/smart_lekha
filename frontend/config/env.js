@@ -30,8 +30,8 @@ export const ENV = {
   NODE_ENV: getEnvVar('MODE', 'development'),
   
   // API configuration
-  API_URL: getEnvVar('VITE_API_URL', 'http://172.20.10.3:5000/smlekha'),
-  WS_URL: getEnvVar('VITE_WS_URL', 'ws://172.20.10.3:5000'),
+  API_URL: getEnvVar('VITE_API_URL', 'http://10.242.95.105:5000/smlekha'),
+  WS_URL: getEnvVar('VITE_WS_URL', 'ws://10.242.95.105:5000'),
   
   // Feature flags
   FEATURES: {
