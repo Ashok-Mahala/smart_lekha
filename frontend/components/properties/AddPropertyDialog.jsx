@@ -14,7 +14,7 @@ const AddPropertyDialog = ({ open, onOpenChange, onAddProperty }) => {
   const [activeTab, setActiveTab] = useState('basic');
   const [propertyDetails, setPropertyDetails] = useState({
     name: '',
-    type: '',
+    type: 'library',
     address: '',
     latitude: '',
     longitude: '',
