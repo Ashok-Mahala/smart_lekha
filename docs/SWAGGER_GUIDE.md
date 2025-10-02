@@ -14,7 +14,7 @@ The Swagger documentation provides an interactive UI to explore, understand, and
 
 2. Open your browser and navigate to:
    ```
-   http://192.168.1.9:5000/smlekha-docs
+   http://172.20.10.3:5000/smlekha-docs
    ```
 
 ## Using the Swagger UI
