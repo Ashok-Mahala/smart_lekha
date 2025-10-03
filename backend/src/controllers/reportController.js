@@ -263,28 +263,35 @@ const getRevenueData = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
-    console.log('🔍 Revenue query parameters:', { startDate, endDate });
+    // console.log('🔍 Revenue query parameters:', { startDate, endDate });
 
-    // Safe date parsing function
+    // Enhanced safe date parsing function
     const safeDateParse = (dateString, defaultValue = null) => {
-      if (!dateString) return defaultValue;
+      if (!dateString || dateString === 'undefined' || dateString === 'null') {
+        return defaultValue;
+      }
+      
+      // Trim and clean the input
+      const cleanDateString = dateString.toString().trim();
       
       // Handle common date formats
-      let date = new Date(dateString);
+      let date = new Date(cleanDateString);
       
-      // If basic parsing fails, try ISO format without time
+      // If basic parsing fails, try different formats
       if (isNaN(date.getTime())) {
-        date = new Date(dateString + 'T00:00:00.000Z');
+        // Try ISO format without time
+        date = new Date(cleanDateString + 'T00:00:00.000Z');
       }
       
       // If still invalid, try parsing as timestamp
       if (isNaN(date.getTime())) {
-        const timestamp = parseInt(dateString);
-        if (!isNaN(timestamp)) {
+        const timestamp = parseInt(cleanDateString);
+        if (!isNaN(timestamp) && timestamp > 0) {
           date = new Date(timestamp);
         }
       }
       
+      // If still invalid, return default
       return isNaN(date.getTime()) ? defaultValue : date;
     };
 
@@ -292,6 +299,8 @@ const getRevenueData = async (req, res) => {
     const defaultEnd = new Date();
     const defaultStart = new Date();
     defaultStart.setDate(defaultStart.getDate() - 30);
+    
+    // Set proper times for date range
     defaultStart.setHours(0, 0, 0, 0);
     defaultEnd.setHours(23, 59, 59, 999);
 
@@ -299,7 +308,16 @@ const getRevenueData = async (req, res) => {
     const start = safeDateParse(startDate, defaultStart);
     const end = safeDateParse(endDate, defaultEnd);
 
-    // Validate date range
+    // CRITICAL: Ensure we have valid Date objects
+    if (!(start instanceof Date) || !(end instanceof Date)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date parameters provided',
+        suggestion: 'Use format: YYYY-MM-DD, ISO date, or timestamp'
+      });
+    }
+
+    // Validate date range logic
     if (start > end) {
       return res.status(400).json({
         success: false,
@@ -307,18 +325,21 @@ const getRevenueData = async (req, res) => {
       });
     }
 
-    console.log('📅 Using date range:', {
-      start: start.toISOString(),
-      end: end.toISOString()
-    });
+    // console.log('📅 Using date range:', {
+    //   start: start.toISOString(),
+    //   end: end.toISOString()
+    // });
 
     const query = {
-      createdAt: { $gte: start, $lte: end },
+      createdAt: { 
+        $gte: start, 
+        $lte: end 
+      },
       status: 'completed'
     };
 
     const payments = await Payment.find(query);
-    console.log(`💰 Found ${payments.length} completed payments`);
+    // console.log(`💰 Found ${payments.length} completed payments`);
 
     const revenueData = processRevenueData(payments);
 
@@ -326,13 +347,27 @@ const getRevenueData = async (req, res) => {
       success: true,
       data: revenueData,
       meta: {
-        period: { start, end },
-        totalPayments: payments.length
+        period: { 
+          start: start.toISOString(), 
+          end: end.toISOString() 
+        },
+        totalPayments: payments.length,
+        dateRange: `${start.toISOString().split('T')[0]} to ${end.toISOString().split('T')[0]}`
       }
     });
     
   } catch (error) {
-    console.error('❌ Error fetching revenue data:', error);
+    // console.error('❌ Error fetching revenue data:', error);
+    
+    // More specific error handling
+    if (error.name === 'CastError') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid data format in database', 
+        error: error.message
+      });
+    }
+    
     res.status(500).json({ 
       success: false,
       message: 'Error fetching revenue data', 
@@ -345,10 +380,38 @@ const getRevenueData = async (req, res) => {
 const getStudentActivityData = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
+    
+    // Add proper date validation
+    let start, end;
+    
+    // Validate startDate
+    if (startDate && !isNaN(new Date(startDate).getTime())) {
+      start = new Date(startDate);
+    } else {
+      // Default to 30 days ago if invalid or not provided
+      start = new Date();
+      start.setDate(start.getDate() - 30);
+    }
+    
+    // Validate endDate
+    if (endDate && !isNaN(new Date(endDate).getTime())) {
+      end = new Date(endDate);
+    } else {
+      // Default to current date if invalid or not provided
+      end = new Date();
+    }
+    
+    // Set time to start/end of day for proper range query
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    
+    // console.log(`📅 Validated date range: { start: '${start.toISOString()}', end: '${end.toISOString()}' }`);
+  
+    
     const query = {
       createdAt: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: start,
+        $lte: end
       }
     };
 
@@ -360,18 +423,48 @@ const getStudentActivityData = async (req, res) => {
     const activityData = processStudentActivityData(bookings, payments);
     res.json(activityData);
   } catch (error) {
-    console.error('Error fetching student activity data:', error);
-    res.status(500).json({ message: 'Error fetching student activity data', error: error.message });
+    // console.error('Error fetching student activity data:', error);
+    res.status(500).json({ 
+      message: 'Error fetching student activity data', 
+      error: error.message 
+    });
   }
 };
 
 const getFinancialData = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
+    
+    // Add proper date validation
+    let start, end;
+    
+    // Validate startDate
+    if (startDate && !isNaN(new Date(startDate).getTime())) {
+      start = new Date(startDate);
+    } else {
+      // Default to 30 days ago if invalid or not provided
+      start = new Date();
+      start.setDate(start.getDate() - 30);
+    }
+    
+    // Validate endDate
+    if (endDate && !isNaN(new Date(endDate).getTime())) {
+      end = new Date(endDate);
+    } else {
+      // Default to current date if invalid or not provided
+      end = new Date();
+    }
+    
+    // Set time to start/end of day for proper range query
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    
+    // console.log(`💰 Financial query date range: { start: '${start.toISOString()}', end: '${end.toISOString()}' }`);
+    
     const query = {
       createdAt: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: start,
+        $lte: end
       }
     };
 
@@ -380,8 +473,11 @@ const getFinancialData = async (req, res) => {
 
     res.json(financialData);
   } catch (error) {
-    console.error('Error fetching financial data:', error);
-    res.status(500).json({ message: 'Error fetching financial data', error: error.message });
+    // console.error('Error fetching financial data:', error);
+    res.status(500).json({ 
+      message: 'Error fetching financial data', 
+      error: error.message 
+    });
   }
 };
 
@@ -401,7 +497,7 @@ const getAllReports = async (req, res) => {
 
     res.json(reports);
   } catch (error) {
-    console.error('Error fetching reports:', error);
+    // console.error('Error fetching reports:', error);
     res.status(500).json({ message: 'Error fetching reports', error: error.message });
   }
 };

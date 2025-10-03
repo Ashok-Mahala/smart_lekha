@@ -227,10 +227,22 @@ const DashboardPage = () => {
       details: {
         title: 'Revenue Analytics',
         content: [
-          { label: 'Today\'s Revenue', value: `₹${dashboardData.dailySummary.totalRevenue}` },
-          { label: 'Monthly Revenue', value: `₹${dashboardData.revenue.monthly[0]?.amount || 0}` },
-          { label: 'Growth Rate', value: `${dashboardData.dailySummary.growthRate || 0}%` },
-          { label: 'Average Daily', value: `₹${Math.floor((dashboardData.revenue.monthly[0]?.amount || 0) / 30)}` }
+          { 
+            label: 'Today\'s Revenue', 
+            value: `₹${dashboardData.dailySummary?.totalRevenue || 0}` 
+          },
+          { 
+            label: 'Monthly Revenue', 
+            value: `₹${dashboardData.revenue?.monthly?.[0]?.amount || 0}` 
+          },
+          { 
+            label: 'Growth Rate', 
+            value: `${dashboardData.dailySummary?.growthRate || 0}%` 
+          },
+          { 
+            label: 'Average Daily', 
+            value: `₹${Math.floor((dashboardData.revenue?.monthly?.[0]?.amount || 0) / 30)}` 
+          }
         ]
       }
     }
@@ -556,9 +568,13 @@ const DashboardPage = () => {
                         <span className="text-2xl font-bold text-purple-700">₹{dashboardData.dailySummary.totalRevenue}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-purple-600">{dashboardData.revenue.daily.length} payments</span>
-                        {dashboardData.dailySummary.growthRate > 0 && (
-                          <span className="text-xs text-green-500">{dashboardData.dailySummary.growthRate}% growth</span>
+                        <span className="text-xs text-purple-600">
+                          {dashboardData?.revenue?.daily?.length || 0} payments
+                        </span>
+                        {dashboardData?.dailySummary?.growthRate > 0 && (
+                          <span className="text-xs text-green-500">
+                            {dashboardData.dailySummary.growthRate}% growth
+                          </span>
                         )}
                       </div>
                     </div>
@@ -568,14 +584,14 @@ const DashboardPage = () => {
                           <CreditCard className="h-4 w-4 text-green-500" />
                           <span className="text-xs font-medium">Total Payments</span>
                         </div>
-                        <span className="text-sm font-medium">{dashboardData.revenue.daily.length}</span>
+                        <span className="text-sm font-medium">{dashboardData?.revenue?.daily?.length  || 0}</span>
                       </div>
                       <div className="p-3 bg-muted/50 rounded-lg">
                         <div className="flex items-center gap-2 mb-1">
                           <TrendingUp className="h-4 w-4 text-orange-500" />
                           <span className="text-xs font-medium">Monthly Revenue</span>
                         </div>
-                        <span className="text-sm">₹{dashboardData.revenue.monthly[0]?.amount || 0}</span>
+                        <span className="text-sm">₹{dashboardData?.revenue?.monthly?.[0]?.amount || 0}</span>
                       </div>
                     </div>
                     <div className="p-3 bg-muted/50 rounded-lg">
@@ -583,7 +599,7 @@ const DashboardPage = () => {
                         <Activity className="h-4 w-4 text-blue-500" />
                         <span className="text-xs font-medium">Revenue Growth</span>
                       </div>
-                      <span className="text-sm text-green-500">{dashboardData.dailySummary.growthRate || 0}%</span>
+                      <span className="text-sm text-green-500">{dashboardData?.dailySummary?.growthRate || 0}%</span>
                     </div>
                   </div>
                 </div>
@@ -612,14 +628,14 @@ const DashboardPage = () => {
                         <Clock className="h-4 w-4 text-green-500" />
                         <span className="text-xs font-medium">Busiest Hour</span>
                       </div>
-                      <span className="text-sm font-medium">{dashboardData.dailySummary.peakHour || 'N/A'}</span>
+                      <span className="text-sm font-medium">{dashboardData?.dailySummary?.peakHour || 'N/A'}</span>
                     </div>
                     <div className="p-3 bg-white/50 rounded-lg">
                       <div className="flex items-center gap-2 mb-1">
                         <Clock className="h-4 w-4 text-blue-500" />
                         <span className="text-xs font-medium">Quietest Hour</span>
                       </div>
-                      <span className="text-sm font-medium">{dashboardData.dailySummary.quietestHour || 'N/A'}</span>
+                      <span className="text-sm font-medium">{dashboardData?.dailySummary?.quietestHour || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
