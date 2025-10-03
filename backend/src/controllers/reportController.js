@@ -262,21 +262,83 @@ const getOccupancyData = async (req, res) => {
 const getRevenueData = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
+    
+    console.log('🔍 Revenue query parameters:', { startDate, endDate });
+
+    // Safe date parsing function
+    const safeDateParse = (dateString, defaultValue = null) => {
+      if (!dateString) return defaultValue;
+      
+      // Handle common date formats
+      let date = new Date(dateString);
+      
+      // If basic parsing fails, try ISO format without time
+      if (isNaN(date.getTime())) {
+        date = new Date(dateString + 'T00:00:00.000Z');
+      }
+      
+      // If still invalid, try parsing as timestamp
+      if (isNaN(date.getTime())) {
+        const timestamp = parseInt(dateString);
+        if (!isNaN(timestamp)) {
+          date = new Date(timestamp);
+        }
+      }
+      
+      return isNaN(date.getTime()) ? defaultValue : date;
+    };
+
+    // Calculate default dates (last 30 days)
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 30);
+    defaultStart.setHours(0, 0, 0, 0);
+    defaultEnd.setHours(23, 59, 59, 999);
+
+    // Parse dates with fallbacks
+    const start = safeDateParse(startDate, defaultStart);
+    const end = safeDateParse(endDate, defaultEnd);
+
+    // Validate date range
+    if (start > end) {
+      return res.status(400).json({
+        success: false,
+        message: 'Start date cannot be after end date'
+      });
+    }
+
+    console.log('📅 Using date range:', {
+      start: start.toISOString(),
+      end: end.toISOString()
+    });
+
     const query = {
-      createdAt: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      },
+      createdAt: { $gte: start, $lte: end },
       status: 'completed'
     };
 
     const payments = await Payment.find(query);
+    console.log(`💰 Found ${payments.length} completed payments`);
+
     const revenueData = processRevenueData(payments);
 
-    res.json(revenueData);
+    res.json({
+      success: true,
+      data: revenueData,
+      meta: {
+        period: { start, end },
+        totalPayments: payments.length
+      }
+    });
+    
   } catch (error) {
-    console.error('Error fetching revenue data:', error);
-    res.status(500).json({ message: 'Error fetching revenue data', error: error.message });
+    console.error('❌ Error fetching revenue data:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching revenue data', 
+      error: error.message,
+      suggestion: 'Please ensure date parameters are in valid format (YYYY-MM-DD, ISO, or timestamp)'
+    });
   }
 };
 

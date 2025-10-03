@@ -74,7 +74,7 @@ app.use('/smlekha/uploads', (req, res, next) => {
   // Check if origin is in whitelist
   const origin = req.headers.origin;
   if (origin && [
-    'http://10.242.95.105:5173',
+    'http://192.168.1.5:5173',
     'http://localhost:5173',
     'http://localhost:3000'
   ].includes(origin)) {

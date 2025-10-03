@@ -75,7 +75,7 @@ npm run backend:build
 The API is fully documented using Swagger/OpenAPI 3.0. To access the API documentation:
 
 1. Start the backend server
-2. Navigate to `/smlekha-docs` in your browser (e.g., http://10.242.95.105:5000/smlekha-docs)
+2. Navigate to `/smlekha-docs` in your browser (e.g., http://192.168.1.5:5000/smlekha-docs)
 
 The documentation includes:
 

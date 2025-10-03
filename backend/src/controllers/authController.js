@@ -18,24 +18,44 @@ const setRefreshTokenCookie = (res, token) => {
 
 // Helper to create refresh token in database
 const createRefreshToken = async (userId, req) => {
+  console.log('Starting refresh token creation for user ID:', userId);
+  
   const refreshToken = jwt.sign(
     { 
       id: userId,
       type: 'refresh'
     },
     config.jwtSecret,
-    { expiresIn: config.refreshTokenExpiresIn }
+    { expiresIn: '1d' } // 1 day
   );
   
-  await RefreshToken.create({
-    token: refreshToken,
-    userId: userId,
-    expiresAt: new Date(Date.now() + 2 * 60 * 1000), // 2 minutes
-    deviceInfo: req.headers['user-agent'] || 'Unknown device',
-    ipAddress: req.ip || req.connection.remoteAddress
-  });
+  console.log('JWT refresh token generated:', refreshToken);
   
-  return refreshToken;
+  try {
+    console.log('Attempting to save refresh token to database...');
+    
+    const refreshTokenRecord = await RefreshToken.create({
+      token: refreshToken,
+      userId: userId,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day in milliseconds
+      deviceInfo: req.headers['user-agent'] || 'Unknown device',
+      ipAddress: req.ip || req.connection.remoteAddress
+    });
+    
+    console.log('✅ Refresh token successfully saved to database:', {
+      id: refreshTokenRecord.id,
+      userId: refreshTokenRecord.userId,
+      token: refreshTokenRecord.token.substring(0, 20) + '...', // Show first 20 chars only
+      expiresAt: refreshTokenRecord.expiresAt,
+      deviceInfo: refreshTokenRecord.deviceInfo,
+      ipAddress: refreshTokenRecord.ipAddress
+    });
+    
+    return refreshToken;
+  } catch (error) {
+    console.error('❌ Error saving refresh token to database:', error);
+    throw error; // Re-throw the error to handle it upstream
+  }
 };
 
 // Register user
