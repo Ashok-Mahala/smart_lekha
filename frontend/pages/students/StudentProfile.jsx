@@ -25,7 +25,7 @@ const StudentProfile = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [student, setStudent] = useState(location.state?.student || null);
-  const [editedStudent, setEditedStudent] = useState(null);
+  const [editedStudent, setEditedStudent] = useState(location.state?.student || null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(!location.state?.student);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -47,6 +47,9 @@ const StudentProfile = () => {
         }
       };
       fetchStudent();
+    } else {
+      // Initialize editedStudent with the student data from location state
+      setEditedStudent(location.state.student);
     }
   }, [id, location.state]);
 
@@ -72,7 +75,10 @@ const StudentProfile = () => {
   };
 
   const handleInputChange = (field, value) => {
-    setEditedStudent(prev => ({ ...prev, [field]: value }));
+    setEditedStudent(prev => ({ 
+      ...prev, 
+      [field]: value 
+    }));
   };
 
   const handleImageClick = (doc) => {
@@ -103,7 +109,7 @@ const StudentProfile = () => {
     );
   }
 
-  if (!student) {
+  if (!student || !editedStudent) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-[70vh]">
@@ -204,7 +210,7 @@ const StudentProfile = () => {
                 <Label className="text-sm text-muted-foreground">Email</Label>
                 {isEditing ? (
                   <Input 
-                    value={currentStudent.email || ''} 
+                    value={currentStudent?.email || ''} 
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     className="mt-1"
                   />
@@ -216,7 +222,7 @@ const StudentProfile = () => {
                 <Label className="text-sm text-muted-foreground">Phone</Label>
                 {isEditing ? (
                   <Input 
-                    value={currentStudent.phone || ''} 
+                    value={currentStudent?.phone || ''} 
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     className="mt-1"
                   />
@@ -228,7 +234,7 @@ const StudentProfile = () => {
                 <Label className="text-sm text-muted-foreground">Aadhar Number</Label>
                 {isEditing ? (
                   <Input 
-                    value={currentStudent.aadharNumber || ''} 
+                    value={currentStudent?.aadharNumber || ''} 
                     onChange={(e) => handleInputChange('aadharNumber', e.target.value)}
                     className="mt-1"
                   />
@@ -240,7 +246,7 @@ const StudentProfile = () => {
                 <Label className="text-sm text-muted-foreground">Institution</Label>
                 {isEditing ? (
                   <Input 
-                    value={currentStudent.institution || ''} 
+                    value={currentStudent?.institution || ''} 
                     onChange={(e) => handleInputChange('institution', e.target.value)}
                     className="mt-1"
                   />
@@ -261,7 +267,7 @@ const StudentProfile = () => {
                 <Label className="text-sm text-muted-foreground">Course</Label>
                 {isEditing ? (
                   <Input 
-                    value={currentStudent.course || ''} 
+                    value={currentStudent?.course || ''} 
                     onChange={(e) => handleInputChange('course', e.target.value)}
                     className="mt-1"
                   />
@@ -273,8 +279,8 @@ const StudentProfile = () => {
                 <Label className="text-sm text-muted-foreground">Shift</Label>
                 {isEditing ? (
                   <Select
-                    value={currentStudent.shift?.name || ''}
-                    onValueChange={(value) => handleInputChange('shift', { ...currentStudent.shift, name: value })}
+                    value={currentStudent?.shift?.name || ''}
+                    onValueChange={(value) => handleInputChange('shift', { ...currentStudent?.shift, name: value })}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Select shift" />
