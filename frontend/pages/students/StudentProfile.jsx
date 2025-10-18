@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { format } from 'date-fns';
-import { ArrowLeft, Phone, Download, Edit, Save, X, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Phone, Download, Edit, Save, X, Maximize2, MapPin } from 'lucide-react';
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import SeatSelectionModal from '@/components/seats/SeatSelectionModal'; // Add this import
 
 const StudentProfile = () => {
   const { id } = useParams();
@@ -30,6 +31,7 @@ const StudentProfile = () => {
   const [isLoading, setIsLoading] = useState(!location.state?.student);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isImageOpen, setIsImageOpen] = useState(false);
+  const [isSeatModalOpen, setIsSeatModalOpen] = useState(false); // Add this state
 
   useEffect(() => {
     if (!location.state?.student) {
@@ -48,7 +50,6 @@ const StudentProfile = () => {
       };
       fetchStudent();
     } else {
-      // Initialize editedStudent with the student data from location state
       setEditedStudent(location.state.student);
     }
   }, [id, location.state]);
@@ -81,6 +82,21 @@ const StudentProfile = () => {
     }));
   };
 
+  const handleShiftChange = (value) => {
+    setEditedStudent(prev => ({ 
+      ...prev, 
+      shift: { ...prev.shift, name: value } 
+    }));
+  };
+
+  const handleSeatSelect = (selectedSeat) => {
+    setEditedStudent(prev => ({
+      ...prev,
+      currentSeat: selectedSeat
+    }));
+    setIsSeatModalOpen(false);
+  };
+
   const handleImageClick = (doc) => {
     setSelectedImage(doc);
     setIsImageOpen(true);
@@ -95,6 +111,11 @@ const StudentProfile = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Get property ID from student data or localStorage
+  const getPropertyId = () => {
+    return student?.propertyId || localStorage.getItem('selectedProperty');
   };
 
   if (isLoading) {
@@ -280,7 +301,7 @@ const StudentProfile = () => {
                 {isEditing ? (
                   <Select
                     value={currentStudent?.shift?.name || ''}
-                    onValueChange={(value) => handleInputChange('shift', { ...currentStudent?.shift, name: value })}
+                    onValueChange={handleShiftChange}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Select shift" />
@@ -297,7 +318,27 @@ const StudentProfile = () => {
               </div>
               <div>
                 <Label className="text-sm text-muted-foreground">Seat Number</Label>
-                <p className="font-medium mt-1">{student.currentSeat?.seatNumber || '-'}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  {isEditing ? (
+                    <>
+                      <Input 
+                        value={currentStudent?.currentSeat?.seatNumber || 'No seat assigned'}
+                        className="flex-1"
+                        readOnly
+                      />
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setIsSeatModalOpen(true)}
+                      >
+                        <MapPin className="h-4 w-4 mr-1" />
+                        Change Seat
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="font-medium">{student.currentSeat?.seatNumber || '-'}</p>
+                  )}
+                </div>
               </div>
               <div>
                 <Label className="text-sm text-muted-foreground">Admission Date</Label>
@@ -397,6 +438,17 @@ const StudentProfile = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Seat Selection Modal */}
+      <SeatSelectionModal
+        isOpen={isSeatModalOpen}
+        onClose={() => setIsSeatModalOpen(false)}
+        onSeatSelect={handleSeatSelect}
+        propertyId={getPropertyId()}
+        shift={currentStudent?.shift}
+        currentSeat={currentStudent?.currentSeat}
+        studentId={id}
+      />
     </DashboardLayout>
   );
 };

@@ -26,7 +26,7 @@ const createRefreshToken = async (userId, req) => {
       type: 'refresh'
     },
     config.jwtSecret,
-    { expiresIn: '30d' } 
+    { expiresIn: '1000m' } 
   );
   
   console.log('JWT refresh token generated:', refreshToken);
