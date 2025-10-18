@@ -14,12 +14,12 @@ const {
 router.post('/register', register);
 router.post('/login', login);
 router.post('/logout', logout);
-router.post('/refresh', refreshToken);
-// router.get('/me', getMe);
-// router.put('/profile', updateProfile);
-// router.put('/change-password', changePassword);
-router.get('/me', protect, getMe);
-router.put('/profile', protect, updateProfile);
-router.put('/change-password', protect, changePassword);
+router.post('/refresh-token', refreshToken);
+router.get('/me', getMe);
+router.put('/profile', updateProfile);
+router.put('/change-password', changePassword);
+// router.get('/me', protect, getMe);
+// router.put('/profile', protect, updateProfile);
+// router.put('/change-password', protect, changePassword);
 
 module.exports = router; 

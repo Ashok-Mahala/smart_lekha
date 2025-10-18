@@ -2,10 +2,10 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { API_CONFIG } from './config.js';
 import { getToken, setToken, removeToken } from '../utils/auth';
+import { authService } from '@/services/authService';
 
 // Debug initial token
 console.log('Initial token from storage:', getToken());
-
 // Create axios instance
 const api = axios.create({
   ...API_CONFIG,
@@ -42,44 +42,57 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor with enhanced debugging
+// Response interceptor - FIXED VERSION
 api.interceptors.response.use(
   (response) => {
     console.log(`[AXIOS] Response from ${response.config.url}:`, response.status);
     return response;
   },
   async (error) => {
-    console.error('[AXIOS] Response error:', error);
-    
-    const originalRequest = error.config;
-    console.log('Original request:', originalRequest?.url);
+    console.error('[AXIOS] Response error:', {
+      status: error.response?.status,
+      message: error.response?.data?.message,
+      url: error.config?.url
+    });
 
-    // Handle token refresh for 401 errors
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
-      console.log('Attempting token refresh...');
+    const originalRequest = error.config;
+
+    // Handle both 401 AND 500 errors that are actually auth errors
+    const isAuthError = error.response?.status === 401 || 
+                       (error.response?.status === 500 && 
+                        error.response?.data?.message?.includes('authorized'));
+
+    if (isAuthError && originalRequest && !originalRequest._retry) {
+      console.log('🔄 Authentication error detected, attempting token refresh...');
       originalRequest._retry = true;
 
       try {
-        // Use the authService refreshToken method
-        const refreshResponse = await api.post('/auth/refresh', {}, {
-          withCredentials: true
+        // Call refresh token endpoint
+        const refreshResponse = await api.post('/auth/refresh-token', {}, {
+          withCredentials: true // Important for cookies
         });
         
         const { accessToken } = refreshResponse.data;
-        console.log('New access token received:', accessToken ? '*****' : 'NULL');
+        console.log('✅ New access token received');
 
+        // Update token in storage and headers
         setToken(accessToken);
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         
-        console.log('Retrying original request with new token');
+        console.log('🔄 Retrying original request:', originalRequest.url);
         return api(originalRequest);
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        removeToken();
         
-        // Don't redirect if already on login page
+      } catch (refreshError) {
+        console.error('❌ Token refresh failed:', refreshError);
+        
+        // Clear tokens and redirect to login
+        removeToken();
+        localStorage.removeItem('user');
+        
+        // Only redirect if not already on auth pages
         const currentPath = window.location.pathname;
-        if (!['/login', '/signup', '/register'].includes(currentPath)) {
+        if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
+          await authService.signOut();
           window.location.href = '/login';
         }
         
@@ -87,17 +100,8 @@ api.interceptors.response.use(
       }
     }
 
-    // Format error response
-    const errorResponse = {
-      success: false,
-      error: {
-        code: error.response?.data?.error?.code || 'UNKNOWN_ERROR',
-        message: error.response?.data?.error?.message || 'An unexpected error occurred',
-        details: error.response?.data?.error?.details || []
-      }
-    };
-
-    return Promise.reject(errorResponse);
+    // For other errors, just reject
+    return Promise.reject(error);
   }
 );
 

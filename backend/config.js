@@ -7,8 +7,8 @@ const config = {
   jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
 //  jwtExpiration: process.env.JWT_EXPIRES_IN || '1m',
 // refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRATION || '2m',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1m',
-  refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRATION || '2m',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRATION || '30d',
 
   email: {
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',

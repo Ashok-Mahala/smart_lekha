@@ -36,6 +36,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import HelpChat from "@/components/help/HelpChat";
 import PropTypes from 'prop-types';
+import { authService } from '@/services/authService';
 
 export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
   const navigate = useNavigate();

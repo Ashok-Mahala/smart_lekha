@@ -15,6 +15,7 @@ const refreshTokenSchema = new mongoose.Schema({
   expiresAt: {
     type: Date,
     required: true
+    // NO TTL index here - we'll handle expiration manually
   },
   deviceInfo: {
     type: String,
@@ -30,14 +31,12 @@ const refreshTokenSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
-    expires: 0 // Manual expiration handling
+    // NO TTL index here either
   }
 });
 
-// Index for automatic cleanup of expired tokens
-refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-
-// Index for user-based queries
+// Only these indexes - NO TTL indexes
 refreshTokenSchema.index({ userId: 1 });
+// token_1 index is automatically created by the unique constraint
 
 module.exports = mongoose.model('RefreshToken', refreshTokenSchema);

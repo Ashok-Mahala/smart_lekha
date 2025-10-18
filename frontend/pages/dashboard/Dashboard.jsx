@@ -606,7 +606,7 @@ const DashboardPage = () => {
               </div>
 
               {/* Additional Information */}
-              <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl">
                   <h4 className="text-sm font-medium mb-3">Popular Seats Today</h4>
                   <div className="flex flex-wrap gap-2">
@@ -639,7 +639,7 @@ const DashboardPage = () => {
                     </div>
                   </div>
                 </div>
-              </div>
+              </div> */}
             </CardContent>
           </Card>
 

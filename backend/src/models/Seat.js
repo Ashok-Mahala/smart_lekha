@@ -16,7 +16,7 @@ const seatSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    unique: true
+    unique: false
   },
   row: { type: Number, required: true },
   column: { type: Number, required: true },
@@ -63,6 +63,7 @@ seatSchema.index({ status: 1 });
 seatSchema.index({ type: 1 });
 seatSchema.index({ deletedAt: 1 });
 
+seatSchema.index({ propertyId: 1, seatNumber: 1 }, { unique: true });
 seatSchema.virtual('bookings', {
   ref: 'Booking',
   localField: '_id',

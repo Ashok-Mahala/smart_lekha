@@ -12,7 +12,7 @@ const setRefreshTokenCookie = (res, token) => {
     httpOnly: true,
     secure: config.nodeEnv === 'production',
     sameSite: 'strict',
-    maxAge: 2 * 60 * 1000 // 2 minutes in milliseconds
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 7 day in milliseconds (matches database)
   });
 };
 
@@ -26,7 +26,7 @@ const createRefreshToken = async (userId, req) => {
       type: 'refresh'
     },
     config.jwtSecret,
-    { expiresIn: '1d' } // 1 day
+    { expiresIn: '30d' } 
   );
   
   console.log('JWT refresh token generated:', refreshToken);
@@ -37,7 +37,7 @@ const createRefreshToken = async (userId, req) => {
     const refreshTokenRecord = await RefreshToken.create({
       token: refreshToken,
       userId: userId,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day in milliseconds
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 day in milliseconds 
       deviceInfo: req.headers['user-agent'] || 'Unknown device',
       ipAddress: req.ip || req.connection.remoteAddress
     });
@@ -147,41 +147,80 @@ const login = asyncHandler(async (req, res) => {
   });
 });
 
-// Refresh token endpoint
+// Refresh token endpoint - FIXED VERSION
 const refreshToken = asyncHandler(async (req, res) => {
+  console.log('🔄 Refresh token endpoint called');
+  console.log('🍪 Cookies received:', Object.keys(req.cookies));
+  
   const refreshToken = req.cookies.refreshToken;
 
   if (!refreshToken) {
-    throw new ApiError(401, 'Refresh token required');
+    console.log('❌ No refresh token in cookies');
+    return res.status(401).json({
+      success: false,
+      message: 'Refresh token required'
+    });
   }
 
   try {
-    // Verify the refresh token JWT
+    console.log('🔐 Verifying refresh token JWT...');
     const decoded = jwt.verify(refreshToken, config.jwtSecret);
+    console.log('✅ JWT verified. User ID:', decoded.id);
     
     if (decoded.type !== 'refresh') {
-      throw new ApiError(403, 'Invalid token type');
+      console.log('❌ Wrong token type:', decoded.type);
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid token type'
+      });
     }
 
     // Check if token exists and is valid in database
+    console.log('🔍 Looking for token in database...');
     const storedToken = await RefreshToken.findOne({
       token: refreshToken,
       userId: decoded.id,
       isRevoked: false
     });
 
-    if (!storedToken || storedToken.expiresAt < new Date()) {
+    if (!storedToken) {
+      console.log('❌ Token not found in database or is revoked');
       res.clearCookie('refreshToken');
-      throw new ApiError(403, 'Invalid or expired refresh token');
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid refresh token'
+      });
+    }
+
+    console.log('✅ Token found in database. Expires at:', storedToken.expiresAt);
+    console.log('⏰ Current time:', new Date());
+    
+    if (storedToken.expiresAt < new Date()) {
+      console.log('❌ Token expired in database');
+      await RefreshToken.findByIdAndUpdate(storedToken._id, { isRevoked: true });
+      res.clearCookie('refreshToken');
+      return res.status(403).json({
+        success: false,
+        message: 'Refresh token expired'
+      });
     }
 
     // Get user data
     const user = await User.findById(decoded.id);
     if (!user) {
-      throw new ApiError(404, 'User not found');
+      console.log('❌ User not found for ID:', decoded.id);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
-    // Revoke the used refresh token
+    // Generate NEW refresh token FIRST (prevent race condition)
+    console.log('🔄 Creating new refresh token...');
+    const newRefreshToken = await createRefreshToken(user._id, req);
+
+    // THEN revoke the old refresh token
+    console.log('🗑️ Revoking old refresh token...');
     await RefreshToken.findByIdAndUpdate(storedToken._id, { isRevoked: true });
 
     // Generate new access token
@@ -195,26 +234,35 @@ const refreshToken = asyncHandler(async (req, res) => {
       { expiresIn: config.jwtExpiresIn }
     );
 
-    // Generate new refresh token
-    const newRefreshToken = await createRefreshToken(user._id, req);
-
     // Set new refresh token cookie
     setRefreshTokenCookie(res, newRefreshToken);
 
+    console.log('✅ Token refresh successful');
     res.json({
       accessToken: newAccessToken,
       expiresIn: config.jwtExpiresIn
     });
 
   } catch (error) {
+    console.error('❌ Refresh token error:', error.message);
     if (error.name === 'JsonWebTokenError') {
-      throw new ApiError(403, 'Invalid refresh token');
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid refresh token'
+      });
     }
     if (error.name === 'TokenExpiredError') {
       res.clearCookie('refreshToken');
-      throw new ApiError(403, 'Refresh token expired');
+      return res.status(403).json({
+        success: false,
+        message: 'Refresh token expired'
+      });
     }
-    throw error;
+    // Return 500 for unexpected errors
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error during token refresh'
+    });
   }
 });
 

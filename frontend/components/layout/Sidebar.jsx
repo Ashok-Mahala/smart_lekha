@@ -61,21 +61,21 @@ const Sidebar = ({ isCollapsed, toggleSidebar }) => {
       icon: CreditCard,
       href: "/payments",
     },
-    {
-      title: "Bank Accounts",
-      icon: Landmark,
-      href: "/bank-accounts",
-    },
-    {
-      title: "Reports",
-      icon: BarChart4,
-      href: "/reports",
-    },
-    {
-      title: "Attendance",
-      icon: ClipboardCheck,
-      href: "/attendance",
-    },
+    // {
+    //   title: "Bank Accounts",
+    //   icon: Landmark,
+    //   href: "/bank-accounts",
+    // },
+    // {
+    //   title: "Reports",
+    //   icon: BarChart4,
+    //   href: "/reports",
+    // },
+    // {
+    //   title: "Attendance",
+    //   icon: ClipboardCheck,
+    //   href: "/attendance",
+    // },
     {
       title: "Settings",
       icon: Settings,
