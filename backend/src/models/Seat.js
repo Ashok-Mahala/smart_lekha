@@ -1,5 +1,52 @@
 const mongoose = require('mongoose');
 
+const seatAssignmentSchema = new mongoose.Schema({
+  student: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Student',
+    required: true 
+  },
+  shift: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Shift',
+    required: true 
+  },
+  startDate: { 
+    type: Date, 
+    required: true,
+    default: Date.now 
+  },
+  endDate: { 
+    type: Date 
+  },
+  status: {
+    type: String,
+    enum: ['active', 'completed', 'cancelled'],
+    default: 'active'
+  },
+  payment: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Payment' 
+  },
+  documents: [{
+    type: {
+      type: String,
+      enum: ['profile_photo', 'identity_proof', 'aadhar_card']
+    },
+    url: String,
+    originalName: String
+  }],
+  feeDetails: {
+    amount: Number,
+    collected: Number,
+    balance: Number
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }
+}, { timestamps: true });
+
 const seatSchema = new mongoose.Schema({
   propertyId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -15,8 +62,7 @@ const seatSchema = new mongoose.Schema({
   seatNumber: {
     type: String,
     required: true,
-    trim: true,
-    unique: false
+    trim: true
   },
   row: { type: Number, required: true },
   column: { type: Number, required: true },
@@ -29,11 +75,8 @@ const seatSchema = new mongoose.Schema({
     type: String,
     enum: ['power_outlet', 'table', 'extra_space', 'window', 'aisle']
   }],
-  currentStudents: [{
-    student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
-    booking: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' },
-    shift: { type: mongoose.Schema.Types.ObjectId, ref: 'Shift' }
-  }],
+  currentAssignments: [seatAssignmentSchema],
+  assignmentHistory: [seatAssignmentSchema],
   lastAssigned: {
     student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
     date: Date
@@ -54,20 +97,27 @@ const seatSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// REMOVE broken array uniqueness index
-// seatSchema.index({ _id: 1, "currentStudents.shift": 1 }, { unique: true, partialFilterExpression: { "currentStudents.shift": { $exists: true } } });
-
 // Indexes
 seatSchema.index({ propertyId: 1 });
 seatSchema.index({ status: 1 });
 seatSchema.index({ type: 1 });
 seatSchema.index({ deletedAt: 1 });
-
 seatSchema.index({ propertyId: 1, seatNumber: 1 }, { unique: true });
-seatSchema.virtual('bookings', {
-  ref: 'Booking',
-  localField: '_id',
-  foreignField: 'seat'
+
+// Unique active assignment per seat per shift
+seatSchema.index(
+  { "currentAssignments.shift": 1, "currentAssignments.status": 1 },
+  {
+    partialFilterExpression: { "currentAssignments.status": "active" }
+  }
+);
+
+// Virtual for current students count
+seatSchema.virtual('currentStudentsCount').get(function() {
+  if (!this.currentAssignments || !Array.isArray(this.currentAssignments)) {
+    return 0;
+  }
+  return this.currentAssignments.filter(a => a.status === 'active').length;
 });
 
 seatSchema.pre(/^find/, function(next) {
@@ -77,25 +127,93 @@ seatSchema.pre(/^find/, function(next) {
   next();
 });
 
-seatSchema.methods.isAvailable = function() {
-  return this.status === 'available' && !this.deletedAt;
-};
-
-seatSchema.methods.addCurrentStudent = async function(studentId, bookingId, shiftId) {
-  const exists = this.currentStudents.some(cs =>
-    cs.booking.toString() === bookingId.toString() ||
-    (cs.student.toString() === studentId.toString() && cs.shift.toString() === shiftId.toString())
+// Methods
+seatSchema.methods.isAvailableForShift = function(shiftId) {
+  if (this.status !== 'available') return false;
+  
+  const activeAssignment = this.currentAssignments.find(
+    assignment => assignment.shift.toString() === shiftId.toString() && 
+    assignment.status === 'active'
   );
-  if (!exists) {
-    this.currentStudents.push({ student: studentId, booking: bookingId, shift: shiftId });
-    this.status = 'occupied';
-    await this.save();
-  }
+  
+  return !activeAssignment;
 };
 
-seatSchema.methods.release = function() {
-  this.currentStudent = null;
-  this.status = 'available';
+seatSchema.methods.assignStudent = async function(studentId, shiftId, assignmentData) {
+  if (!this.isAvailableForShift(shiftId)) {
+    throw new Error('Seat not available for this shift');
+  }
+
+  const assignment = {
+    student: studentId,
+    shift: shiftId,
+    startDate: assignmentData.startDate || new Date(),
+    feeDetails: assignmentData.feeDetails,
+    documents: assignmentData.documents || [],
+    createdBy: assignmentData.createdBy
+  };
+
+  this.currentAssignments.push(assignment);
+  this.status = 'occupied';
+  this.lastAssigned = {
+    student: studentId,
+    date: new Date()
+  };
+
+  return this.save();
+};
+
+seatSchema.methods.releaseStudent = async function(studentId, shiftId) {
+  const assignmentIndex = this.currentAssignments.findIndex(
+    assignment => assignment.student.toString() === studentId.toString() && 
+    assignment.shift.toString() === shiftId.toString() && 
+    assignment.status === 'active'
+  );
+
+  if (assignmentIndex === -1) {
+    throw new Error('Active assignment not found');
+  }
+
+  const assignment = this.currentAssignments[assignmentIndex];
+  assignment.status = 'completed';
+  assignment.endDate = new Date();
+
+  // Move to history
+  this.assignmentHistory.push(assignment);
+  this.currentAssignments.splice(assignmentIndex, 1);
+
+  // Update seat status if no active assignments
+  if (this.currentAssignments.length === 0) {
+    this.status = 'available';
+  }
+
+  return this.save();
+};
+
+seatSchema.methods.cancelAssignment = async function(studentId, shiftId) {
+  const assignmentIndex = this.currentAssignments.findIndex(
+    assignment => assignment.student.toString() === studentId.toString() && 
+    assignment.shift.toString() === shiftId.toString() && 
+    assignment.status === 'active'
+  );
+
+  if (assignmentIndex === -1) {
+    throw new Error('Active assignment not found');
+  }
+
+  const assignment = this.currentAssignments[assignmentIndex];
+  assignment.status = 'cancelled';
+  assignment.endDate = new Date();
+
+  // Move to history
+  this.assignmentHistory.push(assignment);
+  this.currentAssignments.splice(assignmentIndex, 1);
+
+  // Update seat status if no active assignments
+  if (this.currentAssignments.length === 0) {
+    this.status = 'available';
+  }
+
   return this.save();
 };
 
@@ -109,20 +227,6 @@ seatSchema.methods.reactivate = function() {
   this.status = 'available';
   this.deletedAt = null;
   return this.save();
-};
-
-seatSchema.statics.bulkReactivate = async function(seatIds) {
-  return this.updateMany(
-    { _id: { $in: seatIds } },
-    { $set: { status: 'available' }, $unset: { deletedAt: 1 } }
-  );
-};
-
-seatSchema.statics.bulkSoftDelete = async function(seatIds) {
-  return this.updateMany(
-    { _id: { $in: seatIds } },
-    { $set: { status: 'deleted', deletedAt: new Date() } }
-  );
 };
 
 module.exports = mongoose.model('Seat', seatSchema);

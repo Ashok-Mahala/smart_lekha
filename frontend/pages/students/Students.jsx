@@ -28,7 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
-import { getDocumentUrl, getStudentById, getStudentsByProperty, getStudentStats } from "@/api/students";
+import { getDocumentUrl, getStudentById, getStudentsByProperty } from "@/api/students";
 
 const StudentsPage = () => {
   const navigate = useNavigate();

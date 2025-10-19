@@ -1,34 +1,46 @@
 const express = require('express');
 const router = express.Router();
-const { protect} = require('../middleware/auth');
-const { handleFileUpload } = require('../utils/fileUpload');
+const { protect, authorize } = require('../middleware/auth');
 const {
   getSeatsByProperty,
+  assignStudentToSeat,
+  releaseStudentFromSeat,
+  cancelAssignment,
   bulkCreateSeats,
-  bookSeat,
   reserveSeat,
-  releaseSeat,
   getSeatStats,
-  getShifts,
   updateSeatStatus,
   deleteSeat,
   bulkUpdateSeats,
-  bulkDeleteSeats
+  bulkDeleteSeats,
+  getSeatAssignmentHistory
 } = require('../controllers/seatController');
 
-// Protected routes (require authentication)
+// All routes are protected
 router.use(protect);
-router.get('/property/:propertyId', getSeatsByProperty);
-router.get('/shifts', getShifts);
-router.get('/stats', getSeatStats);
-router.post('/:seatId/book', handleFileUpload, bookSeat);
-router.post('/:id/reserve', reserveSeat);
-router.post('/:id/release', releaseSeat);
-router.post('/bulk-update', bulkUpdateSeats);
-router.post('/bulk-delete', bulkDeleteSeats);
-router.delete('/:id', deleteSeat);
 
+// Get seats by property
+router.get('/property/:propertyId', getSeatsByProperty);
+
+// Seat assignment operations
+router.post('/:seatId/assign', assignStudentToSeat);
+router.post('/:seatId/release', releaseStudentFromSeat);
+router.post('/:seatId/cancel', cancelAssignment);
+
+// Seat management
 router.post('/bulk', bulkCreateSeats);
 router.put('/:id/status', updateSeatStatus);
+router.delete('/:id', deleteSeat);
+router.post('/bulk-update', bulkUpdateSeats);
+router.post('/bulk-delete', bulkDeleteSeats);
+
+// Reservation
+router.post('/:id/reserve', reserveSeat);
+
+// Statistics
+router.get('/stats/seat-stats', getSeatStats);
+
+// History
+router.get('/:seatId/history', getSeatAssignmentHistory);
 
 module.exports = router;

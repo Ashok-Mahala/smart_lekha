@@ -11,20 +11,20 @@ export const studentPropTypes = PropTypes.shape({
   lastName: PropTypes.string,
   email: PropTypes.string.isRequired,
   phone: PropTypes.string.isRequired,
-  currentSeat: PropTypes.object,
   institution: PropTypes.string,
   course: PropTypes.string,
-  aadharNumber: PropTypes.number,
+  aadharNumber: PropTypes.string, // Changed from number to string
   status: PropTypes.string.isRequired,
-  booking: PropTypes.object,
-  shift: PropTypes.object,
-  payment: PropTypes.object
+  currentAssignments: PropTypes.array, // Added for new structure
+  assignmentHistory: PropTypes.array, // Added for new structure
+  documents: PropTypes.array, // Added for new structure
+  notes: PropTypes.string
 });
 
 export const getStudentsByProperty = async (propertyId, params = {}) => {
   try {
     const response = await axios.get(`${API_BASE_URL}/property/${propertyId}`, { params });
-    return response.data.students || [];
+    return response.data;
   } catch (error) {
     toast.error('Failed to fetch students');
     throw error;
@@ -37,19 +37,19 @@ export const getDocumentUrl = (relativePath) => {
   return `${base}${relativePath}`;
 };
 
-export const getStudentStats = async (propertyId) => {
+export const getStudentStatsByProperty = async (propertyId) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/stats`, { params: { propertyId } });
+    const response = await axios.get(`${API_BASE_URL}/stats/student-stats`, { params: { propertyId } });
     return response.data;
   } catch (error) {
-    toast.error('Failed to fetch stats');
+    toast.error('Failed to fetch student stats');
     throw error;
   }
 };
 
 export const getStudentById = async (id) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/profile/${id}`);
+    const response = await axios.get(`${API_BASE_URL}/${id}`);
     return response.data;
   } catch (error) {
     toast.error('Failed to fetch student');
@@ -57,25 +57,28 @@ export const getStudentById = async (id) => {
   }
 };
 
-export const createStudent = async (studentData) => {
+export const createStudent = async (studentData, config = {}) => {
   try {
     const isFormData = studentData instanceof FormData;
     const response = await axios.post(API_BASE_URL, studentData, {
-      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {}
+      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {},
+      ...config
     });
     toast.success('Student created successfully');
     return response.data;
   } catch (error) {
-    toast.error('Failed to create student');
+    const errorMessage = error.response?.data?.message || 'Failed to create student';
+    toast.error(errorMessage);
     throw error;
   }
 };
 
-export const updateStudent = async (id, studentData) => {
+export const updateStudent = async (id, studentData, config = {}) => {
   try {
     const isFormData = studentData instanceof FormData;
     const response = await axios.put(`${API_BASE_URL}/${id}`, studentData, {
-      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {}
+      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {},
+      ...config
     });
     toast.success('Student updated successfully');
     return response.data;
@@ -96,11 +99,34 @@ export const deleteStudent = async (id) => {
   }
 };
 
+// New functions for assignment history
+export const getStudentCurrentAssignments = async (studentId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/${studentId}/assignments/current`);
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to fetch current assignments');
+    throw error;
+  }
+};
+
+export const getStudentAssignmentHistory = async (studentId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/${studentId}/assignments/history`);
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to fetch assignment history');
+    throw error;
+  }
+};
+
 export default {
   getStudentsByProperty,
-  getStudentStats,
+  getStudentStatsByProperty,
   getStudentById,
   createStudent,
   updateStudent,
-  deleteStudent
+  deleteStudent,
+  getStudentCurrentAssignments,
+  getStudentAssignmentHistory
 };

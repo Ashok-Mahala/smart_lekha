@@ -1,4 +1,3 @@
-// @/api/seats.js
 import axios from './axios';
 import { API_CONFIG } from './config';
 import { toast } from 'sonner';
@@ -6,19 +5,20 @@ import PropTypes from 'prop-types';
 
 const API_BASE_URL = `${API_CONFIG.baseURL}/seats`;
 
-// PropTypes matching your Seat model
+// Updated PropTypes matching new Seat model
 export const seatPropTypes = PropTypes.shape({
   _id: PropTypes.string.isRequired,
   propertyId: PropTypes.string.isRequired,
-  status: PropTypes.oneOf(['available', 'occupied', 'reserved', 'maintenance']).isRequired,
+  status: PropTypes.oneOf(['available', 'occupied', 'reserved', 'maintenance', 'deleted']).isRequired,
   seatNumber: PropTypes.string.isRequired,
-  row: PropTypes.string.isRequired,
+  row: PropTypes.number.isRequired, // Changed from string to number
   column: PropTypes.number.isRequired,
   type: PropTypes.oneOf(['standard', 'premium', 'handicap', 'other']),
   features: PropTypes.arrayOf(
     PropTypes.oneOf(['power_outlet', 'table', 'extra_space', 'window', 'aisle'])
   ),
-  currentStudent: PropTypes.string,
+  currentAssignments: PropTypes.array, // Added for new structure
+  assignmentHistory: PropTypes.array, // Added for new structure
   reservedUntil: PropTypes.string,
   lastAssigned: PropTypes.shape({
     student: PropTypes.string,
@@ -31,16 +31,54 @@ export const seatPropTypes = PropTypes.shape({
       performedBy: PropTypes.string
     })
   ),
-  notes: PropTypes.string
+  notes: PropTypes.string,
+  deletedAt: PropTypes.string
 });
 
-// API functions matching your controller exactly
+// API functions matching your new controller
 export const getSeatsByProperty = async (propertyId, params = {}) => {
   try {
     const response = await axios.get(`${API_BASE_URL}/property/${propertyId}`, { params });
     return response.data;
   } catch (error) {
     toast.error('Failed to fetch seats');
+    throw error;
+  }
+};
+
+// New function for assigning student to seat
+export const assignStudentToSeat = async (seatId, assignmentData) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/${seatId}/assign`, assignmentData);
+    toast.success('Student assigned to seat successfully');
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || 'Failed to assign student to seat';
+    toast.error(errorMessage);
+    throw error;
+  }
+};
+
+// New function for releasing student from seat
+export const releaseStudentFromSeat = async (seatId, releaseData) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/${seatId}/release`, releaseData);
+    toast.success('Student released from seat successfully');
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to release student from seat');
+    throw error;
+  }
+};
+
+// New function for canceling assignment
+export const cancelAssignment = async (seatId, cancelData) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/${seatId}/cancel`, cancelData);
+    toast.success('Assignment cancelled successfully');
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to cancel assignment');
     throw error;
   }
 };
@@ -56,31 +94,28 @@ export const bulkCreateSeats = async (seatsData) => {
   }
 };
 
-// New function for bulk updating seats
 export const bulkUpdateSeats = async (updates) => {
   try {
     const response = await axios.post(`${API_BASE_URL}/bulk-update`, updates, {
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Content-Type': 'application/json'
       }
     });
     
+    if (updates.length > 0) {
+      toast.success(`Updated ${updates.length} seats`);
+    }
     return response.data;
   } catch (error) {
-    console.error('[FRONTEND] Bulk update failed:', {
-      error: error.message,
-      response: error.response?.data,
-      config: error.config
-    });
+    console.error('Bulk update failed:', error);
+    toast.error('Failed to update seats');
     throw error;
   }
 };
 
-// New function for bulk deleting seats
 export const bulkDeleteSeats = async (seatIds) => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/bulk-delete`, { seatIds });
+    const response = await axios.post(`${API_BASE_URL}/bulk-delete`, seatIds);
     toast.success(`Deleted ${seatIds.length} seats`);
     return response.data;
   } catch (error) {
@@ -89,31 +124,7 @@ export const bulkDeleteSeats = async (seatIds) => {
   }
 };
 
-export const bookSeat = async (seatId, formData) => {
-  try {
-    const response = await axios.post(
-      `${API_BASE_URL}/${seatId}/book`, 
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          // Add authorization header if needed
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      }
-    );
-
-    toast.success('Seat booked successfully!');
-    return response.data;
-  } catch (error) {
-    const errorMessage = error.response?.data?.message || 
-                        error.response?.data?.error || 
-                        'Failed to book seat. Please try again.';
-    toast.error(errorMessage);
-    throw new Error(errorMessage);
-  }
-};
-
+// Remove old bookSeat function since we're using assignStudentToSeat now
 export const reserveSeat = async (seatId, reservationData) => {
   try {
     const response = await axios.post(`${API_BASE_URL}/${seatId}/reserve`, reservationData);
@@ -125,44 +136,24 @@ export const reserveSeat = async (seatId, reservationData) => {
   }
 };
 
-export const releaseSeat = async (seatId) => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/${seatId}/release`);
-    toast.success('Seat released successfully');
-    return response.data;
-  } catch (error) {
-    toast.error('Failed to release seat');
-    throw error;
-  }
-};
-
 export const getSeatStats = async (propertyId) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/stats`, { params: { propertyId } });
+    const response = await axios.get(`${API_BASE_URL}/stats/seat-stats`, { params: { propertyId } });
     return response.data;
   } catch (error) {
-    toast.error('Failed to get statistics');
+    toast.error('Failed to get seat statistics');
     throw error;
   }
 };
 
-export const getShifts = async () => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/shifts`);
-    return response.data;
-  } catch (error) {
-    toast.error('Failed to fetch shifts');
-    throw error;
-  }
-};
-
+// Remove getShifts function as it should be in shifts API
 export const updateSeatStatus = async (seatId, status) => {
   try {
     const response = await axios.put(`${API_BASE_URL}/${seatId}/status`, { status });
-    toast.success(`Status updated to ${status}`);
+    toast.success(`Seat status updated to ${status}`);
     return response.data;
   } catch (error) {
-    toast.error('Failed to update status');
+    toast.error('Failed to update seat status');
     throw error;
   }
 };
@@ -178,16 +169,28 @@ export const deleteSeat = async (seatId) => {
   }
 };
 
+// New function for getting seat assignment history
+export const getSeatAssignmentHistory = async (seatId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/${seatId}/history`);
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to fetch seat assignment history');
+    throw error;
+  }
+};
+
 export default {
   getSeatsByProperty,
+  assignStudentToSeat,
+  releaseStudentFromSeat,
+  cancelAssignment,
   bulkCreateSeats,
   bulkUpdateSeats,
   bulkDeleteSeats,
-  bookSeat,
   reserveSeat,
-  releaseSeat,
   getSeatStats,
-  getShifts,
   updateSeatStatus,
-  deleteSeat
+  deleteSeat,
+  getSeatAssignmentHistory
 };

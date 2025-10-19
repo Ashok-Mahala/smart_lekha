@@ -1,77 +1,47 @@
 const Seat = require('../models/Seat');
 const Student = require('../models/Student');
-const Booking = require('../models/Booking');
 const Payment = require('../models/Payment');
-const { ApiError } = require('../utils/ApiError');
+const Shift = require('../models/Shift');
+const ApiError = require('../utils/ApiError');
 const { asyncHandler } = require('../utils/asyncHandler');
 const mongoose = require('mongoose');
 
 // Get all seats for a property
 const getSeatsByProperty = asyncHandler(async (req, res) => {
   const { propertyId } = req.params;
-  const { status, type } = req.query;
+  const { status, type, shift } = req.query;
   
   const query = { propertyId };
   if (status) query.status = status;
   if (type) query.type = type;
 
   try {
-    // 1. Get all seats with basic student info
     const seats = await Seat.find(query)
       .sort({ row: 1, column: 1 })
       .populate({
-        path: 'currentStudents.student',
-        select: 'firstName lastName email phone studentId'
+        path: 'currentAssignments.student',
+        select: 'firstName lastName email phone'
       })
       .populate({
-        path: 'currentStudents.shift',
-        select: 'name startTime endTime'
+        path: 'currentAssignments.shift',
+        select: 'name startTime endTime fee'
+      })
+      .populate({
+        path: 'currentAssignments.payment',
+        select: 'amount status paymentDate'
       });
 
-    // 2. Get all bookings for occupied seats in one query
-    const occupiedSeatIds = seats
-      .filter(seat => seat.status === 'occupied' && seat.currentStudent)
-      .map(seat => seat._id);
+    // Filter by shift if provided
+    let filteredSeats = seats;
+    if (shift) {
+      filteredSeats = seats.filter(seat => 
+        seat.currentAssignments.some(assignment => 
+          assignment.shift && assignment.shift._id.toString() === shift
+        )
+      );
+    }
 
-    const bookings = await Booking.find({
-      seat: { $in: occupiedSeatIds },
-      status: { $ne: 'cancelled' }
-    })
-    .populate('shift', 'name startTime endTime')
-    .sort({ createdAt: -1 });
-
-    // Group bookings by seat ID
-    const bookingsBySeat = {};
-    bookings.forEach(booking => {
-      if (!bookingsBySeat[booking.seat]) {
-        bookingsBySeat[booking.seat] = booking;
-      }
-    });
-
-    // 3. Combine the data
-    const enhancedSeats = seats.map(seat => {
-      const seatObj = seat.toObject();
-      
-      if (seat.status === 'occupied' && seat.currentStudent) {
-        const booking = bookingsBySeat[seat._id.toString()];
-        if (booking) {
-          seatObj.booking = booking.toObject();
-          seatObj.bookingDate = booking.startDate || seat.updatedAt;
-        }
-        
-        // Format student name properly
-        if (seat.currentStudent) {
-          seatObj.currentStudent.fullName = [
-            seat.currentStudent.firstName,
-            seat.currentStudent.lastName
-          ].filter(Boolean).join(' ');
-        }
-      }
-      
-      return seatObj;
-    });
-
-    res.json(enhancedSeats);
+    res.json(filteredSeats);
   } catch (error) {
     console.error('Error fetching seats:', error);
     res.status(500).json({ 
@@ -82,6 +52,158 @@ const getSeatsByProperty = asyncHandler(async (req, res) => {
   }
 });
 
+// Assign student to seat
+const assignStudentToSeat = asyncHandler(async (req, res) => {
+  try {
+    const { seatId } = req.params;
+    const { studentId, shiftId, startDate, feeDetails, documents, createdBy } = req.body;
+
+    console.log('=== ASSIGN STUDENT TO SEAT START ===');
+    console.log('Seat ID from params:', seatId);
+    console.log('Student ID from request body:', studentId);
+    console.log('Shift ID from request body:', shiftId);
+    console.log('Full request body:', req.body);
+
+    // Validate studentId format
+    if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+      console.error('Invalid student ID format:', studentId);
+      throw new ApiError(400, 'Invalid student ID format');
+    }
+
+    const seat = await Seat.findById(seatId);
+    if (!seat) {
+      console.error('Seat not found with ID:', seatId);
+      throw new ApiError(404, 'Seat not found');
+    }
+
+    console.log('Found seat:', seat._id);
+
+    // Try to find student with detailed logging
+    console.log('Searching for student with ID:', studentId);
+    const student = await Student.findById(studentId);
+    
+    if (!student) {
+      console.error('Student not found with ID:', studentId);
+      
+      // List all students in database for debugging
+      const allStudents = await Student.find({}).select('_id firstName email').limit(10);
+      console.log('Available students in database:', allStudents);
+      
+      throw new ApiError(404, 'Student not found');
+    }
+
+    console.log('Found student:', student._id, student.firstName, student.email);
+
+    const shift = await Shift.findById(shiftId);
+    if (!shift) {
+      console.error('Shift not found with ID:', shiftId);
+      throw new ApiError(404, 'Shift not found');
+    }
+
+    console.log('Found shift:', shift._id, shift.name);
+
+    // Check if seat is available for this shift
+    if (!seat.isAvailableForShift(shiftId)) {
+      console.error('Seat not available for shift:', shiftId);
+      throw new ApiError(400, 'Seat is not available for this shift');
+    }
+
+    // Check if student already has active assignment for this shift
+    const existingAssignment = student.currentAssignments.find(
+      assignment => assignment.shift && assignment.shift.toString() === shiftId && assignment.status === 'active'
+    );
+    if (existingAssignment) {
+      console.error('Student already has active assignment for this shift');
+      throw new ApiError(400, 'Student already has an active assignment for this shift');
+    }
+
+    const assignmentData = {
+      startDate: startDate || new Date(),
+      feeDetails: {
+        amount: feeDetails?.amount || shift.fee,
+        collected: feeDetails?.collected || 0,
+        balance: (feeDetails?.amount || shift.fee) - (feeDetails?.collected || 0)
+      },
+      documents: documents || [],
+      createdBy: createdBy || req.user?._id
+    };
+
+    console.log('Assignment data:', assignmentData);
+
+    // Assign student to seat
+    await seat.assignStudent(studentId, shiftId, assignmentData);
+    
+    // Create assignment in student record
+    await student.assignToSeat(seatId, shiftId, assignmentData);
+
+    const updatedSeat = await Seat.findById(seatId)
+      .populate('currentAssignments.student')
+      .populate('currentAssignments.shift');
+
+    console.log('=== ASSIGN STUDENT TO SEAT END - SUCCESS ===');
+
+    res.status(200).json({
+      success: true,
+      message: 'Student assigned to seat successfully',
+      data: updatedSeat
+    });
+
+  } catch (error) {
+    console.error('Error in assignStudentToSeat:', error);
+    throw error;
+  }
+});
+
+// Release student from seat
+const releaseStudentFromSeat = asyncHandler(async (req, res) => {
+  const { seatId } = req.params;
+  const { studentId, shiftId } = req.body;
+
+  const seat = await Seat.findById(seatId);
+  if (!seat) {
+    throw new ApiError(404, 'Seat not found');
+  }
+
+  const student = await Student.findById(studentId);
+  if (!student) {
+    throw new ApiError(404, 'Student not found');
+  }
+
+  // Release from both seat and student
+  await seat.releaseStudent(studentId, shiftId);
+  await student.releaseFromSeat(seatId, shiftId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Student released from seat successfully'
+  });
+});
+
+// Cancel assignment
+const cancelAssignment = asyncHandler(async (req, res) => {
+  const { seatId } = req.params;
+  const { studentId, shiftId } = req.body;
+
+  const seat = await Seat.findById(seatId);
+  if (!seat) {
+    throw new ApiError(404, 'Seat not found');
+  }
+
+  const student = await Student.findById(studentId);
+  if (!student) {
+    throw new ApiError(404, 'Student not found');
+  }
+
+  // Cancel from both seat and student
+  await seat.cancelAssignment(studentId, shiftId);
+  await student.cancelAssignment(seatId, shiftId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Assignment cancelled successfully'
+  });
+});
+
 // Create multiple seats
 const bulkCreateSeats = asyncHandler(async (req, res) => {
   const { seats } = req.body;
@@ -90,7 +212,6 @@ const bulkCreateSeats = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Seats data is required');
   }
 
-  // Validate each seat has required fields
   const validatedSeats = seats.map(seat => ({
     ...seat,
     status: seat.status || 'available',
@@ -101,100 +222,9 @@ const bulkCreateSeats = asyncHandler(async (req, res) => {
   res.status(201).json(createdSeats);
 });
 
-// Book a seat
-const bookSeat = async (req, res) => {
-  try {
-    const { seatId } = req.params;
-    const formData = req.body;
-    const files = req.files;
-
-    const seat = await Seat.findById(seatId);
-    if (!seat) return res.status(404).json({ error: 'Seat not found' });
-
-    const studentData = JSON.parse(formData.studentData);
-    if (!studentData.email) return res.status(400).json({ error: 'Email is required' });
-
-    let student = await Student.findOne({ email: studentData.email });
-    if (!student) {
-      student = new Student({
-        firstName: studentData.firstName,
-        lastName: studentData.lastName || '',
-        email: studentData.email,
-        phone: studentData.phone,
-        currentSeat: seatId,
-        institution: studentData.institution || '',
-        course: studentData.course || '',
-        aadharNumber: studentData.aadharNumber || '',
-        status: 'active'
-      });
-      await student.save();
-    }
-
-    formData.idempotencyKey = formData.idempotencyKey || `${seatId}-${formData.shiftId}-${Date.now()}`;
-
-    const booking = new Booking({
-      seat: seatId,
-      student: student._id,
-      shift: formData.shiftId,
-      startDate: new Date(formData.startDate),
-      idempotencyKey: formData.idempotencyKey,
-      feeDetails: {
-        amount: parseFloat(formData.fee || 0),
-        collected: parseFloat(formData.collectedFee || 0),
-        balance: parseFloat(formData.fee || 0) - parseFloat(formData.collectedFee || 0)
-      },
-      createdBy: req.user?._id || student._id
-    });    
-    await booking.save();
-
-    const paymentData = JSON.parse(formData.paymentData);
-    const payment = new Payment({
-      amount: parseFloat(paymentData.amount),
-      paymentMethod: paymentData.method || 'cash',
-      status: 'completed',
-      student: student._id,
-      booking: booking._id,
-      createdBy: req.user?._id || student._id
-    });
-    await payment.save();
-
-    const documents = [];
-    if (files.profilePhoto) {
-      documents.push({
-        type: 'profile_photo',
-        url: `/uploads/${files.profilePhoto[0].filename}`,
-        originalName: files.profilePhoto[0].originalname
-      });
-    }
-    if (files.identityProof) {
-      documents.push({
-        type: 'identity_proof',
-        url: `/uploads/${files.identityProof[0].filename}`,
-        originalName: files.identityProof[0].originalname
-      });
-    }
-
-    booking.documents = documents;
-    await booking.save();
-
-    res.status(201).json({
-      success: true,
-      data: { booking, payment }
-    });
-
-  } catch (error) {
-    console.error('Booking error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Booking failed',
-      message: error.message
-    });
-  }
-};
-
 // Reserve a seat
 const reserveSeat = asyncHandler(async (req, res) => {
-  const { studentId, until } = req.body;
+  const { studentId, until, shiftId } = req.body;
   const seat = await Seat.findById(req.params.id);
 
   if (!seat) {
@@ -206,24 +236,11 @@ const reserveSeat = asyncHandler(async (req, res) => {
   }
 
   seat.status = 'reserved';
-  seat.currentStudent = studentId;
   seat.reservedUntil = new Date(until);
-
-  await seat.save();
-  res.json(seat);
-});
-
-// Release a seat
-const releaseSeat = asyncHandler(async (req, res) => {
-  const seat = await Seat.findById(req.params.id);
-
-  if (!seat) {
-    throw new ApiError(404, 'Seat not found');
-  }
-
-  seat.currentStudent = null;
-  seat.status = 'available';
-  seat.reservedUntil = null;
+  seat.reservedFor = {
+    student: studentId,
+    shift: shiftId
+  };
 
   await seat.save();
   res.json(seat);
@@ -241,70 +258,41 @@ const getSeatStats = asyncHandler(async (req, res) => {
     { $match: { propertyId: new mongoose.Types.ObjectId(propertyId) } },
     { $group: { 
       _id: '$status', 
-      count: { $sum: 1 },
-      types: { $push: '$type' }
+      count: { $sum: 1 }
     }},
     { $project: {
       status: '$_id',
       count: 1,
-      types: 1,
       _id: 0
     }}
   ]);
 
   const total = await Seat.countDocuments({ propertyId });
-  
+  const occupied = await Seat.countDocuments({ 
+    propertyId, 
+    status: 'occupied' 
+  });
+  const available = await Seat.countDocuments({ 
+    propertyId, 
+    status: 'available' 
+  });
+
   res.json({
     total,
+    occupied,
+    available,
     stats,
     propertyId
   });
 });
 
-// Get available shifts
-const getShifts = asyncHandler(async (req, res) => {
-  // In a real app, this would come from a configuration
-  const shifts = [
-    { id: 'morning', name: 'Morning', time: '8:00 AM - 12:00 PM' },
-    { id: 'afternoon', name: 'Afternoon', time: '1:00 PM - 5:00 PM' },
-    { id: 'evening', name: 'Evening', time: '6:00 PM - 10:00 PM' }
-  ];
-  
-  res.json(shifts);
-});
-
 // Update seat status
 const updateSeatStatus = asyncHandler(async (req, res) => {
-  const { status, studentId } = req.body;
+  const { status } = req.body;
   
-  console.log('Received update request:', req.body); // Add this for debugging
-  
-  // Check if status is nested in another object (common issue with some frontend setups)
-  let actualStatus = status;
-  let actualStudentId = studentId;
-  
-  // If status is an object, extract the actual status value
-  if (status && typeof status === 'object') {
-    console.log('Status is an object, extracting value:', status);
-    actualStatus = status.status;
-    // Also check if studentId is nested
-    if (status.studentId) {
-      actualStudentId = status.studentId;
-    }
-  }
-  
-  const updateData = { status: actualStatus };
-  
-  // If studentId is provided, update it as well
-  if (actualStudentId) {
-    updateData.studentId = actualStudentId;
-  }
-
-  console.log('Update data being applied:', updateData);
-
   const seat = await Seat.findByIdAndUpdate(
     req.params.id,
-    updateData,
+    { status },
     { new: true, runValidators: true }
   );
 
@@ -318,97 +306,110 @@ const updateSeatStatus = asyncHandler(async (req, res) => {
   });
 });
 
-// Delete a seat by ID
+// Delete a seat
 const deleteSeat = asyncHandler(async (req, res) => {
-  const seat = await Seat.findByIdAndDelete(req.params.id);
+  const seat = await Seat.findById(req.params.id);
 
   if (!seat) {
     throw new ApiError(404, 'Seat not found');
   }
 
-  res.json({ message: 'Seat deleted successfully', seatId: req.params.id });
+  // Check if seat has active assignments
+  const activeAssignments = seat.currentAssignments.filter(a => a.status === 'active');
+  if (activeAssignments.length > 0) {
+    throw new ApiError(400, 'Cannot delete seat with active assignments');
+  }
+
+  await seat.softDelete();
+  res.json({ 
+    success: true,
+    message: 'Seat deleted successfully', 
+    seatId: req.params.id 
+  });
 });
 
-const bulkUpdateSeats = async (req, res) => {
-  try {
-    
-    // 1. Validate input is an array
-    if (!Array.isArray(req.body)) {
-      return res.status(400).json({ 
-        error: "Invalid request format",
-        details: "Expected an array of updates" 
-      });
+// Bulk update seats
+const bulkUpdateSeats = asyncHandler(async (req, res) => {
+  if (!Array.isArray(req.body)) {
+    throw new ApiError(400, 'Expected an array of updates');
+  }
+
+  const bulkOps = req.body.map(update => ({
+    updateOne: {
+      filter: { _id: update.id },
+      update: { $set: update.updates }
     }
+  }));
 
-    // 2. Process each update while preserving status
-    const bulkOps = await Promise.all(req.body.map(async (update) => {
-      if (!update.id || !update.updates) {
-        throw new Error(`Invalid update format: ${JSON.stringify(update)}`);
-      }
+  const result = await Seat.bulkWrite(bulkOps);
+  
+  res.json({
+    success: true,
+    matchedCount: result.matchedCount,
+    modifiedCount: result.modifiedCount
+  });
+});
 
-      // Get current seat status
-      const currentSeat = await Seat.findById(update.id);
-      if (!currentSeat) {
-        throw new Error(`Seat not found with ID: ${update.id}`);
-      }
+// Bulk delete seats
+const bulkDeleteSeats = asyncHandler(async (req, res) => {
+  const seatIds = req.body;
+  
+  // Check if any seat has active assignments
+  const seatsWithAssignments = await Seat.find({
+    _id: { $in: seatIds },
+    'currentAssignments.status': 'active'
+  });
 
-      // Remove status from updates if present
-      const { status, ...safeUpdates } = update.updates;
-      
-      // Create update operation with preserved status
-      return {
-        updateOne: {
-          filter: { _id: update.id },
-          update: { 
-            $set: {
-              ...safeUpdates,
-              status: currentSeat.status // Preserve original status
-            }
-          }
-        }
-      };
-    }));
-
-    // 3. Execute bulk operation
-    const result = await Seat.bulkWrite(bulkOps);
-    
-    res.json({
-      success: true,
-      matchedCount: result.matchedCount,
-      modifiedCount: result.modifiedCount
-    });
-
-  } catch (error) {
-    console.error('Bulk update failed:', error);
-    res.status(400).json({
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+  if (seatsWithAssignments.length > 0) {
+    throw new ApiError(400, 'Some seats have active assignments and cannot be deleted');
   }
-};
 
-// To delete bulk seats
-const bulkDeleteSeats = async (req, res) => {
-  try {
-    const seatIds = req.body;
-    const result = await Seat.deleteMany({ _id: { $in: seatIds } });
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  const result = await Seat.updateMany(
+    { _id: { $in: seatIds } },
+    { 
+      $set: { 
+        status: 'deleted', 
+        deletedAt: new Date() 
+      } 
+    }
+  );
+
+  res.json({
+    success: true,
+    deletedCount: result.modifiedCount
+  });
+});
+
+// Get seat assignment history
+const getSeatAssignmentHistory = asyncHandler(async (req, res) => {
+  const { seatId } = req.params;
+  
+  const seat = await Seat.findById(seatId)
+    .populate('assignmentHistory.student', 'firstName lastName email phone')
+    .populate('assignmentHistory.shift', 'name startTime endTime')
+    .populate('assignmentHistory.payment', 'amount status paymentDate');
+
+  if (!seat) {
+    throw new ApiError(404, 'Seat not found');
   }
-};
 
+  res.json({
+    success: true,
+    data: seat.assignmentHistory
+  });
+});
 
 module.exports = {
   getSeatsByProperty,
+  assignStudentToSeat,
+  releaseStudentFromSeat,
+  cancelAssignment,
   bulkCreateSeats,
-  bookSeat,
   reserveSeat,
-  releaseSeat,
   getSeatStats,
-  getShifts,
   updateSeatStatus,
   deleteSeat,
   bulkUpdateSeats,
-  bulkDeleteSeats
+  bulkDeleteSeats,
+  getSeatAssignmentHistory
 };

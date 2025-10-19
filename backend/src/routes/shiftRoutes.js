@@ -6,9 +6,9 @@ const {
   createShift,
   updateShift,
   deleteShift
-} = require('../controllers/shiftControllers');
+} = require('../controllers/shiftController');
 
-// Protected routes
+// All routes are protected
 router.use(protect);
 
 router.get('/', getShifts);

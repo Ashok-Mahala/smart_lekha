@@ -1,5 +1,44 @@
 const mongoose = require('mongoose');
 
+const studentAssignmentSchema = new mongoose.Schema({
+  seat: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Seat',
+    required: true 
+  },
+  shift: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Shift',
+    required: true 
+  },
+  property: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Property',
+    required: true
+  },
+  startDate: { 
+    type: Date, 
+    required: true 
+  },
+  endDate: { 
+    type: Date 
+  },
+  status: {
+    type: String,
+    enum: ['active', 'completed', 'cancelled'],
+    default: 'active'
+  },
+  payment: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Payment' 
+  },
+  feeDetails: {
+    amount: Number,
+    collected: Number,
+    balance: Number
+  }
+}, { timestamps: true });
+
 const studentSchema = new mongoose.Schema({
   firstName: {
     type: String,
@@ -31,11 +70,6 @@ const studentSchema = new mongoose.Schema({
       message: props => `${props.value} is not a valid phone number!`
     }
   },
-  currentSeat: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Seat',
-    default: null
-  },
   institution: {
     type: String,
     trim: true
@@ -44,12 +78,8 @@ const studentSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-    course: {
-    type: String,
-    trim: true
-  },
   aadharNumber: {
-    type: Number,
+    type: String, // Changed from Number to String
     trim: true,
     validate: {
       validator: function(v) {
@@ -63,6 +93,18 @@ const studentSchema = new mongoose.Schema({
     enum: ['active', 'inactive'],
     default: 'active'
   },
+  currentAssignments: [studentAssignmentSchema],
+  assignmentHistory: [studentAssignmentSchema],
+  documents: [{
+    type: {
+      type: String,
+      enum: ['profile_photo', 'identity_proof', 'aadhar_card', 'other'],
+      required: true
+    },
+    url: String,
+    originalName: String,
+    uploadedAt: { type: Date, default: Date.now }
+  }],
   notes: {
     type: String,
     maxlength: 500
@@ -80,55 +122,108 @@ const studentSchema = new mongoose.Schema({
 
 // Virtual for full name
 studentSchema.virtual('fullName').get(function() {
-  return `${this.firstName} ${this.lastName}`;
+  return `${this.firstName} ${this.lastName}`.trim();
 });
 
-// Indexes
-studentSchema.index({ email: 1 }, { unique: true });
-studentSchema.index({ currentSeat: 1 });
-studentSchema.index({ status: 1 });
-
-// Middleware to clear seat assignment when student is deleted or deactivated
-studentSchema.pre('save', async function(next) {
-  if (this.isModified('status') && this.status === 'inactive' && this.currentSeat) {
-    const Seat = mongoose.model('Seat');
-    await Seat.findByIdAndUpdate(this.currentSeat, { 
-      $set: { currentStudent: null, status: 'available' }
-    });
-    this.currentSeat = null;
+// Virtual for active assignments count - FIXED
+studentSchema.virtual('activeAssignmentsCount').get(function() {
+  // Add null check to prevent the error
+  if (!this.currentAssignments || !Array.isArray(this.currentAssignments)) {
+    return 0;
   }
-  next();
+  return this.currentAssignments.filter(a => a.status === 'active').length;
 });
 
-// Static method to find active students
-studentSchema.statics.findActive = function() {
-  return this.find({ status: 'active' });
+// Static method to find students with active assignments
+studentSchema.statics.findWithActiveAssignments = function() {
+  return this.find({ 
+    'currentAssignments.status': 'active',
+    status: 'active'
+  });
 };
 
-// Method to assign seat to student
-studentSchema.methods.assignSeat = async function(seatId) {
+// Methods
+studentSchema.methods.assignToSeat = async function(seatId, shiftId, assignmentData) {
   const Seat = mongoose.model('Seat');
   const seat = await Seat.findById(seatId);
   
   if (!seat) throw new Error('Seat not found');
-  if (!seat.isAvailable()) throw new Error('Seat is not available');
   
-  // Release current seat if exists
-  if (this.currentSeat) {
-    await Seat.findByIdAndUpdate(this.currentSeat, {
-      currentStudent: null,
-      status: 'available'
-    });
+  // Create assignment
+  const assignment = {
+    seat: seatId,
+    shift: shiftId,
+    property: seat.propertyId,
+    startDate: assignmentData.startDate || new Date(),
+    feeDetails: assignmentData.feeDetails,
+    payment: assignmentData.payment
+  };
+
+  // Add null check for currentAssignments
+  if (!this.currentAssignments) {
+    this.currentAssignments = [];
   }
   
-  // Assign new seat
-  this.currentSeat = seatId;
+  this.currentAssignments.push(assignment);
   await this.save();
   
-  // Update seat
-  seat.currentStudent = this._id;
-  seat.status = 'occupied';
-  await seat.save();
+  return this;
+};
+
+studentSchema.methods.releaseFromSeat = async function(seatId, shiftId) {
+  const assignmentIndex = this.currentAssignments.findIndex(
+    assignment => assignment.seat.toString() === seatId.toString() && 
+    assignment.shift.toString() === shiftId.toString() && 
+    assignment.status === 'active'
+  );
+
+  if (assignmentIndex === -1) {
+    throw new Error('Active assignment not found');
+  }
+
+  const assignment = this.currentAssignments[assignmentIndex];
+  assignment.status = 'completed';
+  assignment.endDate = new Date();
+
+  // Add null check for assignmentHistory
+  if (!this.assignmentHistory) {
+    this.assignmentHistory = [];
+  }
+
+  // Move to history
+  this.assignmentHistory.push(assignment);
+  this.currentAssignments.splice(assignmentIndex, 1);
+  
+  await this.save();
+  
+  return this;
+};
+
+studentSchema.methods.cancelAssignment = async function(seatId, shiftId) {
+  const assignmentIndex = this.currentAssignments.findIndex(
+    assignment => assignment.seat.toString() === seatId.toString() && 
+    assignment.shift.toString() === shiftId.toString() && 
+    assignment.status === 'active'
+  );
+
+  if (assignmentIndex === -1) {
+    throw new Error('Active assignment not found');
+  }
+
+  const assignment = this.currentAssignments[assignmentIndex];
+  assignment.status = 'cancelled';
+  assignment.endDate = new Date();
+
+  // Add null check for assignmentHistory
+  if (!this.assignmentHistory) {
+    this.assignmentHistory = [];
+  }
+
+  // Move to history
+  this.assignmentHistory.push(assignment);
+  this.currentAssignments.splice(assignmentIndex, 1);
+  
+  await this.save();
   
   return this;
 };

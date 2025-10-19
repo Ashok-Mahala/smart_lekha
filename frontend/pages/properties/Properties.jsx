@@ -78,8 +78,16 @@ const PropertiesPage = () => {
   
 
   const handlePropertyClick = (property) => {
-    navigate(`/properties/${property._id}`);
+    const propertyId = property?._id || property?.id;
+  
+    if (propertyId) {
+      console.log("Navigating to property:", propertyId, property);
+      navigate(`/properties/${propertyId}`);
+    } else {
+      console.warn("Property ID missing:", property);
+    }
   };
+  
 
   // Delete Property
   const handleDeleteProperty = async (propertyId, e) => {

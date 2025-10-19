@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
-import { Sofa, User, Lock, Calendar, Loader2 } from "lucide-react";
+import { Sofa, User, Lock, Calendar, Loader2, Clock, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import StudentInfoDialog from './StudentInfoDialog';
@@ -56,9 +56,12 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         column: Number(seat.column),
         status: seat.status || 'available',
         currentStudents: seat.currentStudents || [],
+        currentAssignments: seat.currentAssignments || [], // Added for new structure
         booking: seat.booking || null,
         bookingDate: seat.bookingDate || seat.updatedAt,
-        propertyId: seat.propertyId
+        propertyId: seat.propertyId,
+        type: seat.type || 'standard',
+        features: seat.features || []
       };
     });
   };
@@ -75,6 +78,7 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   const [selectedAvailableSeat, setSelectedAvailableSeat] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [hoveredSeat, setHoveredSeat] = useState(null);
 
   useEffect(() => {
     initialSeats?.length && setSeats(normalizeSeats(initialSeats));
@@ -83,15 +87,48 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   useEffect(() => {
     const loadShifts = async () => {
       try {
-        const response = await getShifts();
+        // Get property ID from localStorage - it's stored as a simple string
+        const propertyId = localStorage.getItem('selectedProperty');
+        
+        console.log('Property ID from localStorage:', propertyId); // Debug log
+        
+        if (!propertyId) {
+          console.warn('No property selected in localStorage');
+          toast({
+            title: "No Property Selected",
+            description: "Please select a property first",
+            variant: "destructive"
+          });
+          return;
+        }
+  
+        // No need to parse JSON - it's already a string ID
+        console.log('Loading shifts for property ID:', propertyId);
+        
+        const response = await getShifts(propertyId);
+        console.log('Shifts API response:', response); // Debug log
+        
         if (response.success && response.data) {
           setShifts(response.data);
           if (response.data.length > 0) setSelectedShift(response.data[0]._id);
+        } else {
+          console.warn('Unexpected API response format:', response);
+          toast({
+            title: "Unexpected Response",
+            description: "Could not load shifts data",
+            variant: "destructive"
+          });
         }
       } catch (error) {
         console.error('Failed to load shifts:', error);
+        toast({
+          title: "Error Loading Shifts",
+          description: error.message || "Please try again later",
+          variant: "destructive"
+        });
       }
     };
+    
     loadShifts();
   }, []);
 
@@ -100,63 +137,72 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
     return (shift.startTime === '00:00' && (shift.endTime === '23:59' || shift.endTime === '24:00'));
   };
 
+  const getSeatStatus = (seat, currentShift) => {
+    // Use currentAssignments instead of currentStudents for new structure
+    const assignments = seat.currentAssignments || seat.currentStudents || [];
+    
+    const bookingInfo = assignments.find(cs => {
+      const shift = shifts.find(s => s._id === cs.shift?._id);
+      return isFullDayShift(shift);
+    });
+
+    const has24hBooking = !!bookingInfo;
+    const currentShiftBooking = assignments.find(cs => cs.shift?._id === selectedShift);
+    const isIn24hShiftView = currentShift && isFullDayShift(currentShift);
+
+    if (has24hBooking) {
+      return {
+        status: 'occupied',
+        isPrebookOnly: true,
+        student: bookingInfo.student,
+        booking: { shift: bookingInfo.shift }
+      };
+    }
+
+    if (isIn24hShiftView && assignments.length > 0) {
+      return {
+        status: 'reserved',
+        isPrebookOnly: true
+      };
+    }
+
+    if (currentShiftBooking) {
+      return {
+        status: 'occupied',
+        isPrebookOnly: false,
+        student: currentShiftBooking.student,
+        booking: { shift: currentShiftBooking.shift }
+      };
+    }
+
+    return {
+      status: seat.status === 'maintenance' ? 'locked' : 'available',
+      isPrebookOnly: false
+    };
+  };
+
   const filteredSeats = useMemo(() => {
     const currentShift = shifts.find(s => s._id === selectedShift);
-  
+    
     return seats.map(seat => {
-      const bookingInfo = seat.currentStudents.find(cs => {
-        const shift = shifts.find(s => s._id === cs.shift._id);
-        return isFullDayShift(shift);
-      });
-  
-      const has24hBooking = !!bookingInfo;
-  
-      const currentShiftBooking = seat.currentStudents.find(cs => cs.shift._id === selectedShift);
-  
-      const isIn24hShiftView = currentShift && isFullDayShift(currentShift);
-  
-      if (has24hBooking) {
-        return {
-          ...seat,
-          status: 'occupied',
-          isPrebookOnly: true,
-          student: bookingInfo.student,
-          booking: {
-            shift: bookingInfo.shift
-          }
-        };
-      }
-  
-      if (isIn24hShiftView && seat.currentStudents.length > 0) {
-        return {
-          ...seat,
-          status: 'reserved',
-          isPrebookOnly: true
-        };
-      }
-  
-      if (currentShiftBooking) {
-        return {
-          ...seat,
-          status: 'occupied',
-          isPrebookOnly: false,
-          student: currentShiftBooking.student,
-          booking: {
-            shift: currentShiftBooking.shift
-          }
-        };
-      }
-  
+      const statusInfo = getSeatStatus(seat, currentShift);
       return {
         ...seat,
-        status: 'available',
-        isPrebookOnly: false
+        ...statusInfo
       };
     }).filter(seat => !showOnlyAvailable || seat.status === 'available');
   }, [seats, showOnlyAvailable, selectedShift, shifts]);
-  
+
   const handleSeatClick = (seat) => {
-    if (seat.status === 'locked') return;
+    if (seat.status === 'locked') {
+      toast({
+        title: "Seat Locked",
+        description: "This seat is under maintenance and cannot be booked.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     if (seat.isPrebookOnly || seat.status === 'reserved') {
       setSelectedSeatForPreBook(seat);
       setIsPreBookDialogOpen(true);
@@ -172,9 +218,14 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
 
   const handlePreBookConfirm = async (bookingDetails) => {
     if (!bookingDetails.name || !bookingDetails.email || !bookingDetails.phone || !bookingDetails.date) {
-      toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
+      toast({ 
+        title: "Error", 
+        description: "Please fill in all required fields", 
+        variant: "destructive" 
+      });
       return;
     }
+    
     try {
       setIsLoading(true);
       await reserveSeat(selectedSeatForPreBook._id, {
@@ -182,11 +233,23 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         until: bookingDetails.date,
         name: bookingDetails.name,
         email: bookingDetails.email,
-        phone: bookingDetails.phone
+        phone: bookingDetails.phone,
+        shiftId: selectedShift
       });
-      toast({ title: "Success", description: `Seat ${selectedSeatForPreBook.seatNumber} pre-booked.` });
+      
+      toast({ 
+        title: "Success", 
+        description: `Seat ${selectedSeatForPreBook.seatNumber} pre-booked successfully.` 
+      });
+      
+      // Refresh seats data
+      onConfirm?.();
     } catch (error) {
-      toast({ title: "Error", description: error.message || "Failed to reserve seat", variant: "destructive" });
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to reserve seat", 
+        variant: "destructive" 
+      });
     } finally {
       setIsLoading(false);
       setIsPreBookDialogOpen(false);
@@ -195,19 +258,46 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   };
 
   const getSeatColor = (seat) => cn(
-    "transition-colors duration-200 border-2",
-    seat.status === 'available' && 'bg-green-50 border-green-500 hover:bg-green-100',
-    seat.status === 'occupied' && 'bg-red-200 border-red-800',
-    seat.status === 'reserved' && 'bg-amber-100 border-amber-600',
-    seat.status === 'locked' && 'bg-gray-200 border-gray-500'
+    "transition-all duration-200 border-2 transform hover:scale-105 cursor-pointer",
+    seat.status === 'available' && 'bg-green-50 border-green-500 hover:bg-green-100 hover:border-green-600 shadow-sm',
+    seat.status === 'occupied' && 'bg-red-200 border-red-800 hover:bg-red-300',
+    seat.status === 'reserved' && 'bg-amber-100 border-amber-600 hover:bg-amber-200',
+    seat.status === 'locked' && 'bg-gray-200 border-gray-500 cursor-not-allowed hover:scale-100'
   );
 
   const getSeatIcon = (seat) => {
-    if (seat.status === 'available') return <Sofa className="h-5 w-5 text-green-600" />;
-    if (seat.status === 'occupied') return <User className="h-5 w-5 text-red-600" />;
-    if (seat.status === 'reserved') return <Calendar className="h-5 w-5 text-amber-600" />;
-    if (seat.status === 'locked') return <Lock className="h-5 w-5 text-gray-600" />;
+    if (seat.status === 'available') return <Sofa className="h-4 w-4 text-green-600" />;
+    if (seat.status === 'occupied') return <User className="h-4 w-4 text-red-600" />;
+    if (seat.status === 'reserved') return <Calendar className="h-4 w-4 text-amber-600" />;
+    if (seat.status === 'locked') return <Lock className="h-4 w-4 text-gray-600" />;
     return null;
+  };
+
+  const getSeatFeatures = (seat) => {
+    if (!seat.features || seat.features.length === 0) return null;
+    
+    const featureIcons = {
+      power_outlet: '⚡',
+      table: '📋',
+      extra_space: '📦',
+      window: '🪟',
+      aisle: '🚶'
+    };
+    
+    return (
+      <div className="flex gap-1 justify-center mt-1">
+        {seat.features.slice(0, 2).map((feature, index) => (
+          <span key={index} className="text-xs" title={feature.replace('_', ' ')}>
+            {featureIcons[feature] || '⭐'}
+          </span>
+        ))}
+        {seat.features.length > 2 && (
+          <span className="text-xs" title={seat.features.slice(2).join(', ').replace(/_/g, ' ')}>
+            +{seat.features.length - 2}
+          </span>
+        )}
+      </div>
+    );
   };
 
   const renderSeats = () => {
@@ -221,28 +311,66 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
     return seatGrid.map((row, rowIndex) => (
       <div key={`row-${rowIndex}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${config.columns}, minmax(0, 1fr))` }}>
         {row.map((seat, colIndex) => {
-         if (!seat) return <div key={`empty-${rowIndex}-${colIndex}`} className="w-full aspect-square" />;
+          if (!seat) return <div key={`empty-${rowIndex}-${colIndex}`} className="w-full aspect-square" />;
+          
           return (
             <TooltipProvider key={seat.id}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`} onClick={() => handleSeatClick(seat)}>
+                  <button 
+                    className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`} 
+                    onClick={() => handleSeatClick(seat)}
+                    onMouseEnter={() => setHoveredSeat(seat.id)}
+                    onMouseLeave={() => setHoveredSeat(null)}
+                    disabled={seat.status === 'locked'}
+                  >
                     <div className="flex flex-col items-center justify-center h-full p-1">
                       {getSeatIcon(seat)}
                       <span className="text-xs mt-1 font-medium">{seat.seatNumber}</span>
-                      {seat.student && <span className="text-[10px] truncate max-w-full">{seat.student.firstName}</span>}
+                      {seat.student && (
+                        <span className="text-[10px] truncate max-w-full">
+                          {seat.student.firstName}
+                        </span>
+                      )}
+                      {getSeatFeatures(seat)}
                     </div>
+                    
+                    {/* Loading indicator */}
+                    {isLoading && selectedSeatForPreBook?._id === seat.id && (
+                      <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex items-center justify-center">
+                        <Loader2 className="h-4 w-4 text-white animate-spin" />
+                      </div>
+                    )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-[300px]">
                   <div className="text-xs space-y-1">
                     <p className="font-semibold">Seat #{seat.seatNumber}</p>
+                    <p className="capitalize">Type: {seat.type}</p>
+                    
                     {seat.status === 'occupied' && seat.student && (
                       <>
                         <p>Student: {seat.student.firstName} {seat.student.lastName}</p>
                         <p>Contact: {seat.student.phone}</p>
-                        {seat.booking?.shift && <p>Shift: {seat.booking.shift.name} ({seat.booking.shift.startTime}-{seat.booking.shift.endTime})</p>}
+                        {seat.booking?.shift && (
+                          <p>Shift: {seat.booking.shift.name} ({seat.booking.shift.startTime}-{seat.booking.shift.endTime})</p>
+                        )}
                       </>
+                    )}
+                    
+                    {seat.status === 'available' && (
+                      <p className="text-green-600">Click to book this seat</p>
+                    )}
+                    
+                    {seat.status === 'reserved' && (
+                      <p className="text-amber-600">Pre-booked - Click for details</p>
+                    )}
+                    
+                    {seat.features && seat.features.length > 0 && (
+                      <div className="mt-1 pt-1 border-t">
+                        <p className="font-medium">Features:</p>
+                        <p>{seat.features.map(f => f.replace('_', ' ')).join(', ')}</p>
+                      </div>
                     )}
                   </div>
                 </TooltipContent>
@@ -257,19 +385,29 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   return (
     <div className={className}>
       <Card className="p-4 mb-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="font-semibold">Seat Booking</h3>
-            <p className="text-sm text-muted-foreground">{currentDate}</p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex-1">
+            <h3 className="font-semibold text-lg">Seat Booking Dashboard</h3>
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Calendar className="h-3 w-3" />
+              {currentDate}
+            </p>
           </div>
-          <div>
+          <div className="w-full sm:w-auto">
             <Select value={selectedShift} onValueChange={setSelectedShift}>
-              <SelectTrigger className="w-[240px]">
+              <SelectTrigger className="w-full sm:w-[280px]">
                 <SelectValue placeholder="Select shift" />
               </SelectTrigger>
               <SelectContent>
                 {shifts.map(shift => (
-                  <SelectItem key={shift._id} value={shift._id}>{shift.name} ({shift.startTime}-{shift.endTime})</SelectItem>
+                  <SelectItem key={shift._id} value={shift._id}>
+                    <div className="flex items-center justify-between w-full">
+                      <span>{shift.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({shift.startTime}-{shift.endTime}) - ₹{shift.fee}
+                      </span>
+                    </div>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -277,25 +415,47 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         </div>
       </Card>
 
-      <div className="space-y-2">{renderSeats()}</div>
+      <div className="space-y-2 p-2 bg-muted/20 rounded-lg">
+        {renderSeats()}
+      </div>
 
-      <div className="mt-6 flex items-center justify-center gap-4 flex-wrap">
-        {['available', 'occupied', 'reserved', 'locked'].map(status => (
-          <div key={status} className="flex items-center gap-1">
-            <div className={`w-4 h-4 rounded-sm border-2 ${
-              status === 'available' ? 'bg-green-50 border-green-500' :
-              status === 'occupied' ? 'bg-red-200 border-red-800' :
-              status === 'reserved' ? 'bg-amber-100 border-amber-600' :
-              'bg-gray-200 border-gray-500'
-            }`} />
-            <span className="text-xs capitalize">{status}</span>
+      <div className="mt-6 flex items-center justify-center gap-6 flex-wrap">
+        {[
+          { status: 'available', label: 'Available', color: 'bg-green-50 border-green-500' },
+          { status: 'occupied', label: 'Occupied', color: 'bg-red-200 border-red-800' },
+          { status: 'reserved', label: 'Reserved', color: 'bg-amber-100 border-amber-600' },
+          { status: 'locked', label: 'Maintenance', color: 'bg-gray-200 border-gray-500' }
+        ].map(({ status, label, color }) => (
+          <div key={status} className="flex items-center gap-2">
+            <div className={`w-4 h-4 rounded-sm border-2 ${color}`} />
+            <span className="text-sm capitalize">{label}</span>
           </div>
         ))}
       </div>
 
-      <StudentInfoDialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen} student={selectedStudent} />
-      <PreBookedSeatDialog open={isPreBookDialogOpen} onOpenChange={setIsPreBookDialogOpen} onConfirm={handlePreBookConfirm} seatNumber={selectedSeatForPreBook?.seatNumber} />
-      <AvailableSeatDialog open={isAvailableDialogOpen} onOpenChange={setIsAvailableDialogOpen} onConfirm={onConfirm} seatNumber={selectedAvailableSeat?.seatNumber} shifts={shifts} seatId={selectedAvailableSeat?._id} />
+      <StudentInfoDialog 
+        open={isStudentDialogOpen} 
+        onOpenChange={setIsStudentDialogOpen} 
+        student={selectedStudent} 
+      />
+      
+      <PreBookedSeatDialog 
+        open={isPreBookDialogOpen} 
+        onOpenChange={setIsPreBookDialogOpen} 
+        onConfirm={handlePreBookConfirm} 
+        seatNumber={selectedSeatForPreBook?.seatNumber} 
+        isLoading={isLoading}
+      />
+      
+      <AvailableSeatDialog 
+        open={isAvailableDialogOpen} 
+        onOpenChange={setIsAvailableDialogOpen} 
+        onConfirm={onConfirm} 
+        seatNumber={selectedAvailableSeat?.seatNumber} 
+        shifts={shifts} 
+        seatId={selectedAvailableSeat?._id}
+        propertyId={seats[0]?.propertyId} // Pass property ID to dialog
+      />
     </div>
   );
 };

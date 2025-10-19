@@ -1,21 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const propertyController = require('../controllers/propertyController');
 const { protect, authorize } = require('../middleware/auth');
+const {
+  getProperties,
+  getPropertyById,
+  createProperty,
+  updateProperty,
+  deleteProperty
+} = require('../controllers/propertyController');
 
-// GET /smlekha/properties
-router.get('/', protect, propertyController.getProperties);
+// All routes are protected
+router.use(protect);
 
-// GET /smlekha/properties/:id
-router.get('/:id', propertyController.getPropertyById);
-
-// POST /smlekha/properties (protected route)
-router.post('/', protect, propertyController.createProperty);
-
-// PUT /smlekha/properties/:id (protected route)
-router.put('/:id', protect, propertyController.updateProperty);
-
-// DELETE /smlekha/properties/:id (protected route)
-router.delete('/:id', protect, propertyController.deleteProperty);
+router.get('/', getProperties);
+router.get('/:id', getPropertyById);
+router.post('/', createProperty);
+router.put('/:id', updateProperty);
+router.delete('/:id', deleteProperty);
 
 module.exports = router;

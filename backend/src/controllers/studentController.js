@@ -1,136 +1,195 @@
 const Student = require('../models/Student');
 const Seat = require('../models/Seat');
 const Shift = require('../models/Shift');
-const Booking = require('../models/Booking');
 const Payment = require('../models/Payment');
-const { ApiError } = require('../utils/ApiError');
+const ApiError = require('../utils/ApiError'); // Fixed import
 const { asyncHandler } = require('../utils/asyncHandler');
 
 const getStudentsByProperty = asyncHandler(async (req, res) => {
   const { propertyId } = req.params;
   if (!propertyId) throw new ApiError(400, 'Property ID is required');
 
-  // Step 1: Get students with populated currentSeat & nested population
   const students = await Student.find()
     .populate({
-      path: 'currentSeat',
+      path: 'currentAssignments.seat',
       match: { propertyId },
-      select: 'seatNumber propertyId currentStudents',
-      populate: [
-        {
-          path: 'currentStudents.student',
-          select: '_id firstName lastName email phone'
-        },
-        {
-          path: 'currentStudents.booking',
-        },
-        {
-          path: 'currentStudents.shift'
-        }
-      ]
+      select: 'seatNumber row column propertyId'
+    })
+    .populate({
+      path: 'currentAssignments.shift',
+      select: 'name startTime endTime fee'
+    })
+    .populate({
+      path: 'currentAssignments.payment',
+      select: 'amount status paymentDate'
     })
     .sort({ createdAt: -1 });
 
-  // Step 2: Filter only students whose currentSeat belongs to this property
-  const filteredStudents = students.filter(s => s.currentSeat && s.currentSeat.propertyId.toString() === propertyId);
+  // Filter students with assignments in this property
+  const filteredStudents = students.filter(student => 
+    student.currentAssignments.some(assignment => 
+      assignment.seat && assignment.seat.propertyId.toString() === propertyId
+    )
+  );
 
-  // Step 3: Enrich with shift, booking, payment
-  const enriched = await Promise.all(filteredStudents.map(async (student) => {
-    const currentSeat = student.currentSeat;
-    const studentId = student._id.toString();
-
-    // Find the matching currentStudent record
-    const matchedEntry = currentSeat?.currentStudents.find(cs =>
-      cs.student && cs.student._id.toString() === studentId
-    );
-
-    if (!matchedEntry) {
-      return {
-        ...student.toObject(),
-        shift: null,
-        booking: null,
-        payment: null
-      };
-    }
-
-    const booking = matchedEntry.booking || await Booking.findById(matchedEntry.booking).lean();
-    const shift = matchedEntry.shift || await Shift.findById(matchedEntry.shift).lean();
-
-    // Find one payment associated with the booking
-    const payment = await Payment.findOne({ booking: booking?._id }).lean();
-
-    return {
-      ...student.toObject(),
-      shift,
-      booking,
-      payment
-    };
-  }));
-
-  res.json({ students: enriched });
+  res.json({ students: filteredStudents });
 });
 
 const getStudentById = asyncHandler(async (req, res) => {
   const student = await Student.findById(req.params.id)
     .populate({
-      path: 'currentSeat',
+      path: 'currentAssignments.seat',
       populate: {
-        path: 'currentStudents',
-        populate: [
-          {
-            path: 'student',
-            select: '_id firstName lastName email phone'
-          },
-          {
-            path: 'booking',
-            populate: {
-              path: 'documents'
-            }
-          },
-          {
-            path: 'shift'
-          }
-        ]
+        path: 'propertyId',
+        select: 'name address'
       }
+    })
+    .populate({
+      path: 'currentAssignments.shift'
+    })
+    .populate({
+      path: 'currentAssignments.payment'
+    })
+    .populate({
+      path: 'assignmentHistory.seat',
+      populate: {
+        path: 'propertyId',
+        select: 'name address'
+      }
+    })
+    .populate({
+      path: 'assignmentHistory.shift'
+    })
+    .populate({
+      path: 'assignmentHistory.payment'
     });
 
   if (!student) throw new ApiError(404, 'Student not found');
 
-  // Find the student's booking and shift from currentSeat
-  const studentBooking = student.currentSeat?.currentStudents?.find(
-    cs => cs.student?._id.toString() === student._id.toString()
-  );
-
-  const payment = await Payment.findOne({ booking: studentBooking?.booking?._id }).lean();
-
-  res.json({
-    ...student.toObject(),
-    booking: studentBooking?.booking,
-    shift: studentBooking?.shift,
-    payment
-  });
+  res.json(student);
 });
 
 const getStudentStatsByProperty = asyncHandler(async (req, res) => {
   const { propertyId } = req.query;
   if (!propertyId) throw new ApiError(400, 'Property ID is required');
 
-  const students = await Student.find({ status: { $in: ['active', 'inactive'] } })
-    .populate('currentSeat');
+  const students = await Student.find({ status: 'active' })
+    .populate('currentAssignments.seat');
 
-  const filtered = students.filter(s => s.currentSeat?.propertyId?.toString() === propertyId);
+  const filtered = students.filter(student => 
+    student.currentAssignments.some(assignment => 
+      assignment.seat && assignment.seat.propertyId.toString() === propertyId
+    )
+  );
+
   const stats = {
     totalStudents: filtered.length,
     activeStudents: filtered.filter(s => s.status === 'active').length,
-    inactiveStudents: filtered.filter(s => s.status === 'inactive').length
+    studentsWithAssignments: filtered.filter(s => s.currentAssignments.length > 0).length
   };
+
   res.json(stats);
 });
 
 const createStudent = asyncHandler(async (req, res) => {
-  const student = new Student(req.body);
-  await student.save();
-  res.status(201).json(student);
+  try {
+    console.log('=== CREATE STUDENT REQUEST START ===');
+    console.log('Request headers:', req.headers);
+    console.log('Request Content-Type:', req.get('Content-Type'));
+    console.log('Request body:', req.body);
+    console.log('Request files:', req.files);
+    console.log('Files keys:', req.files ? Object.keys(req.files) : 'No files');
+    
+    let studentData = {};
+    
+    // Check if the request contains files (FormData)
+    if (req.files && Object.keys(req.files).length > 0) {
+      console.log('Processing FormData request');
+      
+      // Log all fields from req.body
+      console.log('Available fields in req.body:', Object.keys(req.body));
+      console.log('firstName from req.body:', req.body.firstName);
+      console.log('email from req.body:', req.body.email);
+      console.log('phone from req.body:', req.body.phone);
+      
+      // If it's FormData, parse the text fields from req.body
+      studentData = {
+        firstName: req.body.firstName,
+        lastName: req.body.lastName || '',
+        email: req.body.email,
+        phone: req.body.phone,
+        institution: req.body.institution || '',
+        course: req.body.course || '',
+        aadharNumber: req.body.aadharNumber || '',
+        status: 'active',
+        documents: req.files.map(file => {
+          console.log('Processing file:', file.fieldname, file.originalname);
+          return {
+            type: file.fieldname === 'profilePhoto' ? 'profile_photo' : 
+                  file.fieldname === 'identityProof' ? 'identity_proof' : 'other',
+            url: `/uploads/${file.filename}`,
+            originalName: file.originalname
+          };
+        })
+      };
+    } else {
+      console.log('Processing JSON request');
+      // If it's JSON data, use req.body directly
+      studentData = {
+        ...req.body,
+        status: req.body.status || 'active',
+        documents: []
+      };
+    }
+
+    console.log('Processed studentData:', studentData);
+
+    // Validate required fields
+    if (!studentData.firstName) {
+      console.error('Missing firstName');
+      throw new ApiError(400, 'First name is required');
+    }
+    if (!studentData.email) {
+      console.error('Missing email');
+      throw new ApiError(400, 'Email is required');
+    }
+    if (!studentData.phone) {
+      console.error('Missing phone');
+      throw new ApiError(400, 'Phone is required');
+    }
+
+    console.log('All required fields present');
+
+    // Check if student with same email already exists
+    const existingStudent = await Student.findOne({ email: studentData.email });
+    if (existingStudent) {
+      console.error('Student already exists with email:', studentData.email);
+      throw new ApiError(400, 'Student with this email already exists');
+    }
+
+    console.log('Creating new student in database...');
+    const student = new Student(studentData);
+    await student.save();
+    console.log('Student created successfully with ID:', student._id);
+    
+    const populatedStudent = await Student.findById(student._id)
+      .populate('currentAssignments.seat')
+      .populate('currentAssignments.shift');
+
+    console.log('=== CREATE STUDENT REQUEST END ===');
+
+    res.status(201).json({
+      success: true,
+      data: populatedStudent
+    });
+
+  } catch (error) {
+    console.error('Create student error:', error);
+    if (error.code === 11000) {
+      throw new ApiError(400, 'Student with this email already exists');
+    }
+    throw error;
+  }
 });
 
 const updateStudent = asyncHandler(async (req, res) => {
@@ -138,15 +197,57 @@ const updateStudent = asyncHandler(async (req, res) => {
     req.params.id, 
     req.body, 
     { new: true, runValidators: true }
-  );
+  )
+  .populate('currentAssignments.seat')
+  .populate('currentAssignments.shift');
+
   if (!student) throw new ApiError(404, 'Student not found');
   res.json(student);
 });
 
 const deleteStudent = asyncHandler(async (req, res) => {
-  const student = await Student.findByIdAndDelete(req.params.id);
+  const student = await Student.findById(req.params.id);
+  
   if (!student) throw new ApiError(404, 'Student not found');
+
+  // Check if student has active assignments
+  const activeAssignments = student.currentAssignments.filter(a => a.status === 'active');
+  if (activeAssignments.length > 0) {
+    throw new ApiError(400, 'Cannot delete student with active assignments');
+  }
+
+  await Student.findByIdAndDelete(req.params.id);
   res.json({ message: 'Student deleted successfully' });
+});
+
+// Get student's assignment history
+const getStudentAssignmentHistory = asyncHandler(async (req, res) => {
+  const student = await Student.findById(req.params.id)
+    .populate('assignmentHistory.seat')
+    .populate('assignmentHistory.shift')
+    .populate('assignmentHistory.payment');
+
+  if (!student) throw new ApiError(404, 'Student not found');
+
+  res.json({
+    success: true,
+    data: student.assignmentHistory
+  });
+});
+
+// Get student's current assignments
+const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
+  const student = await Student.findById(req.params.id)
+    .populate('currentAssignments.seat')
+    .populate('currentAssignments.shift')
+    .populate('currentAssignments.payment');
+
+  if (!student) throw new ApiError(404, 'Student not found');
+
+  res.json({
+    success: true,
+    data: student.currentAssignments
+  });
 });
 
 module.exports = {
@@ -155,5 +256,7 @@ module.exports = {
   createStudent,
   updateStudent,
   deleteStudent,
-  getStudentStatsByProperty
+  getStudentStatsByProperty,
+  getStudentAssignmentHistory,
+  getStudentCurrentAssignments
 };

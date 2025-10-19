@@ -1,171 +1,120 @@
-// Payments API Service
-
-import { toast } from "sonner";
+import axios from './axios';
+import { API_CONFIG } from './config';
+import { toast } from 'sonner';
 import PropTypes from 'prop-types';
-import api from './axios';
 
-const PAYMENTS_ENDPOINT = '/smlekha/payments';
+const API_BASE_URL = `${API_CONFIG.baseURL}/payments`;
 
-// Get all payments with optional filtering
-export const getPayments = async (params = {}) => {
-  try {
-    const response = await api.get(PAYMENTS_ENDPOINT, { params });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Get payment by ID
-export const getPaymentById = async (id) => {
-  try {
-    const response = await api.get(`${PAYMENTS_ENDPOINT}/${id}`);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Create new payment
-export const createPayment = async (paymentData) => {
-  try {
-    const response = await api.post(PAYMENTS_ENDPOINT, paymentData);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Update payment
-export const updatePayment = async (id, paymentData) => {
-  try {
-    const response = await api.put(`${PAYMENTS_ENDPOINT}/${id}`, paymentData);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Delete payment
-export const deletePayment = async (id) => {
-  try {
-    const response = await api.delete(`${PAYMENTS_ENDPOINT}/${id}`);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Get payment statistics
-export const getPaymentStats = async (params = {}) => {
-  try {
-    const response = await api.get(`${PAYMENTS_ENDPOINT}/stats`, { params });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Get payment history for a student
-export const getStudentPayments = async (studentId, params = {}) => {
-  try {
-    const response = await api.get(`${PAYMENTS_ENDPOINT}/student/${studentId}`, { params });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Get payment history for a seat
-export const getSeatPayments = async (seatId, params = {}) => {
-  try {
-    const response = await api.get(`${PAYMENTS_ENDPOINT}/seat/${seatId}`, { params });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Verify payment
-export const verifyPayment = async (paymentId) => {
-  try {
-    const response = await api.post(`${PAYMENTS_ENDPOINT}/${paymentId}/verify`);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// Refund payment
-export const refundPayment = async (paymentId, refundData) => {
-  try {
-    const response = await api.post(`${PAYMENTS_ENDPOINT}/${paymentId}/refund`, refundData);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// PropTypes validation
 export const paymentPropTypes = PropTypes.shape({
-  id: PropTypes.string.isRequired,
-  studentId: PropTypes.string.isRequired,
-  studentName: PropTypes.string,
+  _id: PropTypes.string.isRequired,
+  student: PropTypes.string.isRequired,
+  seat: PropTypes.string.isRequired,
+  shift: PropTypes.string.isRequired,
+  assignment: PropTypes.string.isRequired,
   amount: PropTypes.number.isRequired,
-  type: PropTypes.oneOf(["seat-reservation", "fine", "membership", "other"]).isRequired,
-  status: PropTypes.oneOf(["completed", "pending", "failed", "refunded"]).isRequired,
-  date: PropTypes.string.isRequired,
-  reference: PropTypes.string,
-  description: PropTypes.string,
+  status: PropTypes.oneOf(['pending', 'completed', 'failed', 'refunded']).isRequired,
+  paymentMethod: PropTypes.oneOf(['cash', 'card', 'online', 'bank_transfer']).isRequired,
+  transactionId: PropTypes.string,
+  paymentDate: PropTypes.string,
+  dueDate: PropTypes.string,
+  period: PropTypes.shape({
+    start: PropTypes.string.isRequired,
+    end: PropTypes.string.isRequired
+  }),
+  createdBy: PropTypes.string,
+  notes: PropTypes.string
 });
 
-export const fetchPayments = async () => {
+export const getPayments = async (params = {}) => {
   try {
-    const response = await fetch('/smlekha/payments');
-    
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('API endpoint not available');
-    }
-    
-    return await response.json();
+    const response = await axios.get(API_BASE_URL, { params });
+    return response.data;
   } catch (error) {
-    console.error('Error fetching payments:', error);
-    return [];
+    toast.error('Failed to fetch payments');
+    throw error;
   }
 };
 
-export const fetchDuePayments = async () => {
+export const getPaymentById = async (paymentId) => {
   try {
-    const response = await fetch('/smlekha/payments/due');
-    
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('API endpoint not available');
-    }
-    
-    return await response.json();
+    const response = await axios.get(`${API_BASE_URL}/${paymentId}`);
+    return response.data;
   } catch (error) {
-    console.error('Error fetching due payments:', error);
-    return [];
+    toast.error('Failed to fetch payment');
+    throw error;
   }
 };
 
-export const fetchPaymentStats = async () => {
+export const createPayment = async (paymentData) => {
   try {
-    const response = await fetch('/smlekha/payments/stats');
-    
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('API endpoint not available');
-    }
-    
-    return await response.json();
+    const response = await axios.post(API_BASE_URL, paymentData);
+    toast.success('Payment created successfully');
+    return response.data;
   } catch (error) {
-    console.error('Error fetching payment stats:', error);
-    return {
-      total: 0,
-      pending: 0,
-      completed: 0,
-      failed: 0,
-      refunded: 0,
-    };
+    toast.error('Failed to create payment');
+    throw error;
   }
+};
+
+export const updatePayment = async (paymentId, paymentData) => {
+  try {
+    const response = await axios.put(`${API_BASE_URL}/${paymentId}`, paymentData);
+    toast.success('Payment updated successfully');
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to update payment');
+    throw error;
+  }
+};
+
+export const completePayment = async (paymentId, transactionData = {}) => {
+  try {
+    const response = await axios.put(`${API_BASE_URL}/${paymentId}/complete`, transactionData);
+    toast.success('Payment completed successfully');
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to complete payment');
+    throw error;
+  }
+};
+
+export const getPaymentStats = async (params = {}) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/stats/payment-stats`, { params });
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to fetch payment statistics');
+    throw error;
+  }
+};
+
+export const getStudentPayments = async (studentId, params = {}) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/student/${studentId}`, { params });
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to fetch student payments');
+    throw error;
+  }
+};
+
+export const getOverduePayments = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/overdue`);
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to fetch overdue payments');
+    throw error;
+  }
+};
+
+export default {
+  getPayments,
+  getPaymentById,
+  createPayment,
+  updatePayment,
+  completePayment,
+  getPaymentStats,
+  getStudentPayments,
+  getOverduePayments
 };

@@ -8,11 +8,11 @@ const Shift = require('../models/Shift');
 exports.getShifts = asyncHandler(async (req, res) => {
   const { property } = req.query;
 
-  if (!property) {
-    throw new ApiError(400, 'Property ID is required');
-  }
-
-  const shifts = await Shift.find({ property }).sort('startTime');
+  // If no property ID provided, return all shifts (or empty array)
+  // You can modify this based on your requirements
+  const query = property ? { property } : {};
+  
+  const shifts = await Shift.find(query).sort('startTime');
 
   res.status(200).json({
     success: true,
@@ -27,7 +27,7 @@ exports.createShift = asyncHandler(async (req, res) => {
   const { name, startTime, endTime, property, fee } = req.body;
   
   if (!name || !startTime || !endTime || !property || !fee) {
-    throw new ApiError(400, 'Please provide name, start time, end time');
+    throw new ApiError(400, 'Please provide name, start time, end time, property, and fee');
   }
 
   const shift = await Shift.create({ 
@@ -35,7 +35,7 @@ exports.createShift = asyncHandler(async (req, res) => {
     startTime, 
     endTime,
     fee,
-    property // Automatically included from localStorage
+    property
   });
   
   res.status(201).json({
@@ -79,7 +79,7 @@ exports.deleteShift = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Shift not found');
   }
 
-  await Shift.findByIdAndDelete(req.params.id); // use model-level deletion
+  await Shift.findByIdAndDelete(req.params.id);
 
   res.status(200).json({
     success: true,

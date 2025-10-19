@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
-const { validateId, validateDateRange } = require('../middleware/validation');
-const { saveLayout, getLayout } = require ('../controllers/layoutController');
+const {
+  saveLayout,
+  getLayout
+} = require('../controllers/layoutController');
 
-// Save/update layout
+// All routes are protected
+router.use(protect);
+
 router.post('/:propertyId', saveLayout);
-
-// Get layout by property
 router.get('/:propertyId', getLayout);
 
 module.exports = router;
