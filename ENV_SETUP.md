@@ -55,10 +55,10 @@ CORS_ORIGIN=http://localhost:5173
 
 ```
 # Required
-VITE_API_URL=http://92.168.1.6:5000/smlekha
+VITE_API_URL=http://192.168.1.6:5000/smlekha
 
 # Optional with defaults
-VITE_WS_URL=ws://92.168.1.6:5000
+VITE_WS_URL=ws://192.168.1.6:5000
 VITE_ENABLE_PAYMENTS=true
 VITE_ENABLE_NOTIFICATIONS=true
 VITE_ENABLE_REPORTS=true
