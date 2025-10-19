@@ -120,6 +120,18 @@ export const getStudentAssignmentHistory = async (studentId) => {
   }
 };
 
+export const searchStudentsForAssignment = async (propertyId, searchQuery = '') => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/property/${propertyId}/search`, {
+      params: { search: searchQuery }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error searching students:', error);
+    throw error;
+  }
+};
+
 export default {
   getStudentsByProperty,
   getStudentStatsByProperty,
@@ -128,5 +140,6 @@ export default {
   updateStudent,
   deleteStudent,
   getStudentCurrentAssignments,
-  getStudentAssignmentHistory
+  getStudentAssignmentHistory,
+  searchStudentsForAssignment
 };

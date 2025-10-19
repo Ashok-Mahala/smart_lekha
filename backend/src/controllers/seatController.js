@@ -399,6 +399,53 @@ const getSeatAssignmentHistory = asyncHandler(async (req, res) => {
   });
 });
 
+// controllers/seatController.js - Add these functions
+const getSeatDetailedHistory = asyncHandler(async (req, res) => {
+  const { seatId } = req.params;
+  
+  const seat = await Seat.findById(seatId);
+  if (!seat) {
+    throw new ApiError(404, 'Seat not found');
+  }
+
+  const detailedHistory = await seat.getDetailedHistory();
+  
+  res.json({
+    success: true,
+    data: detailedHistory
+  });
+});
+
+const deassignStudent = asyncHandler(async (req, res) => {
+  const { seatId } = req.params;
+  const { studentId, shiftId, reason } = req.body;
+
+  const seat = await Seat.findById(seatId);
+  if (!seat) {
+    throw new ApiError(404, 'Seat not found');
+  }
+
+  const student = await Student.findById(studentId);
+  if (!student) {
+    throw new ApiError(404, 'Student not found');
+  }
+
+  // Release from both seat and student
+  await seat.releaseStudent(studentId, shiftId);
+  await student.releaseFromSeat(seatId, shiftId);
+
+  // Log the deassignment reason if provided
+  if (reason) {
+    console.log(`Student ${studentId} deassigned from seat ${seatId}. Reason: ${reason}`);
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Student deassigned successfully'
+  });
+});
+
+
 module.exports = {
   getSeatsByProperty,
   assignStudentToSeat,
@@ -411,5 +458,7 @@ module.exports = {
   deleteSeat,
   bulkUpdateSeats,
   bulkDeleteSeats,
-  getSeatAssignmentHistory
+  getSeatAssignmentHistory,
+  getSeatDetailedHistory,
+  deassignStudent
 };

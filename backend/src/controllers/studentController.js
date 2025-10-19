@@ -250,6 +250,50 @@ const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
   });
 });
 
+const searchStudentsForAssignment = asyncHandler(async (req, res) => {
+  const { propertyId } = req.params;
+  const { search = '' } = req.query;
+  
+  if (!propertyId) throw new ApiError(400, 'Property ID is required');
+
+  // Build search query - remove any property-based filtering
+  const searchQuery = {
+    status: 'active'
+  };
+
+  // Only add search conditions if search term is provided
+  if (search.trim()) {
+    searchQuery.$or = [
+      { firstName: { $regex: search, $options: 'i' } },
+      { lastName: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } },
+      { phone: { $regex: search, $options: 'i' } }
+    ];
+  }
+
+  const students = await Student.find(searchQuery)
+    .populate({
+      path: 'currentAssignments.seat',
+      select: 'seatNumber row column propertyId'
+    })
+    .populate({
+      path: 'currentAssignments.shift',
+      select: 'name startTime endTime fee'
+    })
+    .populate({
+      path: 'currentAssignments.payment',
+      select: 'amount status paymentDate'
+    })
+    .sort({ firstName: 1, lastName: 1 })
+    .limit(50);
+
+  // Return the same structure as getStudentsByProperty
+  res.json({ 
+    students: students,
+    count: students.length 
+  });
+});
+
 module.exports = {
   getStudentsByProperty,
   getStudentById,
@@ -258,5 +302,6 @@ module.exports = {
   deleteStudent,
   getStudentStatsByProperty,
   getStudentAssignmentHistory,
-  getStudentCurrentAssignments
+  getStudentCurrentAssignments,
+  searchStudentsForAssignment
 };

@@ -229,4 +229,49 @@ seatSchema.methods.reactivate = function() {
   return this.save();
 };
 
+seatSchema.methods.getAssignmentHistory = async function() {
+  await this.populate([
+    {
+      path: 'assignmentHistory.student',
+      select: 'firstName lastName email phone'
+    },
+    {
+      path: 'assignmentHistory.shift',
+      select: 'name startTime endTime fee'
+    },
+    {
+      path: 'assignmentHistory.payment',
+      select: 'amount status paymentDate paymentMethod'
+    },
+    {
+      path: 'assignmentHistory.createdBy',
+      select: 'name email'
+    }
+  ]);
+  
+  return this.assignmentHistory.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+};
+
+seatSchema.methods.getDetailedHistory = async function() {
+  const history = await this.getAssignmentHistory();
+  
+  return history.map(assignment => ({
+    student: assignment.student,
+    shift: assignment.shift,
+    period: {
+      start: assignment.startDate,
+      end: assignment.endDate || 'Present'
+    },
+    duration: assignment.endDate ? 
+      Math.ceil((new Date(assignment.endDate) - new Date(assignment.startDate)) / (1000 * 60 * 60 * 24)) + ' days' :
+      'Ongoing',
+    status: assignment.status,
+    payment: assignment.payment,
+    feeDetails: assignment.feeDetails,
+    documents: assignment.documents,
+    createdBy: assignment.createdBy,
+    createdAt: assignment.createdAt
+  }));
+};
+
 module.exports = mongoose.model('Seat', seatSchema);

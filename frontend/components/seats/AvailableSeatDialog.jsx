@@ -26,7 +26,7 @@ import {
 } from "@/api/seats";
 import { 
   createStudent,
-  getStudentsByProperty 
+  searchStudentsForAssignment
 } from "@/api/students";
 
 const AvailableSeatDialog = ({ open, onOpenChange, seatNumber, seatId, shifts = [], propertyId, onConfirm }) => {
@@ -74,7 +74,8 @@ const AvailableSeatDialog = ({ open, onOpenChange, seatNumber, seatId, shifts = 
 
   const loadExistingStudents = async () => {
     try {
-      const response = await getStudentsByProperty(propertyId);
+      // Use the new search function or updated getStudentsByProperty
+      const response = await searchStudentsForAssignment(propertyId, '');
       setExistingStudents(response.students || []);
     } catch (error) {
       console.error('Error loading students:', error);

@@ -12,7 +12,8 @@ const {
   deleteStudent,
   getStudentStatsByProperty,
   getStudentAssignmentHistory,
-  getStudentCurrentAssignments
+  getStudentCurrentAssignments,
+  searchStudentsForAssignment
 } = require('../controllers/studentController');
 
 // Create uploads directory if it doesn't exist
@@ -62,6 +63,7 @@ router.get('/:id', getStudentById);
 router.post('/', upload.any(), createStudent); // Add multer middleware here
 router.put('/:id', updateStudent);
 router.delete('/:id', deleteStudent);
+router.get('/property/:propertyId/search', searchStudentsForAssignment);
 
 // Assignment history
 router.get('/:id/assignments/current', getStudentCurrentAssignments);

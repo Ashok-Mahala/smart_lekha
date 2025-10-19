@@ -180,6 +180,29 @@ export const getSeatAssignmentHistory = async (seatId) => {
   }
 };
 
+export const getSeatDetailedHistory = async (seatId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/${seatId}/history/detailed`);
+    return response.data;
+  } catch (error) {
+    toast.error('Failed to fetch seat detailed history');
+    throw error;
+  }
+};
+
+export const deassignStudent = async (seatId, deassignData) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/${seatId}/deassign`, deassignData);
+    toast.success('Student deassigned successfully');
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || 'Failed to deassign student';
+    toast.error(errorMessage);
+    throw error;
+  }
+};
+
+
 export default {
   getSeatsByProperty,
   assignStudentToSeat,
@@ -192,5 +215,7 @@ export default {
   getSeatStats,
   updateSeatStatus,
   deleteSeat,
-  getSeatAssignmentHistory
+  getSeatAssignmentHistory,
+  getSeatDetailedHistory,
+  deassignStudent
 };

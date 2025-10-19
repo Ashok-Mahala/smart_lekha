@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
-import { Sofa, User, Lock, Calendar, Loader2, Clock, Info } from "lucide-react";
+import { Sofa, User, Lock, Calendar, Loader2, Clock, Info, History } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import StudentInfoDialog from './StudentInfoDialog';
 import PreBookedSeatDialog from './PreBookedSeatDialog';
 import AvailableSeatDialog from './AvailableSeatDialog';
+import SeatHistoryDialog from './SeatHistoryDialog'; // Import the new dialog
 import PropTypes from 'prop-types';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,7 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         column: Number(seat.column),
         status: seat.status || 'available',
         currentStudents: seat.currentStudents || [],
-        currentAssignments: seat.currentAssignments || [], // Added for new structure
+        currentAssignments: seat.currentAssignments || [],
         booking: seat.booking || null,
         bookingDate: seat.bookingDate || seat.updatedAt,
         propertyId: seat.propertyId,
@@ -71,9 +72,11 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   const [shifts, setShifts] = useState([]);
   const [selectedShift, setSelectedShift] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedSeat, setSelectedSeat] = useState(null); // Add this for student info and history
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [isPreBookDialogOpen, setIsPreBookDialogOpen] = useState(false);
   const [isAvailableDialogOpen, setIsAvailableDialogOpen] = useState(false);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false); // Add history dialog state
   const [selectedSeatForPreBook, setSelectedSeatForPreBook] = useState(null);
   const [selectedAvailableSeat, setSelectedAvailableSeat] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -87,10 +90,9 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   useEffect(() => {
     const loadShifts = async () => {
       try {
-        // Get property ID from localStorage - it's stored as a simple string
         const propertyId = localStorage.getItem('selectedProperty');
         
-        console.log('Property ID from localStorage:', propertyId); // Debug log
+        console.log('Property ID from localStorage:', propertyId);
         
         if (!propertyId) {
           console.warn('No property selected in localStorage');
@@ -101,12 +103,11 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
           });
           return;
         }
-  
-        // No need to parse JSON - it's already a string ID
+
         console.log('Loading shifts for property ID:', propertyId);
         
         const response = await getShifts(propertyId);
-        console.log('Shifts API response:', response); // Debug log
+        console.log('Shifts API response:', response);
         
         if (response.success && response.data) {
           setShifts(response.data);
@@ -138,7 +139,6 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   };
 
   const getSeatStatus = (seat, currentShift) => {
-    // Use currentAssignments instead of currentStudents for new structure
     const assignments = seat.currentAssignments || seat.currentStudents || [];
     
     const bookingInfo = assignments.find(cs => {
@@ -155,7 +155,8 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         status: 'occupied',
         isPrebookOnly: true,
         student: bookingInfo.student,
-        booking: { shift: bookingInfo.shift }
+        booking: { shift: bookingInfo.shift },
+        currentShift: bookingInfo.shift
       };
     }
 
@@ -171,7 +172,9 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         status: 'occupied',
         isPrebookOnly: false,
         student: currentShiftBooking.student,
-        booking: { shift: currentShiftBooking.shift }
+        booking: { shift: currentShiftBooking.shift },
+        currentShift: currentShiftBooking.shift,
+        feeDetails: currentShiftBooking.feeDetails
       };
     }
 
@@ -208,12 +211,24 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
       setIsPreBookDialogOpen(true);
     } else if (seat.status === 'occupied') {
       setSelectedStudent(seat.student);
+      setSelectedSeat(seat); // Store the seat info for student dialog
       setIsStudentDialogOpen(true);
     } else if (seat.status === 'available') {
       setSelectedAvailableSeat(seat);
       setIsAvailableDialogOpen(true);
     }
     onSeatSelect?.(seat.id);
+  };
+
+  const handleViewHistory = (seat, e) => {
+    e.stopPropagation(); // Prevent triggering seat click
+    setSelectedSeat(seat);
+    setIsHistoryDialogOpen(true);
+  };
+
+  const handleDeassignStudent = (studentId, seatId) => {
+    // Refresh the seat data after deassignment
+    onConfirm?.();
   };
 
   const handlePreBookConfirm = async (bookingDetails) => {
@@ -242,7 +257,6 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         description: `Seat ${selectedSeatForPreBook.seatNumber} pre-booked successfully.` 
       });
       
-      // Refresh seats data
       onConfirm?.();
     } catch (error) {
       toast({ 
@@ -317,31 +331,44 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
             <TooltipProvider key={seat.id}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button 
-                    className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`} 
-                    onClick={() => handleSeatClick(seat)}
-                    onMouseEnter={() => setHoveredSeat(seat.id)}
-                    onMouseLeave={() => setHoveredSeat(null)}
-                    disabled={seat.status === 'locked'}
-                  >
-                    <div className="flex flex-col items-center justify-center h-full p-1">
-                      {getSeatIcon(seat)}
-                      <span className="text-xs mt-1 font-medium">{seat.seatNumber}</span>
-                      {seat.student && (
-                        <span className="text-[10px] truncate max-w-full">
-                          {seat.student.firstName}
-                        </span>
-                      )}
-                      {getSeatFeatures(seat)}
-                    </div>
-                    
-                    {/* Loading indicator */}
-                    {isLoading && selectedSeatForPreBook?._id === seat.id && (
-                      <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex items-center justify-center">
-                        <Loader2 className="h-4 w-4 text-white animate-spin" />
+                  <div className="relative">
+                    <button 
+                      className={`w-full aspect-square rounded-md relative group ${getSeatColor(seat)}`} 
+                      onClick={() => handleSeatClick(seat)}
+                      onMouseEnter={() => setHoveredSeat(seat.id)}
+                      onMouseLeave={() => setHoveredSeat(null)}
+                      disabled={seat.status === 'locked'}
+                    >
+                      <div className="flex flex-col items-center justify-center h-full p-1">
+                        {getSeatIcon(seat)}
+                        <span className="text-xs mt-1 font-medium">{seat.seatNumber}</span>
+                        {seat.student && (
+                          <span className="text-[10px] truncate max-w-full">
+                            {seat.student.firstName}
+                          </span>
+                        )}
+                        {getSeatFeatures(seat)}
                       </div>
+                      
+                      {/* Loading indicator */}
+                      {isLoading && selectedSeatForPreBook?._id === seat.id && (
+                        <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex items-center justify-center">
+                          <Loader2 className="h-4 w-4 text-white animate-spin" />
+                        </div>
+                      )}
+                    </button>
+                    
+                    {/* History button - show on hover for all seats */}
+                    {(hoveredSeat === seat.id || seat.status === 'occupied') && (
+                      <button
+                        onClick={(e) => handleViewHistory(seat, e)}
+                        className="absolute -top-1 -right-1 bg-blue-500 text-white p-1 rounded-full shadow-lg hover:bg-blue-600 transition-colors z-10"
+                        title="View seat history"
+                      >
+                        <History className="h-3 w-3" />
+                      </button>
                     )}
-                  </button>
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-[300px]">
                   <div className="text-xs space-y-1">
@@ -372,6 +399,14 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
                         <p>{seat.features.map(f => f.replace('_', ' ')).join(', ')}</p>
                       </div>
                     )}
+                    
+                    {/* History hint in tooltip */}
+                    <div className="mt-1 pt-1 border-t text-blue-600">
+                      <p className="flex items-center gap-1">
+                        <History className="h-3 w-3" />
+                        Click history icon to view assignment history
+                      </p>
+                    </div>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -433,10 +468,13 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         ))}
       </div>
 
+      {/* Dialogs */}
       <StudentInfoDialog 
         open={isStudentDialogOpen} 
         onOpenChange={setIsStudentDialogOpen} 
         student={selectedStudent} 
+        seat={selectedSeat}
+        onDeassign={handleDeassignStudent}
       />
       
       <PreBookedSeatDialog 
@@ -454,7 +492,14 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         seatNumber={selectedAvailableSeat?.seatNumber} 
         shifts={shifts} 
         seatId={selectedAvailableSeat?._id}
-        propertyId={seats[0]?.propertyId} // Pass property ID to dialog
+        propertyId={seats[0]?.propertyId}
+      />
+
+      {/* New History Dialog */}
+      <SeatHistoryDialog 
+        open={isHistoryDialogOpen} 
+        onOpenChange={setIsHistoryDialogOpen} 
+        seat={selectedSeat}
       />
     </div>
   );

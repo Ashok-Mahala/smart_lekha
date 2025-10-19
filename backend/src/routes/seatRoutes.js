@@ -13,7 +13,9 @@ const {
   deleteSeat,
   bulkUpdateSeats,
   bulkDeleteSeats,
-  getSeatAssignmentHistory
+  getSeatAssignmentHistory,
+  getSeatDetailedHistory,
+  deassignStudent
 } = require('../controllers/seatController');
 
 // All routes are protected
@@ -33,6 +35,7 @@ router.put('/:id/status', updateSeatStatus);
 router.delete('/:id', deleteSeat);
 router.post('/bulk-update', bulkUpdateSeats);
 router.post('/bulk-delete', bulkDeleteSeats);
+router.post('/:seatId/deassign', deassignStudent);
 
 // Reservation
 router.post('/:id/reserve', reserveSeat);
@@ -42,5 +45,6 @@ router.get('/stats/seat-stats', getSeatStats);
 
 // History
 router.get('/:seatId/history', getSeatAssignmentHistory);
+router.get('/:seatId/history/detailed', getSeatDetailedHistory);
 
 module.exports = router;
