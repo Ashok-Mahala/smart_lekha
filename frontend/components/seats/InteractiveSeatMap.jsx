@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import StudentInfoDialog from './StudentInfoDialog';
 import PreBookedSeatDialog from './PreBookedSeatDialog';
 import AvailableSeatDialog from './AvailableSeatDialog';
-import SeatHistoryDialog from './SeatHistoryDialog'; // Import the new dialog
+import SeatHistoryDialog from './SeatHistoryDialog';
 import PropTypes from 'prop-types';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,11 +72,11 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   const [shifts, setShifts] = useState([]);
   const [selectedShift, setSelectedShift] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [selectedSeat, setSelectedSeat] = useState(null); // Add this for student info and history
+  const [selectedSeat, setSelectedSeat] = useState(null);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [isPreBookDialogOpen, setIsPreBookDialogOpen] = useState(false);
   const [isAvailableDialogOpen, setIsAvailableDialogOpen] = useState(false);
-  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false); // Add history dialog state
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [selectedSeatForPreBook, setSelectedSeatForPreBook] = useState(null);
   const [selectedAvailableSeat, setSelectedAvailableSeat] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -211,7 +211,7 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
       setIsPreBookDialogOpen(true);
     } else if (seat.status === 'occupied') {
       setSelectedStudent(seat.student);
-      setSelectedSeat(seat); // Store the seat info for student dialog
+      setSelectedSeat(seat);
       setIsStudentDialogOpen(true);
     } else if (seat.status === 'available') {
       setSelectedAvailableSeat(seat);
@@ -221,13 +221,12 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
   };
 
   const handleViewHistory = (seat, e) => {
-    e.stopPropagation(); // Prevent triggering seat click
+    e.stopPropagation();
     setSelectedSeat(seat);
     setIsHistoryDialogOpen(true);
   };
 
   const handleDeassignStudent = (studentId, seatId) => {
-    // Refresh the seat data after deassignment
     onConfirm?.();
   };
 
@@ -340,34 +339,32 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
                       disabled={seat.status === 'locked'}
                     >
                       <div className="flex flex-col items-center justify-center h-full p-1">
-                        {getSeatIcon(seat)}
-                        <span className="text-xs mt-1 font-medium">{seat.seatNumber}</span>
+                        <div className="flex items-center justify-center gap-2 mb-1">
+                          {getSeatIcon(seat)}
+                          <span className="text-xs font-medium mx-1">{seat.seatNumber}</span>
+                          {/* History icon next to seat number */}
+                          <button
+                            onClick={(e) => handleViewHistory(seat, e)}
+                            className="text-blue-500 hover:text-blue-700 transition-colors ml-1"
+                            title="View seat history"
+                          >
+                            <History className="h-3 w-3" />
+                          </button>
+                        </div>
                         {seat.student && (
-                          <span className="text-[10px] truncate max-w-full">
+                          <span className="text-[10px] truncate max-w-full mt-1">
                             {seat.student.firstName}
                           </span>
                         )}
                         {getSeatFeatures(seat)}
                       </div>
                       
-                      {/* Loading indicator */}
                       {isLoading && selectedSeatForPreBook?._id === seat.id && (
                         <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex items-center justify-center">
                           <Loader2 className="h-4 w-4 text-white animate-spin" />
                         </div>
                       )}
                     </button>
-                    
-                    {/* History button - show on hover for all seats */}
-                    {(hoveredSeat === seat.id || seat.status === 'occupied') && (
-                      <button
-                        onClick={(e) => handleViewHistory(seat, e)}
-                        className="absolute -top-1 -right-1 bg-blue-500 text-white p-1 rounded-full shadow-lg hover:bg-blue-600 transition-colors z-10"
-                        title="View seat history"
-                      >
-                        <History className="h-3 w-3" />
-                      </button>
-                    )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-[300px]">
@@ -400,7 +397,6 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
                       </div>
                     )}
                     
-                    {/* History hint in tooltip */}
                     <div className="mt-1 pt-1 border-t text-blue-600">
                       <p className="flex items-center gap-1">
                         <History className="h-3 w-3" />
@@ -468,7 +464,6 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         ))}
       </div>
 
-      {/* Dialogs */}
       <StudentInfoDialog 
         open={isStudentDialogOpen} 
         onOpenChange={setIsStudentDialogOpen} 
@@ -495,7 +490,6 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         propertyId={seats[0]?.propertyId}
       />
 
-      {/* New History Dialog */}
       <SeatHistoryDialog 
         open={isHistoryDialogOpen} 
         onOpenChange={setIsHistoryDialogOpen} 

@@ -179,7 +179,7 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange }) => {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-sm text-muted-foreground mt-1">Dashboard Overview</p>
+          {/* <p className="text-sm text-muted-foreground mt-1">Dashboard Overview</p> */}
         </div>
       </div>
 

@@ -236,9 +236,9 @@ const SeatHistoryDialog = ({ open, onOpenChange, seat }) => {
                     )}
                     
                     <div className="mt-4 pt-4 border-t text-xs text-muted-foreground">
-                      Assignment {assignment.status} • 
+                      {/* Assignment {assignment.status} •  */}
                       Created {format(new Date(assignment.createdAt), 'MMM dd, yyyy HH:mm')}
-                      {assignment.createdBy && ` • By ${assignment.createdBy.name}`}
+                      {/* {assignment.createdBy && ` • By ${assignment.createdBy.name}`} */}
                     </div>
                   </CardContent>
                 </Card>

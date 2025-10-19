@@ -8,16 +8,13 @@ const DashboardLayout = ({ children }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [selectedProperty, setSelectedProperty] = useState("default");
   const [isLoading, setIsLoading] = useState(true);
+  const sidebarRef = useRef(null);
   const mainContentRef = useRef(null);
 
   useEffect(() => {
     const fetchProperties = async () => {
       try {
         setIsLoading(true);
-        // Replace with actual API call
-        // const response = await fetch('/smlekha/properties');
-        // const data = await response.json();
-        // If properties are loaded and there's at least one
         if (properties.length > 0) {
           setSelectedProperty(properties[0].id);
         }
@@ -41,8 +38,13 @@ const DashboardLayout = ({ children }) => {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (mainContentRef.current && !mainContentRef.current.contains(event.target)) {
-        setIsCollapsed(true);
+      // Only close sidebar on mobile when clicking outside
+      if (window.innerWidth < 768) {
+        if (sidebarRef.current && 
+            !sidebarRef.current.contains(event.target) && 
+            !isCollapsed) {
+          setIsCollapsed(true);
+        }
       }
     };
 
@@ -50,19 +52,32 @@ const DashboardLayout = ({ children }) => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [isCollapsed]);
 
   return (
     <div className="flex min-h-screen h-screen bg-background overflow-hidden">
-      <Sidebar isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} />
+      <div ref={sidebarRef}>
+        <Sidebar isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} />
+      </div>
       <div ref={mainContentRef} className="flex-1 flex flex-col overflow-hidden">
         {/* Fixed Header */}
-        <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <PropertySelector 
-            selectedProperty={selectedProperty} 
-            onPropertyChange={handlePropertyChange} 
-            isLoading={isLoading}
-          />
+        <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex items-center gap-4 px-4 py-3">
+            {/* Mobile menu button - always visible on mobile */}
+            <button
+              onClick={toggleSidebar}
+              className="md:hidden flex items-center justify-center w-8 h-8 rounded-md hover:bg-accent"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <PropertySelector 
+              selectedProperty={selectedProperty} 
+              onPropertyChange={handlePropertyChange} 
+              isLoading={isLoading}
+            />
+          </div>
         </header>
         <main className="flex-1 overflow-y-auto p-6">
           <div className="container mx-auto max-w-7xl">
