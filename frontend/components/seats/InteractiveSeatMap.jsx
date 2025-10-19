@@ -320,9 +320,9 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
         return filteredSeats.find(s => s.row === row && s.column === col);
       })
     );
-
+  
     return seatGrid.map((row, rowIndex) => (
-      <div key={`row-${rowIndex}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${config.columns}, minmax(0, 1fr))` }}>
+      <div key={`row-${rowIndex}`} className="grid gap-1 sm:gap-2" style={{ gridTemplateColumns: `repeat(${config.columns}, minmax(0, 1fr))` }}>
         {row.map((seat, colIndex) => {
           if (!seat) return <div key={`empty-${rowIndex}-${colIndex}`} className="w-full aspect-square" />;
           
@@ -338,37 +338,45 @@ const InteractiveSeatMap = ({ className, config: propConfig = {}, seats: initial
                       onMouseLeave={() => setHoveredSeat(null)}
                       disabled={seat.status === 'locked'}
                     >
-                      <div className="flex flex-col items-center justify-center h-full p-1">
-                        <div className="flex items-center justify-center gap-2 mb-1">
+                      <div className="flex flex-col items-center justify-center h-full p-0.5 sm:p-1">
+                        {/* Main seat info - simplified for mobile */}
+                        <div className="flex items-center justify-center gap-0.5 sm:gap-1 mb-0.5">
                           {getSeatIcon(seat)}
-                          <span className="text-xs font-medium mx-1">{seat.seatNumber}</span>
-                          {/* History icon next to seat number */}
-                          <button
-                            onClick={(e) => handleViewHistory(seat, e)}
-                            className="text-blue-500 hover:text-blue-700 transition-colors ml-1"
-                            title="View seat history"
-                          >
-                            <History className="h-3 w-3" />
-                          </button>
+                          <span className="text-[10px] sm:text-xs font-medium">{seat.seatNumber}</span>
                         </div>
+                        
+                        {/* Student name - only show if space allows */}
                         {seat.student && (
-                          <span className="text-[10px] truncate max-w-full mt-1">
+                          <span className="text-[8px] sm:text-[10px] truncate max-w-full px-0.5">
                             {seat.student.firstName}
                           </span>
                         )}
-                        {getSeatFeatures(seat)}
+                        
+                        {/* Features - hide on very small screens */}
+                        <div className="hidden sm:block">
+                          {getSeatFeatures(seat)}
+                        </div>
+                        
+                        {/* History icon - positioned absolutely for mobile */}
+                        <button
+                          onClick={(e) => handleViewHistory(seat, e)}
+                          className="absolute top-0.5 right-0.5 sm:relative sm:top-0 sm:right-0 text-blue-500 hover:text-blue-700 transition-colors"
+                          title="View seat history"
+                        >
+                          <History className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                        </button>
                       </div>
                       
                       {isLoading && selectedSeatForPreBook?._id === seat.id && (
                         <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex items-center justify-center">
-                          <Loader2 className="h-4 w-4 text-white animate-spin" />
+                          <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 text-white animate-spin" />
                         </div>
                       )}
                     </button>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[300px]">
-                  <div className="text-xs space-y-1">
+                <TooltipContent side="top" className="max-w-[300px] text-xs">
+                  <div className="space-y-1">
                     <p className="font-semibold">Seat #{seat.seatNumber}</p>
                     <p className="capitalize">Type: {seat.type}</p>
                     
