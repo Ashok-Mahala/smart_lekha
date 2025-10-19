@@ -182,7 +182,7 @@ The API is fully documented using Swagger/OpenAPI 3.0. To access the documentati
 
 2. Navigate to:
    ```
-   http://192.168.1.4:5000/smlekha-docs
+   http://92.168.1.6:5000/smlekha-docs
    ```
 
 3. You can test endpoints directly from the Swagger UI:

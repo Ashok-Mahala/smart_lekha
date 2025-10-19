@@ -275,10 +275,36 @@ const getShifts = asyncHandler(async (req, res) => {
 
 // Update seat status
 const updateSeatStatus = asyncHandler(async (req, res) => {
-  const { status } = req.body;
+  const { status, studentId } = req.body;
+  
+  console.log('Received update request:', req.body); // Add this for debugging
+  
+  // Check if status is nested in another object (common issue with some frontend setups)
+  let actualStatus = status;
+  let actualStudentId = studentId;
+  
+  // If status is an object, extract the actual status value
+  if (status && typeof status === 'object') {
+    console.log('Status is an object, extracting value:', status);
+    actualStatus = status.status;
+    // Also check if studentId is nested
+    if (status.studentId) {
+      actualStudentId = status.studentId;
+    }
+  }
+  
+  const updateData = { status: actualStatus };
+  
+  // If studentId is provided, update it as well
+  if (actualStudentId) {
+    updateData.studentId = actualStudentId;
+  }
+
+  console.log('Update data being applied:', updateData);
+
   const seat = await Seat.findByIdAndUpdate(
     req.params.id,
-    { status },
+    updateData,
     { new: true, runValidators: true }
   );
 
@@ -286,7 +312,10 @@ const updateSeatStatus = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Seat not found');
   }
 
-  res.json(seat);
+  res.status(200).json({
+    success: true,
+    data: seat
+  });
 });
 
 // Delete a seat by ID

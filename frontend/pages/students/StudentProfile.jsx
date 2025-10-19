@@ -19,7 +19,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import SeatSelectionModal from '@/components/seats/SeatSelectionModal'; // Add this import
+import SeatSelectionModal from '@/components/seats/SeatSelectionModal';
+
+// Update the API function to match your existing endpoint
+const getShiftsByProperty = async (propertyId) => {
+  const response = await axios.get(`/shifts?property=${propertyId}`);
+  return response.data.data; // Access the data property from your API response
+};
 
 const StudentProfile = () => {
   const { id } = useParams();
@@ -31,7 +37,14 @@ const StudentProfile = () => {
   const [isLoading, setIsLoading] = useState(!location.state?.student);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isImageOpen, setIsImageOpen] = useState(false);
-  const [isSeatModalOpen, setIsSeatModalOpen] = useState(false); // Add this state
+  const [isSeatModalOpen, setIsSeatModalOpen] = useState(false);
+  const [shifts, setShifts] = useState([]);
+  const [isLoadingShifts, setIsLoadingShifts] = useState(false);
+
+  // Get property ID from student data or localStorage
+  const getPropertyId = () => {
+    return student?.propertyId || localStorage.getItem('selectedProperty');
+  };
 
   useEffect(() => {
     if (!location.state?.student) {
@@ -53,6 +66,29 @@ const StudentProfile = () => {
       setEditedStudent(location.state.student);
     }
   }, [id, location.state]);
+
+  // Fetch shifts when student data is available
+  useEffect(() => {
+    const fetchShifts = async () => {
+      const propertyId = getPropertyId();
+      if (propertyId) {
+        try {
+          setIsLoadingShifts(true);
+          const shiftsData = await getShiftsByProperty(propertyId);
+          setShifts(shiftsData);
+        } catch (error) {
+          console.error("Error fetching shifts:", error);
+          toast.error("Failed to load shifts");
+        } finally {
+          setIsLoadingShifts(false);
+        }
+      }
+    };
+
+    if (student || location.state?.student) {
+      fetchShifts();
+    }
+  }, [student, location.state?.student]);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -83,9 +119,11 @@ const StudentProfile = () => {
   };
 
   const handleShiftChange = (value) => {
+    // Find the selected shift object from the shifts array
+    const selectedShift = shifts.find(shift => shift._id === value);
     setEditedStudent(prev => ({ 
       ...prev, 
-      shift: { ...prev.shift, name: value } 
+      shift: selectedShift
     }));
   };
 
@@ -113,9 +151,17 @@ const StudentProfile = () => {
     document.body.removeChild(link);
   };
 
-  // Get property ID from student data or localStorage
-  const getPropertyId = () => {
-    return student?.propertyId || localStorage.getItem('selectedProperty');
+  // Format shift time for display
+  const formatShiftTime = (shift) => {
+    if (!shift.startTime || !shift.endTime) return shift.name || '';
+    
+    try {
+      const startTime = format(new Date(`2000-01-01T${shift.startTime}`), 'hh:mm a');
+      const endTime = format(new Date(`2000-01-01T${shift.endTime}`), 'hh:mm a');
+      return `${shift.name} (${startTime} - ${endTime})`;
+    } catch (error) {
+      return shift.name || '';
+    }
   };
 
   if (isLoading) {
@@ -144,6 +190,12 @@ const StudentProfile = () => {
   }
 
   const currentStudent = isEditing ? editedStudent : student;
+
+  // Get current shift value for the select
+  const getCurrentShiftValue = () => {
+    if (!currentStudent?.shift) return '';
+    return currentStudent.shift._id || '';
+  };
 
   return (
     <DashboardLayout>
@@ -300,20 +352,45 @@ const StudentProfile = () => {
                 <Label className="text-sm text-muted-foreground">Shift</Label>
                 {isEditing ? (
                   <Select
-                    value={currentStudent?.shift?.name || ''}
+                    value={getCurrentShiftValue()}
                     onValueChange={handleShiftChange}
+                    disabled={isLoadingShifts}
                   >
                     <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select shift" />
+                      <SelectValue placeholder={
+                        isLoadingShifts ? "Loading shifts..." : "Select shift"
+                      } />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Morning Shift">Morning Shift</SelectItem>
-                      <SelectItem value="Afternoon Shift">Afternoon Shift</SelectItem>
-                      <SelectItem value="Evening Shift">Evening Shift</SelectItem>
+                      {shifts.length > 0 ? (
+                        shifts.map((shift) => (
+                          <SelectItem key={shift._id} value={shift._id}>
+                            {formatShiftTime(shift)} {shift.fee ? `- ₹${shift.fee}` : ''}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-shifts" disabled>
+                          No shifts available
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="font-medium mt-1">{student.shift?.name || '-'}</p>
+                  <div className="mt-1">
+                    <p className="font-medium">
+                      {student.shift?.name || '-'}
+                      {student.shift?.startTime && student.shift?.endTime && (
+                        <span className="text-sm text-muted-foreground ml-2">
+                          ({format(new Date(`2000-01-01T${student.shift.startTime}`), 'hh:mm a')} - {format(new Date(`2000-01-01T${student.shift.endTime}`), 'hh:mm a')})
+                        </span>
+                      )}
+                      {student.shift?.fee && (
+                        <span className="text-sm text-muted-foreground ml-2">
+                          - ₹{student.shift.fee}
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 )}
               </div>
               <div>
@@ -357,7 +434,10 @@ const StudentProfile = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-sm text-muted-foreground">Fee Amount</Label>
-                <p className="font-medium mt-1">₹{student.shift?.fee || '0'}</p>
+                <p className="font-medium mt-1">
+                  ₹{student.shift?.fee || 
+                    (student.booking?.shift?.fee ? student.booking.shift.fee : '0')}
+                </p>
               </div>
               <div>
                 <Label className="text-sm text-muted-foreground">Payment Status</Label>
