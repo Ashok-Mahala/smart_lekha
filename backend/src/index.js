@@ -69,6 +69,8 @@ app.use('/smlekha/properties', propertyRoutes);
 app.use('/smlekha/layouts', LayoutRoutes);
 app.use('/smlekha/shifts', ShiftRoutes);
 
+const uploadsPath = path.join(__dirname, '..', 'uploads');
+console.log('Static files will be served from:', uploadsPath);
 // Static files with proper CORS headers
 app.use('/smlekha/uploads', (req, res, next) => { 
   // Check if origin is in whitelist
@@ -83,8 +85,11 @@ app.use('/smlekha/uploads', (req, res, next) => {
   }
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'); 
   next(); 
-}, express.static(path.join(__dirname, 'uploads')));
+}, express.static(uploadsPath));
 
+
+console.log('Server file location:', __dirname);
+console.log('Current working directory:', process.cwd());
 // 404 handler for API routes
 app.use('/smlekha/*', (req, res, next) => {
   res.status(404).json({
