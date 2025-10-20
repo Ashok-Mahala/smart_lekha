@@ -34,7 +34,10 @@ const ShiftSchedule = ({ className }) => {
 
   const loadShifts = async () => {
     try {
-      const response = await getShifts();
+      // Get selected property from localStorage
+      const selectedProperty = localStorage.getItem('selectedProperty');
+      
+      const response = await getShifts(selectedProperty);
       setShifts(response.data || []);
     } catch (error) {
       toast({

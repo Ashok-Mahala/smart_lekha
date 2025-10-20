@@ -45,6 +45,24 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange, onMobileM
   const [error, setError] = useState(null);
   const [initialLoad, setInitialLoad] = useState(true);
   
+  // Remove the reload useEffect completely and handle it in the change handler
+
+  const handlePropertyChange = (newPropertyId) => {
+    // Only proceed if the property actually changed
+    if (newPropertyId !== selectedProperty) {
+      console.log('Property changing from', selectedProperty, 'to', newPropertyId);
+      
+      // Update the property in parent component and localStorage
+      onPropertyChange(newPropertyId);
+      localStorage.setItem('selectedProperty', newPropertyId);
+      
+      // Reload the page after a short delay to ensure state is saved
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    }
+  };
+
   useEffect(() => {
     const loadProperties = () => {
       try {
@@ -83,12 +101,6 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange, onMobileM
 
     loadProperties();
   }, [onPropertyChange, initialLoad]);
-
-  useEffect(() => {
-    if (selectedProperty && !initialLoad) {
-      localStorage.setItem('selectedProperty', selectedProperty);
-    }
-  }, [selectedProperty, initialLoad]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
   const selectedPropertyData = properties.find(p => p.id === selectedProperty) || 
@@ -147,7 +159,7 @@ export const PropertySelector = ({ selectedProperty, onPropertyChange, onMobileM
           <Menu className="h-4 w-4" />
         </Button> */}
         
-        <Select value={selectedProperty} onValueChange={onPropertyChange}>
+        <Select value={selectedProperty} onValueChange={handlePropertyChange}>
           <SelectTrigger className="w-[160px] sm:w-[180px] lg:w-[220px] border-none shadow-none text-sm sm:text-lg font-semibold px-2 hover:bg-gray-50">
             <SelectValue>
               {selectedPropertyData?.name || "Select Property"}
