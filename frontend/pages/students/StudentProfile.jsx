@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import axios from '@/api/axios';
-import { getStudentById, getDocumentUrl } from '@/api/students';
+import { getStudentById, getDocumentUrl, updateStudent } from '@/api/students';
 import {
   Dialog,
   DialogContent,
@@ -21,10 +21,15 @@ import {
 } from "@/components/ui/dialog";
 import SeatSelectionModal from '@/components/seats/SeatSelectionModal';
 
-// Update the API function to match your existing endpoint
+// Fixed API function to get shifts
 const getShiftsByProperty = async (propertyId) => {
-  const response = await axios.get(`/shifts?property=${propertyId}`);
-  return response.data.data; // Access the data property from your API response
+  try {
+    const response = await axios.get(`/shifts?property=${propertyId}`);
+    return response.data.data || response.data || []; // Handle different response structures
+  } catch (error) {
+    console.error('Error fetching shifts:', error);
+    throw error;
+  }
 };
 
 const StudentProfile = () => {
@@ -41,9 +46,25 @@ const StudentProfile = () => {
   const [shifts, setShifts] = useState([]);
   const [isLoadingShifts, setIsLoadingShifts] = useState(false);
 
-  // Get property ID from student data or localStorage
+  // Get property ID from student's current assignment or localStorage
   const getPropertyId = () => {
-    return student?.propertyId || localStorage.getItem('selectedProperty');
+    if (student?.currentAssignments?.[0]?.property) {
+      return student.currentAssignments[0].property;
+    }
+    if (student?.currentAssignments?.[0]?.seat?.propertyId) {
+      return student.currentAssignments[0].seat.propertyId;
+    }
+    return localStorage.getItem('selectedProperty');
+  };
+
+  // Get current assignment
+  const getCurrentAssignment = () => {
+    return student?.currentAssignments?.find(assignment => assignment.status === 'active') || null;
+  };
+
+  // Get current assignment for edited student
+  const getEditedCurrentAssignment = () => {
+    return editedStudent?.currentAssignments?.find(assignment => assignment.status === 'active') || null;
   };
 
   useEffect(() => {
@@ -96,8 +117,21 @@ const StudentProfile = () => {
 
   const handleSave = async () => {
     try {
-      const response = await axios.put(`/students/${id}`, editedStudent);
+      // Prepare the data for update - only send basic student info, not assignments
+      const updateData = {
+        firstName: editedStudent.firstName,
+        lastName: editedStudent.lastName,
+        email: editedStudent.email,
+        phone: editedStudent.phone,
+        aadharNumber: editedStudent.aadharNumber,
+        institution: editedStudent.institution,
+        course: editedStudent.course,
+        status: editedStudent.status
+      };
+
+      const response = await updateStudent(id, updateData);
       setStudent(response.data);
+      setEditedStudent(response.data);
       setIsEditing(false);
       toast.success('Student updated successfully');
     } catch (error) {
@@ -118,21 +152,31 @@ const StudentProfile = () => {
     }));
   };
 
-  const handleShiftChange = (value) => {
-    // Find the selected shift object from the shifts array
-    const selectedShift = shifts.find(shift => shift._id === value);
-    setEditedStudent(prev => ({ 
-      ...prev, 
-      shift: selectedShift
-    }));
-  };
+  const handleSeatSelect = async (selectedSeat) => {
+    try {
+      // This would require a separate API call to update the assignment
+      // For now, just update the local state
+      const updatedAssignments = student.currentAssignments?.map(assignment => {
+        if (assignment.status === 'active') {
+          return {
+            ...assignment,
+            seat: selectedSeat
+          };
+        }
+        return assignment;
+      });
 
-  const handleSeatSelect = (selectedSeat) => {
-    setEditedStudent(prev => ({
-      ...prev,
-      currentSeat: selectedSeat
-    }));
-    setIsSeatModalOpen(false);
+      setEditedStudent(prev => ({
+        ...prev,
+        currentAssignments: updatedAssignments
+      }));
+
+      setIsSeatModalOpen(false);
+      toast.success('Seat updated successfully');
+    } catch (error) {
+      console.error('Error updating seat:', error);
+      toast.error('Failed to update seat');
+    }
   };
 
   const handleImageClick = (doc) => {
@@ -151,17 +195,19 @@ const StudentProfile = () => {
     document.body.removeChild(link);
   };
 
-  // Format shift time for display
-  const formatShiftTime = (shift) => {
-    if (!shift.startTime || !shift.endTime) return shift.name || '';
-    
-    try {
-      const startTime = format(new Date(`2000-01-01T${shift.startTime}`), 'hh:mm a');
-      const endTime = format(new Date(`2000-01-01T${shift.endTime}`), 'hh:mm a');
-      return `${shift.name} (${startTime} - ${endTime})`;
-    } catch (error) {
-      return shift.name || '';
+  // Get profile photo URL
+  const getProfilePhotoUrl = () => {
+    const profilePhoto = student?.documents?.find(doc => doc.type === 'profile_photo');
+    if (profilePhoto) {
+      return getDocumentUrl(profilePhoto.url);
     }
+    
+    // Fallback to any image document
+    const anyImage = student?.documents?.find(doc => 
+      doc.url && (doc.url.match(/\.(jpg|jpeg|png|gif)$/i))
+    );
+    
+    return anyImage ? getDocumentUrl(anyImage.url) : "/placeholder.svg";
   };
 
   if (isLoading) {
@@ -189,13 +235,9 @@ const StudentProfile = () => {
     );
   }
 
+  const currentAssignment = getCurrentAssignment();
+  const editedCurrentAssignment = getEditedCurrentAssignment();
   const currentStudent = isEditing ? editedStudent : student;
-
-  // Get current shift value for the select
-  const getCurrentShiftValue = () => {
-    if (!currentStudent?.shift) return '';
-    return currentStudent.shift._id || '';
-  };
 
   return (
     <DashboardLayout>
@@ -258,11 +300,11 @@ const StudentProfile = () => {
             <div className="flex flex-col items-center text-center mb-6">
               <div className="h-32 w-32 rounded-full overflow-hidden border-4 border-gray-200 shadow-xl mb-4 relative group">
                 <img
-                  src={getDocumentUrl(student.booking?.documents?.find(d => d.type === 'profile_photo')?.url) || "/placeholder.svg"}
+                  src={getProfilePhotoUrl()}
                   alt={`${student.firstName} ${student.lastName}`}
                   className="h-full w-full object-cover cursor-pointer"
                   onClick={() => {
-                    const photo = student.booking?.documents?.find(d => d.type === 'profile_photo');
+                    const photo = student.documents?.find(d => d.type === 'profile_photo');
                     if (photo) handleImageClick(photo);
                   }}
                 />
@@ -330,10 +372,10 @@ const StudentProfile = () => {
             </div>
           </div>
 
-          {/* Academic Information */}
+          {/* Assignment Information */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center gap-2 border-b pb-2 mb-4">
-              <h3 className="text-lg font-medium">Academic Information</h3>
+              <h3 className="text-lg font-medium">Assignment Information</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -350,48 +392,21 @@ const StudentProfile = () => {
               </div>
               <div>
                 <Label className="text-sm text-muted-foreground">Shift</Label>
-                {isEditing ? (
-                  <Select
-                    value={getCurrentShiftValue()}
-                    onValueChange={handleShiftChange}
-                    disabled={isLoadingShifts}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder={
-                        isLoadingShifts ? "Loading shifts..." : "Select shift"
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shifts.length > 0 ? (
-                        shifts.map((shift) => (
-                          <SelectItem key={shift._id} value={shift._id}>
-                            {formatShiftTime(shift)} {shift.fee ? `- ₹${shift.fee}` : ''}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="no-shifts" disabled>
-                          No shifts available
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div className="mt-1">
-                    <p className="font-medium">
-                      {student.shift?.name || '-'}
-                      {student.shift?.startTime && student.shift?.endTime && (
-                        <span className="text-sm text-muted-foreground ml-2">
-                          ({format(new Date(`2000-01-01T${student.shift.startTime}`), 'hh:mm a')} - {format(new Date(`2000-01-01T${student.shift.endTime}`), 'hh:mm a')})
-                        </span>
-                      )}
-                      {student.shift?.fee && (
-                        <span className="text-sm text-muted-foreground ml-2">
-                          - ₹{student.shift.fee}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                )}
+                <div className="mt-1">
+                  <p className="font-medium">
+                    {currentAssignment?.shift?.name || '-'}
+                    {currentAssignment?.shift?.startTime && currentAssignment?.shift?.endTime && (
+                      <span className="text-sm text-muted-foreground ml-2">
+                        ({currentAssignment.shift.startTime} - {currentAssignment.shift.endTime})
+                      </span>
+                    )}
+                    {currentAssignment?.shift?.fee && (
+                      <span className="text-sm text-muted-foreground ml-2">
+                        - ₹{currentAssignment.shift.fee}
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
               <div>
                 <Label className="text-sm text-muted-foreground">Seat Number</Label>
@@ -399,7 +414,7 @@ const StudentProfile = () => {
                   {isEditing ? (
                     <>
                       <Input 
-                        value={currentStudent?.currentSeat?.seatNumber || 'No seat assigned'}
+                        value={editedCurrentAssignment?.seat?.seatNumber || 'No seat assigned'}
                         className="flex-1"
                         readOnly
                       />
@@ -413,14 +428,14 @@ const StudentProfile = () => {
                       </Button>
                     </>
                   ) : (
-                    <p className="font-medium">{student.currentSeat?.seatNumber || '-'}</p>
+                    <p className="font-medium">{currentAssignment?.seat?.seatNumber || '-'}</p>
                   )}
                 </div>
               </div>
               <div>
-                <Label className="text-sm text-muted-foreground">Admission Date</Label>
+                <Label className="text-sm text-muted-foreground">Start Date</Label>
                 <p className="font-medium mt-1">
-                  {student.booking?.startDate ? format(new Date(student.booking.startDate), "dd MMM yyyy") : '-'}
+                  {currentAssignment?.startDate ? format(new Date(currentAssignment.startDate), "dd MMM yyyy") : '-'}
                 </p>
               </div>
             </div>
@@ -433,28 +448,34 @@ const StudentProfile = () => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-sm text-muted-foreground">Fee Amount</Label>
+                <Label className="text-sm text-muted-foreground">Total Fee</Label>
                 <p className="font-medium mt-1">
-                  ₹{student.shift?.fee || 
-                    (student.booking?.shift?.fee ? student.booking.shift.fee : '0')}
+                  ₹{currentAssignment?.feeDetails?.amount || 
+                    currentAssignment?.shift?.fee || '0'}
                 </p>
               </div>
               <div>
-                <Label className="text-sm text-muted-foreground">Payment Status</Label>
+                <Label className="text-sm text-muted-foreground">Paid Amount</Label>
+                <p className="font-medium mt-1 text-green-600">
+                  ₹{currentAssignment?.feeDetails?.collected || '0'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Balance</Label>
+                <p className="font-medium mt-1 text-red-600">
+                  ₹{currentAssignment?.feeDetails?.balance || '0'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Status</Label>
                 <p className="font-medium mt-1">
-                  <Badge variant={student.payment?.status === 'completed' ? 'default' : 'destructive'}>
-                    {student.payment?.status || 'pending'}
+                  <Badge variant={
+                    currentAssignment?.feeDetails?.balance === 0 ? 'default' : 
+                    currentAssignment?.feeDetails?.balance > 0 ? 'destructive' : 'outline'
+                  }>
+                    {currentAssignment?.feeDetails?.balance === 0 ? 'Paid' : 
+                     currentAssignment?.feeDetails?.balance > 0 ? 'Pending' : 'Unknown'}
                   </Badge>
-                </p>
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Payment Method</Label>
-                <p className="font-medium mt-1">{student.payment?.paymentMethod || '-'}</p>
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Payment Date</Label>
-                <p className="font-medium mt-1">
-                  {student.payment?.paymentDate ? format(new Date(student.payment.paymentDate), "dd MMM yyyy") : '-'}
                 </p>
               </div>
             </div>
@@ -466,7 +487,7 @@ const StudentProfile = () => {
               <h3 className="text-lg font-medium">Documents</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {student.booking?.documents?.map((doc, index) => (
+              {student.documents?.map((doc, index) => (
                 <div key={index} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
                   <div 
                     className="flex items-center justify-between cursor-pointer"
@@ -484,6 +505,11 @@ const StudentProfile = () => {
                   </div>
                 </div>
               ))}
+              {(!student.documents || student.documents.length === 0) && (
+                <p className="text-muted-foreground col-span-2 text-center py-4">
+                  No documents uploaded
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -525,8 +551,8 @@ const StudentProfile = () => {
         onClose={() => setIsSeatModalOpen(false)}
         onSeatSelect={handleSeatSelect}
         propertyId={getPropertyId()}
-        shift={currentStudent?.shift}
-        currentSeat={currentStudent?.currentSeat}
+        shift={currentAssignment?.shift}
+        currentSeat={currentAssignment?.seat}
         studentId={id}
       />
     </DashboardLayout>

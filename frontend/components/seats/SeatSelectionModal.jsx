@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sofa, CheckCircle2, Users, MapPin } from 'lucide-react';
+import { Loader2, Sofa, CheckCircle2, Users, MapPin, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { getSeatsByProperty, updateSeatStatus } from '@/api/seats';
 import { toast } from "sonner";
 
@@ -23,9 +23,10 @@ const SeatSelectionModal = ({
   const [seats, setSeats] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSeat, setSelectedSeat] = useState(null);
+  const [showAllSeats, setShowAllSeats] = useState(true); // New state to toggle view
 
   useEffect(() => {
-    if (isOpen && propertyId) {
+    if (isOpen && propertyId && shift) {
       loadSeats();
       setSelectedSeat(currentSeat || null);
     }
@@ -36,20 +37,43 @@ const SeatSelectionModal = ({
       setIsLoading(true);
       const seatsData = await getSeatsByProperty(propertyId);
       
-      const availableSeats = seatsData.filter(seat => 
-        seat.status === 'available' || seat._id === currentSeat?._id
-      );
-      
-      setSeats(availableSeats);
+      // Show all seats by default, no filtering
+      setSeats(seatsData);
     } catch (error) {
       console.error("Error loading seats:", error);
-      toast.error("Failed to load available seats");
+      toast.error("Failed to load seats");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Get the student occupying a seat for the current shift
+  const getOccupyingStudent = (seat) => {
+    if (!seat.currentAssignments || seat.currentAssignments.length === 0) {
+      return null;
+    }
+
+    const assignmentForCurrentShift = seat.currentAssignments.find(
+      assignment => assignment.shift?._id === shift?._id
+    );
+
+    return assignmentForCurrentShift?.student || null;
+  };
+
   const handleSeatSelect = (seat) => {
+    // Check if seat is occupied by another student
+    const occupyingStudent = getOccupyingStudent(seat);
+    if (occupyingStudent && occupyingStudent._id !== studentId) {
+      toast.error(`This seat is currently occupied by ${occupyingStudent.fullName}`);
+      return;
+    }
+
+    // Check if seat is available or is the current seat
+    if (seat.status !== 'available' && seat._id !== currentSeat?._id) {
+      toast.error("This seat is not available for assignment");
+      return;
+    }
+
     setSelectedSeat(seat);
   };
 
@@ -60,10 +84,12 @@ const SeatSelectionModal = ({
     }
 
     try {
+      // Free up current seat if changing seats
       if (currentSeat && currentSeat._id !== selectedSeat._id) {
         await updateSeatStatus(currentSeat._id, { status: 'available' });
       }
 
+      // Assign new seat
       await updateSeatStatus(selectedSeat._id, { 
         status: 'occupied',
         studentId: studentId
@@ -80,6 +106,17 @@ const SeatSelectionModal = ({
 
   const getSeatStatusColor = (seat) => {
     if (seat._id === selectedSeat?._id) return 'bg-blue-100 border-blue-500 text-blue-900';
+    
+    const occupyingStudent = getOccupyingStudent(seat);
+    
+    if (occupyingStudent) {
+      if (occupyingStudent._id === studentId) {
+        return 'bg-purple-100 border-purple-500 text-purple-900'; // Current student's seat
+      } else {
+        return 'bg-red-100 border-red-500 text-red-900'; // Other student's seat
+      }
+    }
+    
     if (seat.status === 'available') return 'bg-green-100 border-green-500 text-green-900';
     if (seat.status === 'occupied') return 'bg-red-100 border-red-500 text-red-900';
     return 'bg-gray-100 border-gray-300 text-gray-700';
@@ -87,22 +124,89 @@ const SeatSelectionModal = ({
 
   const getSeatStatusIcon = (seat) => {
     if (seat._id === selectedSeat?._id) return <CheckCircle2 className="h-3 w-3" />;
+    
+    const occupyingStudent = getOccupyingStudent(seat);
+    
+    if (occupyingStudent) {
+      if (occupyingStudent._id === studentId) {
+        return <Users className="h-3 w-3" />; // Current student
+      } else {
+        return <AlertCircle className="h-3 w-3" />; // Other student
+      }
+    }
+    
     if (seat.status === 'available') return <Sofa className="h-3 w-3" />;
-    return <Users className="h-3 w-3" />;
+    if (seat.status === 'occupied') return <Users className="h-3 w-3" />;
+    return <AlertCircle className="h-3 w-3" />;
+  };
+
+  const getSeatStatusText = (seat) => {
+    if (seat._id === selectedSeat?._id) return 'Selected';
+    
+    const occupyingStudent = getOccupyingStudent(seat);
+    
+    if (occupyingStudent) {
+      if (occupyingStudent._id === studentId) {
+        return 'Your Seat';
+      } else {
+        return `Occupied by ${occupyingStudent.firstName}`;
+      }
+    }
+    
+    if (seat.status === 'available') return 'Available';
+    if (seat.status === 'occupied') return 'Occupied';
+    return seat.status;
   };
 
   const isSeatSelectable = (seat) => {
+    const occupyingStudent = getOccupyingStudent(seat);
+    
+    // Seat is selectable if:
+    // 1. It's available, OR
+    // 2. It's the current student's seat
     return seat.status === 'available' || seat._id === currentSeat?._id;
   };
 
+  const getSeatTooltip = (seat) => {
+    const occupyingStudent = getOccupyingStudent(seat);
+    
+    if (occupyingStudent) {
+      if (occupyingStudent._id === studentId) {
+        return 'Your current seat - Click to keep this seat';
+      } else {
+        return `Occupied by ${occupyingStudent.fullName} - Not available`;
+      }
+    }
+    
+    if (seat.status === 'available') return 'Available seat - Click to select';
+    if (seat.status === 'occupied') return 'Occupied seat - Not available';
+    return 'Seat information';
+  };
+
+  // Filter seats based on toggle
+  const displayedSeats = showAllSeats 
+    ? seats 
+    : seats.filter(seat => isSeatSelectable(seat));
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[96vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <MapPin className="h-5 w-5" />
-            Select a Seat
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <MapPin className="h-5 w-5" />
+              Select a Seat - {shift?.name}
+            </DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAllSeats(!showAllSeats)}
+              className="flex items-center gap-2"
+            >
+              {showAllSeats ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showAllSeats ? 'Show Available Only' : 'Show All Seats'}
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col space-y-4">
@@ -113,12 +217,21 @@ const SeatSelectionModal = ({
                 <div>
                   <p className="font-medium text-sm">Selected Shift</p>
                   <p className="text-sm text-gray-600">
-                    {shift.name} {shift.fee && `- ₹${shift.fee}`}
+                    {shift.name} 
+                    {shift.startTime && shift.endTime && ` (${shift.startTime} - ${shift.endTime})`}
+                    {shift.fee && ` - ₹${shift.fee}`}
                   </p>
                 </div>
-                <Badge variant="outline" className="self-start sm:self-auto">
-                  {seats.length} seats available
-                </Badge>
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <Badge variant="outline" className="self-start sm:self-auto">
+                    {seats.filter(seat => isSeatSelectable(seat)).length} seats available
+                  </Badge>
+                  {!showAllSeats && (
+                    <Badge variant="secondary" className="self-start sm:self-auto">
+                      Filtered: Available Only
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -128,6 +241,10 @@ const SeatSelectionModal = ({
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <span>Available</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+              <span>Your Seat</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -142,48 +259,59 @@ const SeatSelectionModal = ({
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12 flex-1">
               <Loader2 className="h-8 w-8 animate-spin mb-3 text-primary" />
-              <span className="text-sm text-muted-foreground">Loading available seats...</span>
+              <span className="text-sm text-muted-foreground">Loading seats...</span>
             </div>
           ) : (
             <>
               {/* Seats Grid Container */}
               <div className="flex-1 min-h-0 overflow-y-auto">
                 <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 gap-2 p-1">
-                  {seats.map((seat) => (
-                    <div
-                      key={seat._id}
-                      className={`
-                        border rounded-lg p-2 transition-all duration-200
-                        flex flex-col items-center justify-center min-h-[70px]
-                        ${getSeatStatusColor(seat)}
-                        ${isSeatSelectable(seat) 
-                          ? 'cursor-pointer hover:shadow-md hover:scale-105' 
-                          : 'cursor-not-allowed opacity-60'
-                        }
-                      `}
-                      onClick={() => {
-                        if (isSeatSelectable(seat)) {
-                          handleSeatSelect(seat);
-                        }
-                      }}
-                    >
-                      {getSeatStatusIcon(seat)}
-                      <span className="font-semibold text-sm mt-1">
-                        {seat.seatNumber}
-                      </span>
-                      <span className="text-[10px] mt-0.5 capitalize text-center leading-tight">
-                        {seat._id === selectedSeat?._id ? 'Selected' : seat.status}
-                      </span>
-                    </div>
-                  ))}
+                  {displayedSeats.map((seat) => {
+                    const isSelectable = isSeatSelectable(seat);
+                    const tooltip = getSeatTooltip(seat);
+                    
+                    return (
+                      <div
+                        key={seat._id}
+                        className={`
+                          border rounded-lg p-2 transition-all duration-200
+                          flex flex-col items-center justify-center min-h-[70px]
+                          ${getSeatStatusColor(seat)}
+                          ${isSelectable 
+                            ? 'cursor-pointer hover:shadow-md hover:scale-105' 
+                            : 'cursor-not-allowed opacity-60'
+                          }
+                        `}
+                        onClick={() => {
+                          if (isSelectable) {
+                            handleSeatSelect(seat);
+                          }
+                        }}
+                        title={tooltip}
+                      >
+                        {getSeatStatusIcon(seat)}
+                        <span className="font-semibold text-sm mt-1">
+                          {seat.seatNumber}
+                        </span>
+                        <span className="text-[10px] mt-0.5 capitalize text-center leading-tight">
+                          {getSeatStatusText(seat)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {seats.length === 0 && !isLoading && (
+                {displayedSeats.length === 0 && !isLoading && (
                   <div className="text-center py-8 border rounded-lg bg-gray-50 mx-1">
                     <Sofa className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                    <p className="text-sm text-muted-foreground font-medium">No available seats found</p>
+                    <p className="text-sm text-muted-foreground font-medium">
+                      {showAllSeats ? 'No seats found' : 'No available seats found'}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      All seats are currently occupied for this shift
+                      {showAllSeats 
+                        ? 'There are no seats configured for this property' 
+                        : 'All seats are currently occupied for this shift'
+                      }
                     </p>
                   </div>
                 )}
@@ -227,6 +355,24 @@ const SeatSelectionModal = ({
                     </div>
                   </div>
                 )}
+
+                {/* View Information */}
+                {/* <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-4 w-4 text-gray-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold text-gray-900 text-sm">
+                        {showAllSeats ? 'All Seats View' : 'Available Seats View'}
+                      </h4>
+                      <p className="text-gray-700 text-sm">
+                        {showAllSeats 
+                          ? 'Showing all seats. Green seats are available, purple is your current seat, red seats are occupied by others.'
+                          : 'Showing only available seats and your current seat. Click on any seat to select it.'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div> */}
               </div>
 
               {/* Action Buttons - Fixed at bottom */}
@@ -254,5 +400,12 @@ const SeatSelectionModal = ({
     </Dialog>
   );
 };
+
+// Add the Info icon import
+const Info = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
 
 export default SeatSelectionModal;
