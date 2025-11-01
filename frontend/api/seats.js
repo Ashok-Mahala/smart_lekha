@@ -202,6 +202,19 @@ export const deassignStudent = async (seatId, deassignData) => {
   }
 };
 
+// Change student seat
+export const changeStudentSeat = async (changeSeatData) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/change-seat`, changeSeatData);
+    toast.success('Seat changed successfully');
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || 'Failed to change seat';
+    toast.error(errorMessage);
+    throw error;
+  }
+};
+
 
 export default {
   getSeatsByProperty,
@@ -217,5 +230,6 @@ export default {
   deleteSeat,
   getSeatAssignmentHistory,
   getSeatDetailedHistory,
-  deassignStudent
+  deassignStudent,
+  changeStudentSeat
 };

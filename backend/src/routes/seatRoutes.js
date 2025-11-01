@@ -15,7 +15,8 @@ const {
   bulkDeleteSeats,
   getSeatAssignmentHistory,
   getSeatDetailedHistory,
-  deassignStudent
+  deassignStudent,
+  changeStudentSeat
 } = require('../controllers/seatController');
 
 // All routes are protected
@@ -36,6 +37,7 @@ router.delete('/:id', deleteSeat);
 router.post('/bulk-update', bulkUpdateSeats);
 router.post('/bulk-delete', bulkDeleteSeats);
 router.post('/:seatId/deassign', deassignStudent);
+router.post('/change-seat', changeStudentSeat);
 
 // Reservation
 router.post('/:id/reserve', reserveSeat);

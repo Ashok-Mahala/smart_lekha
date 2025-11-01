@@ -8,7 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Sofa, CheckCircle2, Users, MapPin, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { getSeatsByProperty, updateSeatStatus } from '@/api/seats';
+import { getSeatsByProperty } from '@/api/seats';
+import { changeStudentSeat } from '@/api/seats';
 import { toast } from "sonner";
 
 const SeatSelectionModal = ({ 
@@ -22,8 +23,9 @@ const SeatSelectionModal = ({
 }) => {
   const [seats, setSeats] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isChangingSeat, setIsChangingSeat] = useState(false);
   const [selectedSeat, setSelectedSeat] = useState(null);
-  const [showAllSeats, setShowAllSeats] = useState(true); // New state to toggle view
+  const [showAllSeats, setShowAllSeats] = useState(true);
 
   useEffect(() => {
     if (isOpen && propertyId && shift) {
@@ -36,8 +38,6 @@ const SeatSelectionModal = ({
     try {
       setIsLoading(true);
       const seatsData = await getSeatsByProperty(propertyId);
-      
-      // Show all seats by default, no filtering
       setSeats(seatsData);
     } catch (error) {
       console.error("Error loading seats:", error);
@@ -47,7 +47,6 @@ const SeatSelectionModal = ({
     }
   };
 
-  // Get the student occupying a seat for the current shift
   const getOccupyingStudent = (seat) => {
     if (!seat.currentAssignments || seat.currentAssignments.length === 0) {
       return null;
@@ -61,6 +60,12 @@ const SeatSelectionModal = ({
   };
 
   const handleSeatSelect = (seat) => {
+    // If selecting the same seat, deselect it
+    if (selectedSeat && selectedSeat._id === seat._id) {
+      setSelectedSeat(null);
+      return;
+    }
+
     // Check if seat is occupied by another student
     const occupyingStudent = getOccupyingStudent(seat);
     if (occupyingStudent && occupyingStudent._id !== studentId) {
@@ -83,24 +88,32 @@ const SeatSelectionModal = ({
       return;
     }
 
-    try {
-      // Free up current seat if changing seats
-      if (currentSeat && currentSeat._id !== selectedSeat._id) {
-        await updateSeatStatus(currentSeat._id, { status: 'available' });
-      }
+    // If selecting the same seat, just close
+    if (currentSeat && currentSeat._id === selectedSeat._id) {
+      onClose();
+      toast.info("You've kept your current seat");
+      return;
+    }
 
-      // Assign new seat
-      await updateSeatStatus(selectedSeat._id, { 
-        status: 'occupied',
-        studentId: studentId
+    try {
+      setIsChangingSeat(true);
+
+      const result = await changeStudentSeat({
+        currentSeatId: currentSeat?._id,
+        newSeatId: selectedSeat._id,
+        studentId: studentId,
+        shiftId: shift._id,
+        reason: 'Student initiated seat change'
       });
 
       onSeatSelect(selectedSeat);
       onClose();
-      toast.success("Seat assigned successfully");
+      toast.success("Seat changed successfully");
     } catch (error) {
-      console.error("Error assigning seat:", error);
-      toast.error("Failed to assign seat");
+      console.error("Error changing seat:", error);
+      toast.error(error.response?.data?.message || "Failed to change seat");
+    } finally {
+      setIsChangingSeat(false);
     }
   };
 
@@ -111,9 +124,9 @@ const SeatSelectionModal = ({
     
     if (occupyingStudent) {
       if (occupyingStudent._id === studentId) {
-        return 'bg-purple-100 border-purple-500 text-purple-900'; // Current student's seat
+        return 'bg-purple-100 border-purple-500 text-purple-900';
       } else {
-        return 'bg-red-100 border-red-500 text-red-900'; // Other student's seat
+        return 'bg-red-100 border-red-500 text-red-900';
       }
     }
     
@@ -129,9 +142,9 @@ const SeatSelectionModal = ({
     
     if (occupyingStudent) {
       if (occupyingStudent._id === studentId) {
-        return <Users className="h-3 w-3" />; // Current student
+        return <Users className="h-3 w-3" />;
       } else {
-        return <AlertCircle className="h-3 w-3" />; // Other student
+        return <AlertCircle className="h-3 w-3" />;
       }
     }
     
@@ -163,8 +176,8 @@ const SeatSelectionModal = ({
     
     // Seat is selectable if:
     // 1. It's available, OR
-    // 2. It's the current student's seat
-    return seat.status === 'available' || seat._id === currentSeat?._id;
+    // 2. It's the current student's seat (to allow keeping same seat)
+    return seat.status === 'available' || (occupyingStudent && occupyingStudent._id === studentId);
   };
 
   const getSeatTooltip = (seat) => {
@@ -195,7 +208,7 @@ const SeatSelectionModal = ({
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <MapPin className="h-5 w-5" />
-              Select a Seat - {shift?.name}
+              {currentSeat ? 'Change Your Seat' : 'Select a Seat'} - {shift?.name}
             </DialogTitle>
             <Button
               variant="outline"
@@ -324,7 +337,9 @@ const SeatSelectionModal = ({
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div>
-                        <h4 className="font-semibold text-blue-900 text-sm">Selected Seat</h4>
+                        <h4 className="font-semibold text-blue-900 text-sm">
+                          {selectedSeat._id === currentSeat?._id ? 'Keeping Current Seat' : 'Selected New Seat'}
+                        </h4>
                         <p className="text-blue-700 text-sm">
                           Seat <strong>{selectedSeat.seatNumber}</strong>
                           <span className="text-blue-600 text-xs ml-2">
@@ -333,14 +348,14 @@ const SeatSelectionModal = ({
                         </p>
                       </div>
                       <Badge variant="secondary" className="bg-blue-100 text-blue-800 self-start sm:self-auto">
-                        Ready to Assign
+                        {selectedSeat._id === currentSeat?._id ? 'No Change' : 'Ready to Assign'}
                       </Badge>
                     </div>
                   </div>
                 )}
 
-                {/* Current Seat Info */}
-                {currentSeat && currentSeat._id !== selectedSeat?._id && (
+                {/* Current Seat Info - Only show if changing seats */}
+                {currentSeat && selectedSeat && currentSeat._id !== selectedSeat._id && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div>
@@ -350,29 +365,11 @@ const SeatSelectionModal = ({
                         </p>
                       </div>
                       <Badge variant="secondary" className="bg-amber-100 text-amber-800 self-start sm:self-auto">
-                        Current
+                        To Be Released
                       </Badge>
                     </div>
                   </div>
                 )}
-
-                {/* View Information */}
-                {/* <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-start gap-2">
-                    <Info className="h-4 w-4 text-gray-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h4 className="font-semibold text-gray-900 text-sm">
-                        {showAllSeats ? 'All Seats View' : 'Available Seats View'}
-                      </h4>
-                      <p className="text-gray-700 text-sm">
-                        {showAllSeats 
-                          ? 'Showing all seats. Green seats are available, purple is your current seat, red seats are occupied by others.'
-                          : 'Showing only available seats and your current seat. Click on any seat to select it.'
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div> */}
               </div>
 
               {/* Action Buttons - Fixed at bottom */}
@@ -381,16 +378,26 @@ const SeatSelectionModal = ({
                   variant="outline" 
                   onClick={onClose}
                   className="w-full sm:w-auto"
+                  disabled={isChangingSeat}
                 >
                   Cancel
                 </Button>
                 <Button 
                   onClick={handleConfirmSelection}
-                  disabled={!selectedSeat}
+                  disabled={!selectedSeat || isChangingSeat}
                   className="w-full sm:w-auto gap-2"
                 >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Assign Seat
+                  {isChangingSeat ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  {isChangingSeat 
+                    ? 'Changing Seat...' 
+                    : selectedSeat && selectedSeat._id === currentSeat?._id 
+                      ? 'Keep This Seat' 
+                      : 'Change Seat'
+                  }
                 </Button>
               </div>
             </>
@@ -400,12 +407,5 @@ const SeatSelectionModal = ({
     </Dialog>
   );
 };
-
-// Add the Info icon import
-const Info = ({ className }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
 
 export default SeatSelectionModal;

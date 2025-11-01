@@ -288,8 +288,19 @@ const getSeatStats = asyncHandler(async (req, res) => {
 
 // Update seat status
 const updateSeatStatus = asyncHandler(async (req, res) => {
-  const { status } = req.body;
+  let { status } = req.body;
   
+  // Handle the case where status might be an object
+  if (status && typeof status === 'object' && status.status) {
+    status = status.status;
+  }
+  
+  // Validate status
+  const validStatuses = ['available', 'occupied', 'reserved', 'maintenance', 'deleted'];
+  if (!validStatuses.includes(status)) {
+    throw new ApiError(400, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+  }
+
   const seat = await Seat.findByIdAndUpdate(
     req.params.id,
     { status },
@@ -445,6 +456,126 @@ const deassignStudent = asyncHandler(async (req, res) => {
   });
 });
 
+// Change student seat assignment
+const changeStudentSeat = asyncHandler(async (req, res) => {
+  try {
+    const { currentSeatId, newSeatId, studentId, shiftId, reason } = req.body;
+
+    console.log('=== CHANGE STUDENT SEAT START ===');
+    console.log('Current Seat ID:', currentSeatId);
+    console.log('New Seat ID:', newSeatId);
+    console.log('Student ID:', studentId);
+    console.log('Shift ID:', shiftId);
+
+    // Validate inputs
+    if (!currentSeatId || !newSeatId || !studentId || !shiftId) {
+      throw new ApiError(400, 'currentSeatId, newSeatId, studentId, and shiftId are required');
+    }
+
+    if (currentSeatId === newSeatId) {
+      throw new ApiError(400, 'New seat cannot be the same as current seat');
+    }
+
+    // Find all entities in parallel
+    const [currentSeat, newSeat, student, shift] = await Promise.all([
+      Seat.findById(currentSeatId),
+      Seat.findById(newSeatId),
+      Student.findById(studentId),
+      Shift.findById(shiftId)
+    ]);
+
+    if (!currentSeat) throw new ApiError(404, 'Current seat not found');
+    if (!newSeat) throw new ApiError(404, 'New seat not found');
+    if (!student) throw new ApiError(404, 'Student not found');
+    if (!shift) throw new ApiError(404, 'Shift not found');
+
+    console.log('All entities found successfully');
+
+    // Verify student is actually assigned to current seat for this shift
+    const currentAssignment = currentSeat.currentAssignments.find(
+      assignment => assignment.student.toString() === studentId && 
+                   assignment.shift.toString() === shiftId && 
+                   assignment.status === 'active'
+    );
+
+    if (!currentAssignment) {
+      throw new ApiError(400, 'Student is not assigned to the current seat for this shift');
+    }
+
+    // Check if new seat is available for this shift
+    if (!newSeat.isAvailableForShift(shiftId)) {
+      throw new ApiError(400, 'New seat is not available for this shift');
+    }
+
+    // Start a session for transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // 1. Release student from current seat
+      await currentSeat.releaseStudent(studentId, shiftId);
+      
+      // 2. Assign student to new seat
+      const assignmentData = {
+        startDate: new Date(),
+        feeDetails: currentAssignment.feeDetails,
+        documents: currentAssignment.documents || [],
+        createdBy: currentAssignment.createdBy || req.user?._id,
+        reason: reason || 'Seat change'
+      };
+
+      await newSeat.assignStudent(studentId, shiftId, assignmentData);
+
+      // 3. Update student's assignment record
+      await student.releaseFromSeat(currentSeatId, shiftId);
+      await student.assignToSeat(newSeatId, shiftId, assignmentData);
+
+      // Commit transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      console.log('=== CHANGE STUDENT SEAT END - SUCCESS ===');
+
+      // Fetch updated seats with populated data
+      const [updatedCurrentSeat, updatedNewSeat] = await Promise.all([
+        Seat.findById(currentSeatId)
+          .populate('currentAssignments.student')
+          .populate('currentAssignments.shift'),
+        Seat.findById(newSeatId)
+          .populate('currentAssignments.student')
+          .populate('currentAssignments.shift')
+      ]);
+
+      res.status(200).json({
+        success: true,
+        message: 'Seat changed successfully',
+        data: {
+          previousSeat: updatedCurrentSeat,
+          newSeat: updatedNewSeat,
+          student: {
+            _id: student._id,
+            fullName: student.fullName
+          },
+          shift: {
+            _id: shift._id,
+            name: shift.name
+          }
+        }
+      });
+
+    } catch (error) {
+      // Abort transaction on error
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('Error in changeStudentSeat:', error);
+    throw error;
+  }
+});
+
 
 module.exports = {
   getSeatsByProperty,
@@ -460,5 +591,6 @@ module.exports = {
   bulkDeleteSeats,
   getSeatAssignmentHistory,
   getSeatDetailedHistory,
-  deassignStudent
+  deassignStudent,
+  changeStudentSeat
 };
