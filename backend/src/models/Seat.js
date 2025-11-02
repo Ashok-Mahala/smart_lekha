@@ -24,10 +24,6 @@ const seatAssignmentSchema = new mongoose.Schema({
     enum: ['active', 'completed', 'cancelled'],
     default: 'active'
   },
-  payment: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Payment' 
-  },
   documents: [{
     type: {
       type: String,
@@ -36,11 +32,6 @@ const seatAssignmentSchema = new mongoose.Schema({
     url: String,
     originalName: String
   }],
-  feeDetails: {
-    amount: Number,
-    collected: Number,
-    balance: Number
-  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -120,6 +111,14 @@ seatSchema.virtual('currentStudentsCount').get(function() {
   return this.currentAssignments.filter(a => a.status === 'active').length;
 });
 
+// Virtual for getting payment information (populated from Payment model)
+seatSchema.virtual('paymentInfo', {
+  ref: 'Payment',
+  localField: 'currentAssignments._id',
+  foreignField: 'assignment',
+  justOne: false
+});
+
 seatSchema.pre(/^find/, function(next) {
   if (!this.getOptions().includeDeleted) {
     this.where({ deletedAt: null });
@@ -148,7 +147,6 @@ seatSchema.methods.assignStudent = async function(studentId, shiftId, assignment
     student: studentId,
     shift: shiftId,
     startDate: assignmentData.startDate || new Date(),
-    feeDetails: assignmentData.feeDetails,
     documents: assignmentData.documents || [],
     createdBy: assignmentData.createdBy
   };
@@ -240,10 +238,6 @@ seatSchema.methods.getAssignmentHistory = async function() {
       select: 'name startTime endTime fee'
     },
     {
-      path: 'assignmentHistory.payment',
-      select: 'amount status paymentDate paymentMethod'
-    },
-    {
       path: 'assignmentHistory.createdBy',
       select: 'name email'
     }
@@ -266,8 +260,6 @@ seatSchema.methods.getDetailedHistory = async function() {
       Math.ceil((new Date(assignment.endDate) - new Date(assignment.startDate)) / (1000 * 60 * 60 * 24)) + ' days' :
       'Ongoing',
     status: assignment.status,
-    payment: assignment.payment,
-    feeDetails: assignment.feeDetails,
     documents: assignment.documents,
     createdBy: assignment.createdBy,
     createdAt: assignment.createdAt

@@ -36,12 +36,13 @@ export const seatPropTypes = PropTypes.shape({
 });
 
 // API functions matching your new controller
-export const getSeatsByProperty = async (propertyId, params = {}) => {
+export const getSeatsByProperty = async (propertyId) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/property/${propertyId}`, { params });
-    return response.data;
+    const response = await axios.get(`/seats/property/${propertyId}`);
+    // Return the data array from the response
+    return response.data.data || [];
   } catch (error) {
-    toast.error('Failed to fetch seats');
+    console.error('Error fetching seats:', error);
     throw error;
   }
 };

@@ -70,10 +70,13 @@ const SeatsPage = () => {
 
         setSelectedProperty(property);
 
-        const [layoutData, seatsData] = await Promise.all([
+        const [layoutData, seatsResponse] = await Promise.all([
           getLayout(property._id).catch(() => null),
           getSeatsByProperty(property._id).catch(() => []),
         ]);
+        
+        // Ensure seatsData is an array
+        const seatsData = Array.isArray(seatsResponse) ? seatsResponse : [];
         
         // Calculate stats from seatsData
         const calculatedStats = {
@@ -117,12 +120,7 @@ const SeatsPage = () => {
         } else {
           setLayoutConfig(layoutData);
           setSeats(seatsData);
-          setStats({
-            total: seatsData.length,
-            available: seatsData.filter(s => s.status === 'available').length,
-            occupied: seatsData.filter(s => s.status === 'occupied').length,
-            reserved: seatsData.filter(s => s.status === 'reserved').length,
-          });
+          setStats(calculatedStats);
         }
       } catch (error) {
         setError(error.message);
@@ -149,7 +147,10 @@ const SeatsPage = () => {
     if (!selectedProperty) return;
     
     try {
-      const seatsData = await getSeatsByProperty(selectedProperty._id);
+      const seatsResponse = await getSeatsByProperty(selectedProperty._id);
+      // Ensure seatsData is an array
+      const seatsData = Array.isArray(seatsResponse) ? seatsResponse : [];
+      
       const calculatedStats = {
         total: seatsData.length,
         available: seatsData.filter(s => s.status === 'available').length,

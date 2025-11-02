@@ -12,7 +12,10 @@ import {
   UserPlus,
   Loader2,
   AlertCircle,
-  User
+  User,
+  IndianRupee,
+  Calendar,
+  Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +28,7 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { getDocumentUrl, getStudentById, getStudentsByProperty } from "@/api/students";
 import { getOverduePayments } from "@/api/payments";
@@ -144,18 +147,18 @@ const StudentsPage = () => {
       ? `${baseUrl}${profileDoc.url}`
       : `${baseUrl}/${profileDoc.url}`;
 
-      console.log("imageUrl",imageUrl);
     return imageUrl;
-    
   };
 
+  // Enhanced payment status calculation
   const getPaymentStatus = (student) => {
     const overduePayment = overduePaymentsMap[student._id];
     if (overduePayment) {
       return {
         status: 'overdue',
-        amount: overduePayment.amount,
-        dueDate: overduePayment.dueDate
+        amount: overduePayment.balanceAmount || overduePayment.amount,
+        dueDate: overduePayment.dueDate,
+        isOverdue: true
       };
     }
 
@@ -164,50 +167,81 @@ const StudentsPage = () => {
     );
 
     if (currentAssignment) {
-      const balance = currentAssignment.feeDetails?.balance || 0;
-      
-      if (balance > 0) {
-        return {
-          status: balance === currentAssignment.feeDetails?.amount ? 'pending' : 'partial',
-          amount: balance,
-          dueDate: currentAssignment.payment?.dueDate
-        };
+      const feeDetails = currentAssignment.feeDetails;
+      if (feeDetails) {
+        const { amount, collected, balance } = feeDetails;
+        
+        if (balance > 0) {
+          // Check if payment is overdue
+          const isOverdue = currentAssignment.payment?.dueDate && 
+                           new Date() > new Date(currentAssignment.payment.dueDate);
+          
+          return {
+            status: isOverdue ? 'overdue' : (collected === 0 ? 'pending' : 'partial'),
+            amount: balance,
+            dueDate: currentAssignment.payment?.dueDate,
+            isOverdue
+          };
+        } else if (collected > 0 && collected === amount) {
+          return {
+            status: 'paid',
+            amount: 0,
+            dueDate: null,
+            isOverdue: false
+          };
+        }
       }
     }
 
     return {
-      status: 'paid',
+      status: 'pending',
       amount: 0,
-      dueDate: null
+      dueDate: null,
+      isOverdue: false
     };
   };
 
   const renderPaymentStatus = (paymentStatus) => {
-    const { status, amount, dueDate } = paymentStatus;
+    const { status, amount, dueDate, isOverdue } = paymentStatus;
     
     switch (status) {
       case 'overdue':
+        const overdueDays = dueDate ? differenceInDays(new Date(), new Date(dueDate)) : 0;
         return (
-          <Badge variant="destructive" className="flex items-center gap-1">
-            <AlertCircle className="h-3 w-3" />
-            ₹{amount}
-          </Badge>
+          <div className="flex flex-col gap-1">
+            <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+              <AlertCircle className="h-3 w-3" />
+              ₹{amount}
+            </Badge>
+            {overdueDays > 0 && (
+              <span className="text-xs text-red-600">
+                {overdueDays} day{overdueDays !== 1 ? 's' : ''} overdue
+              </span>
+            )}
+          </div>
         );
       case 'pending':
         return (
-          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-            ₹{amount}
-          </Badge>
+          <div className="flex flex-col gap-1">
+            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 w-fit">
+              ₹{amount}
+            </Badge>
+            <span className="text-xs text-yellow-600">Pending</span>
+          </div>
         );
       case 'partial':
         return (
-          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-            ₹{amount}
-          </Badge>
+          <div className="flex flex-col gap-1">
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 w-fit">
+              ₹{amount}
+            </Badge>
+            <span className="text-xs text-blue-600">Partial Payment</span>
+          </div>
         );
       case 'paid':
         return (
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            <IndianRupee className="h-3 w-3 mr-1" />
             Paid
           </Badge>
         );
@@ -215,6 +249,32 @@ const StudentsPage = () => {
         return '-';
     }
   };
+
+  // Calculate statistics for the header
+  const statistics = useMemo(() => {
+    const totalStudents = students.length;
+    const studentsWithPayments = students.filter(student => {
+      const paymentStatus = getPaymentStatus(student);
+      return paymentStatus.status !== 'paid';
+    }).length;
+    
+    const totalPendingAmount = students.reduce((sum, student) => {
+      const paymentStatus = getPaymentStatus(student);
+      return sum + paymentStatus.amount;
+    }, 0);
+
+    const overdueCount = students.filter(student => {
+      const paymentStatus = getPaymentStatus(student);
+      return paymentStatus.isOverdue;
+    }).length;
+
+    return {
+      totalStudents,
+      studentsWithPayments,
+      totalPendingAmount,
+      overdueCount
+    };
+  }, [students]);
 
   // Fixed: Using state to track image loading errors
   const ProfilePhotoWithFallback = ({ student }) => {
@@ -260,24 +320,79 @@ const StudentsPage = () => {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Header Section */}
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold">Student Management</h1>
+            <div>
+              <h1 className="text-3xl font-bold">Student Management</h1>
+              <p className="text-muted-foreground mt-1">
+                Manage and monitor student assignments and payments
+              </p>
+            </div>
             <div className="flex items-center gap-4">
-              <div className="text-sm text-muted-foreground">
-                Total Students: {students.length}
-              </div>
-              {/* <Button onClick={() => navigate('/students/add')}>
+              <Button onClick={() => navigate('/students/add')}>
                 <UserPlus className="h-4 w-4 mr-2" /> Add Student
-              </Button> */}
+              </Button>
             </div>
           </div>
 
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Total Students</p>
+                    <p className="text-2xl font-bold">{statistics.totalStudents}</p>
+                  </div>
+                  <Users className="h-8 w-8 text-blue-500" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Pending Payments</p>
+                    <p className="text-2xl font-bold">{statistics.studentsWithPayments}</p>
+                  </div>
+                  <IndianRupee className="h-8 w-8 text-yellow-500" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Total Pending</p>
+                    <p className="text-2xl font-bold">₹{statistics.totalPendingAmount}</p>
+                  </div>
+                  <AlertCircle className="h-8 w-8 text-red-500" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Overdue</p>
+                    <p className="text-2xl font-bold">{statistics.overdueCount}</p>
+                  </div>
+                  <Calendar className="h-8 w-8 text-orange-500" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Students Table */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Active Students</CardTitle>
                 <Input
-                  placeholder="Search students..."
+                  placeholder="Search by name, email, or phone..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   className="w-64"
@@ -288,25 +403,26 @@ const StudentsPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Profile Photo</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Seat</TableHead>
-                    <TableHead>Shift</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Pending Payment</TableHead>
-                    <TableHead>Total Fee</TableHead>
-                    <TableHead>Paid Amount</TableHead>
+                    <TableHead className="w-12">Photo</TableHead>
+                    <TableHead>Student Details</TableHead>
+                    <TableHead>Assignment</TableHead>
+                    <TableHead>Payment Status</TableHead>
+                    <TableHead>Fee Details</TableHead>
+                    <TableHead>Duration</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredStudents.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-8">
+                      <TableCell colSpan={6} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <Users className="h-12 w-12 text-muted-foreground" />
                           <p className="text-muted-foreground">No students found</p>
+                          {searchTerm && (
+                            <p className="text-sm text-muted-foreground">
+                              Try adjusting your search terms
+                            </p>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -318,53 +434,92 @@ const StudentsPage = () => {
                       const paymentStatus = getPaymentStatus(student);
                       const feeDetails = currentAssignment?.feeDetails;
 
+                      // Calculate assignment duration
+                      const assignmentDuration = currentAssignment?.startDate ? 
+                        differenceInDays(new Date(), new Date(currentAssignment.startDate)) : 0;
+
                       return (
                         <TableRow
                           key={student._id}
                           onClick={() => handleStudentClick(student._id)}
-                          className="cursor-pointer hover:bg-gray-50"
+                          className="cursor-pointer hover:bg-gray-50 transition-colors"
                         >
                           <TableCell>
                             <ProfilePhotoWithFallback student={student} />
                           </TableCell>
-                          <TableCell className="font-medium">
-                            {student.fullName}
-                          </TableCell>
-                          <TableCell>{student.email}</TableCell>
-                          <TableCell>{student.phone}</TableCell>
+                          
+                          {/* Student Details */}
                           <TableCell>
-                            <Badge variant="outline">
-                              {seat?.seatNumber || '-'}
-                            </Badge>
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-sm">{student.fullName}</span>
+                              <span className="text-xs text-muted-foreground">{student.email}</span>
+                              <span className="text-xs text-muted-foreground">{student.phone}</span>
+                              <Badge 
+                                variant={student.status === 'active' ? 'default' : 'secondary'}
+                                className="w-fit mt-1 text-xs"
+                              >
+                                {student.status}
+                              </Badge>
+                            </div>
                           </TableCell>
+                          
+                          {/* Assignment Details */}
                           <TableCell>
-                            {shift
-                              ? `${shift.name} (${shift.startTime} - ${shift.endTime})`
-                              : '-'}
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1">
+                                <span className="text-sm font-medium">Seat {seat?.seatNumber || '-'}</span>
+                              </div>
+                              {shift && (
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Clock className="h-3 w-3" />
+                                  {shift.name}
+                                </div>
+                              )}
+                              {currentAssignment?.startDate && (
+                                <div className="text-xs text-muted-foreground">
+                                  Since {format(new Date(currentAssignment.startDate), 'dd MMM')}
+                                </div>
+                              )}
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            <Badge 
-                              variant={student.status === 'active' ? 'default' : 'secondary'}
-                            >
-                              {student.status}
-                            </Badge>
-                          </TableCell>
+                          
+                          {/* Payment Status */}
                           <TableCell>
                             {renderPaymentStatus(paymentStatus)}
                           </TableCell>
+                          
+                          {/* Fee Details */}
                           <TableCell>
                             {feeDetails ? (
-                              <span className="text-sm font-medium">₹{feeDetails.amount}</span>
+                              <div className="flex flex-col gap-1">
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-muted-foreground">Total:</span>
+                                  <span className="font-medium">₹{feeDetails.amount}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-muted-foreground">Paid:</span>
+                                  <span className="font-medium text-green-600">₹{feeDetails.collected}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-muted-foreground">Balance:</span>
+                                  <span className="font-medium text-red-600">₹{feeDetails.balance}</span>
+                                </div>
+                              </div>
                             ) : (
-                              '-'
+                              <span className="text-muted-foreground text-sm">No fee details</span>
                             )}
                           </TableCell>
+                          
+                          {/* Duration */}
                           <TableCell>
-                            {feeDetails ? (
-                              <span className="text-sm text-green-600">₹{feeDetails.collected}</span>
-                            ) : (
-                              '-'
-                            )}
+                            <div className="flex flex-col items-center text-center">
+                              <span className="text-lg font-bold text-blue-600">
+                                {assignmentDuration}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                day{assignmentDuration !== 1 ? 's' : ''}
+                              </span>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

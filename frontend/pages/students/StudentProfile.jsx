@@ -70,6 +70,50 @@ const StudentProfile = () => {
     return editedStudent?.currentAssignments?.find(assignment => assignment.status === 'active') || null;
   };
 
+  // Get payment for current assignment
+  const getCurrentPayment = () => {
+    const currentAssignment = getCurrentAssignment();
+    if (!currentAssignment || !student?.paymentHistory) return null;
+    
+    // Find payment that matches the current assignment
+    return student.paymentHistory.find(payment => 
+      payment.assignment === currentAssignment._id && 
+      payment.status !== 'refunded'
+    );
+  };
+
+  // Get payment for a specific assignment
+  const getPaymentForAssignment = (assignment) => {
+    if (!assignment || !student?.paymentHistory) return null;
+    
+    return student.paymentHistory.find(payment => 
+      payment.assignment === assignment._id
+    );
+  };
+
+  // Get fee details for current assignment (combines assignment and payment data)
+  const getCurrentFeeDetails = () => {
+    const currentAssignment = getCurrentAssignment();
+    const currentPayment = getCurrentPayment();
+    
+    if (currentPayment) {
+      return {
+        amount: currentPayment.amount,
+        collected: currentPayment.collectedAmount,
+        balance: currentPayment.balanceAmount,
+        status: currentPayment.status
+      };
+    }
+    
+    // Fallback to assignment data if no payment found
+    return {
+      amount: currentAssignment?.shift?.fee || 0,
+      collected: 0,
+      balance: currentAssignment?.shift?.fee || 0,
+      status: 'pending'
+    };
+  };
+
   useEffect(() => {
     const fetchStudent = async () => {
       try {
@@ -87,7 +131,7 @@ const StudentProfile = () => {
 
     // Always fetch fresh data, don't rely on location.state
     fetchStudent();
-  }, [id]); // Removed location.state dependency
+  }, [id]);
 
   // Fetch shifts when student data is available
   useEffect(() => {
@@ -110,7 +154,7 @@ const StudentProfile = () => {
     if (student) {
       fetchShifts();
     }
-  }, [student]); // Removed location.state dependency
+  }, [student]);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -223,16 +267,36 @@ const StudentProfile = () => {
     return student?.assignmentHistory?.filter(assignment => assignment.status === 'completed') || [];
   };
 
-  // Get payment history from assignments
+  // Get payment history from paymentHistory array
   const getPaymentHistory = () => {
+    return student?.paymentHistory || [];
+  };
+
+  // Get assignment-based payment history (for backward compatibility)
+  const getAssignmentPaymentHistory = () => {
     const allAssignments = [
       ...(student?.currentAssignments || []),
       ...(student?.assignmentHistory || [])
     ];
 
-    return allAssignments
-      .filter(assignment => assignment.feeDetails)
-      .sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    return allAssignments.map(assignment => {
+      const payment = getPaymentForAssignment(assignment);
+      return {
+        assignment,
+        payment,
+        feeDetails: payment ? {
+          amount: payment.amount,
+          collected: payment.collectedAmount,
+          balance: payment.balanceAmount,
+          status: payment.status
+        } : {
+          amount: assignment.shift?.fee || 0,
+          collected: 0,
+          balance: assignment.shift?.fee || 0,
+          status: 'pending'
+        }
+      };
+    }).filter(item => item.feeDetails.amount > 0);
   };
 
   if (isLoading) {
@@ -262,9 +326,12 @@ const StudentProfile = () => {
 
   const currentAssignment = getCurrentAssignment();
   const editedCurrentAssignment = getEditedCurrentAssignment();
+  const currentPayment = getCurrentPayment();
+  const currentFeeDetails = getCurrentFeeDetails();
   const currentStudent = isEditing ? editedStudent : student;
   const seatHistory = getSeatHistory();
   const paymentHistory = getPaymentHistory();
+  const assignmentPaymentHistory = getAssignmentPaymentHistory();
 
   return (
     <DashboardLayout>
@@ -484,23 +551,45 @@ const StudentProfile = () => {
                   <div>
                     <Label className="text-sm text-muted-foreground">Total Fee</Label>
                     <p className="font-medium mt-1 text-lg">
-                      ₹{currentAssignment?.feeDetails?.amount || 
-                        currentAssignment?.shift?.fee || '0'}
+                      ₹{currentFeeDetails.amount}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm text-muted-foreground">Paid Amount</Label>
                     <p className="font-medium mt-1 text-lg text-green-600">
-                      ₹{currentAssignment?.feeDetails?.collected || '0'}
+                      ₹{currentFeeDetails.collected}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm text-muted-foreground">Balance</Label>
                     <p className="font-medium mt-1 text-lg text-red-600">
-                      ₹{currentAssignment?.feeDetails?.balance || '0'}
+                      ₹{currentFeeDetails.balance}
                     </p>
                   </div>
                 </div>
+
+                {currentPayment && (
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Payment Status:</span>
+                      <Badge 
+                        variant={
+                          currentPayment.status === 'completed' ? 'default' :
+                          currentPayment.status === 'partial' ? 'secondary' :
+                          'destructive'
+                        }
+                      >
+                        {currentPayment.status.toUpperCase()}
+                      </Badge>
+                    </div>
+                    {currentPayment.transactionId && (
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-sm text-muted-foreground">Transaction ID:</span>
+                        <span className="text-sm font-medium">{currentPayment.transactionId}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>
@@ -579,43 +668,67 @@ const StudentProfile = () => {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {paymentHistory.map((assignment, index) => (
+                      {paymentHistory.map((payment, index) => (
                         <Card key={index} className="p-4">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-4">
-                              <div className="bg-green-100 p-3 rounded-full">
-                                <IndianRupee className="h-6 w-6 text-green-600" />
+                              <div className={`p-3 rounded-full ${
+                                payment.status === 'completed' ? 'bg-green-100' :
+                                payment.status === 'partial' ? 'bg-yellow-100' :
+                                'bg-red-100'
+                              }`}>
+                                <IndianRupee className={`h-6 w-6 ${
+                                  payment.status === 'completed' ? 'text-green-600' :
+                                  payment.status === 'partial' ? 'text-yellow-600' :
+                                  'text-red-600'
+                                }`} />
                               </div>
                               <div>
                                 <p className="font-semibold">
-                                  {assignment.status === 'active' ? 'Current' : 'Previous'} Assignment
+                                  {payment.description || 'Seat Rent Payment'}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
-                                  Seat {assignment.seat?.seatNumber} • {assignment.shift?.name}
+                                  Seat {payment.seat?.seatNumber} • {payment.shift?.name}
                                 </p>
                                 <div className="grid grid-cols-3 gap-4 mt-2 text-sm">
                                   <div>
                                     <span className="text-muted-foreground">Total:</span>
-                                    <p className="font-medium">₹{assignment.feeDetails?.amount || 0}</p>
+                                    <p className="font-medium">₹{payment.amount}</p>
                                   </div>
                                   <div>
                                     <span className="text-muted-foreground">Paid:</span>
-                                    <p className="font-medium text-green-600">₹{assignment.feeDetails?.collected || 0}</p>
+                                    <p className="font-medium text-green-600">₹{payment.collectedAmount}</p>
                                   </div>
                                   <div>
                                     <span className="text-muted-foreground">Balance:</span>
-                                    <p className="font-medium text-red-600">₹{assignment.feeDetails?.balance || 0}</p>
+                                    <p className="font-medium text-red-600">₹{payment.balanceAmount}</p>
                                   </div>
                                 </div>
+                                {payment.transactionId && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Transaction: {payment.transactionId}
+                                  </p>
+                                )}
                               </div>
                             </div>
                             <div className="text-right">
-                              <Badge variant={assignment.status === 'active' ? 'default' : 'secondary'}>
-                                {assignment.status}
+                              <Badge 
+                                variant={
+                                  payment.status === 'completed' ? 'default' :
+                                  payment.status === 'partial' ? 'secondary' :
+                                  'destructive'
+                                }
+                              >
+                                {payment.status.toUpperCase()}
                               </Badge>
                               <p className="text-xs text-muted-foreground mt-1">
-                                {format(new Date(assignment.startDate), 'dd MMM yyyy')}
-                                {assignment.endDate && ` - ${format(new Date(assignment.endDate), 'dd MMM yyyy')}`}
+                                {payment.paymentDate ? 
+                                  format(new Date(payment.paymentDate), 'dd MMM yyyy') :
+                                  format(new Date(payment.createdAt), 'dd MMM yyyy')
+                                }
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Period: {format(new Date(payment.period.start), 'dd MMM')} - {format(new Date(payment.period.end), 'dd MMM yyyy')}
                               </p>
                             </div>
                           </div>
