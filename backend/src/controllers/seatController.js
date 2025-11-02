@@ -251,70 +251,6 @@ const releaseStudentFromSeat = asyncHandler(async (req, res) => {
   }
 });
 
-// Enhanced cancelAssignment to handle payment cancellation
-const cancelAssignment = asyncHandler(async (req, res) => {
-  const { seatId } = req.params;
-  const { studentId, shiftId, cancelReason } = req.body;
-
-  const seat = await Seat.findById(seatId);
-  if (!seat) {
-    throw new ApiError(404, 'Seat not found');
-  }
-
-  const student = await Student.findById(studentId);
-  if (!student) {
-    throw new ApiError(404, 'Student not found');
-  }
-
-  // Start a session for transaction
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    // Find the assignment to get payment reference
-    const assignment = seat.currentAssignments.find(
-      assignment => assignment.student.toString() === studentId && 
-                   assignment.shift.toString() === shiftId && 
-                   assignment.status === 'active'
-    );
-
-    if (!assignment) {
-      throw new ApiError(404, 'Active assignment not found');
-    }
-
-    // Update payment status if exists
-    if (assignment.payment) {
-      await Payment.findByIdAndUpdate(
-        assignment.payment,
-        { 
-          status: 'failed',
-          notes: `Assignment cancelled: ${cancelReason || 'No reason provided'}`
-        },
-        { session }
-      );
-    }
-
-    // Cancel from both seat and student
-    await seat.cancelAssignment(studentId, shiftId);
-    await student.cancelAssignment(seatId, shiftId);
-
-    // Commit transaction
-    await session.commitTransaction();
-    session.endSession();
-
-    res.status(200).json({
-      success: true,
-      message: 'Assignment cancelled successfully'
-    });
-
-  } catch (error) {
-    // Abort transaction on error
-    await session.abortTransaction();
-    session.endSession();
-    throw error;
-  }
-});
-
 // Enhanced changeStudentSeat to handle payment transfer
 const changeStudentSeat = asyncHandler(async (req, res) => {
   try {
@@ -556,46 +492,6 @@ const reserveSeat = asyncHandler(async (req, res) => {
   res.json(seat);
 });
 
-// Get seat statistics for a property
-const getSeatStats = asyncHandler(async (req, res) => {
-  const { propertyId } = req.query;
-  
-  if (!propertyId) {
-    throw new ApiError(400, 'Property ID is required');
-  }
-
-  const stats = await Seat.aggregate([
-    { $match: { propertyId: new mongoose.Types.ObjectId(propertyId) } },
-    { $group: { 
-      _id: '$status', 
-      count: { $sum: 1 }
-    }},
-    { $project: {
-      status: '$_id',
-      count: 1,
-      _id: 0
-    }}
-  ]);
-
-  const total = await Seat.countDocuments({ propertyId });
-  const occupied = await Seat.countDocuments({ 
-    propertyId, 
-    status: 'occupied' 
-  });
-  const available = await Seat.countDocuments({ 
-    propertyId, 
-    status: 'available' 
-  });
-
-  res.json({
-    total,
-    occupied,
-    available,
-    stats,
-    propertyId
-  });
-});
-
 // Update seat status
 const updateSeatStatus = asyncHandler(async (req, res) => {
   let { status } = req.body;
@@ -671,36 +567,6 @@ const bulkUpdateSeats = asyncHandler(async (req, res) => {
   });
 });
 
-// Bulk delete seats
-const bulkDeleteSeats = asyncHandler(async (req, res) => {
-  const seatIds = req.body;
-  
-  // Check if any seat has active assignments
-  const seatsWithAssignments = await Seat.find({
-    _id: { $in: seatIds },
-    'currentAssignments.status': 'active'
-  });
-
-  if (seatsWithAssignments.length > 0) {
-    throw new ApiError(400, 'Some seats have active assignments and cannot be deleted');
-  }
-
-  const result = await Seat.updateMany(
-    { _id: { $in: seatIds } },
-    { 
-      $set: { 
-        status: 'deleted', 
-        deletedAt: new Date() 
-      } 
-    }
-  );
-
-  res.json({
-    success: true,
-    deletedCount: result.modifiedCount
-  });
-});
-
 // Get seat assignment history
 const getSeatAssignmentHistory = asyncHandler(async (req, res) => {
   const { seatId } = req.params;
@@ -717,23 +583,6 @@ const getSeatAssignmentHistory = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: seat.assignmentHistory
-  });
-});
-
-// controllers/seatController.js - Add these functions
-const getSeatDetailedHistory = asyncHandler(async (req, res) => {
-  const { seatId } = req.params;
-  
-  const seat = await Seat.findById(seatId);
-  if (!seat) {
-    throw new ApiError(404, 'Seat not found');
-  }
-
-  const detailedHistory = await seat.getDetailedHistory();
-  
-  res.json({
-    success: true,
-    data: detailedHistory
   });
 });
 
@@ -770,16 +619,12 @@ module.exports = {
   getSeatsByProperty,
   assignStudentToSeat,
   releaseStudentFromSeat,
-  cancelAssignment,
   bulkCreateSeats,
   reserveSeat,
-  getSeatStats,
   updateSeatStatus,
   deleteSeat,
   bulkUpdateSeats,
-  bulkDeleteSeats,
   getSeatAssignmentHistory,
-  getSeatDetailedHistory,
   deassignStudent,
   changeStudentSeat
 };

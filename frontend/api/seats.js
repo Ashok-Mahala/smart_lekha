@@ -71,18 +71,6 @@ export const releaseStudentFromSeat = async (seatId, releaseData) => {
   }
 };
 
-// New function for canceling assignment
-export const cancelAssignment = async (seatId, cancelData) => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/${seatId}/cancel`, cancelData);
-    toast.success('Assignment cancelled successfully');
-    return response.data;
-  } catch (error) {
-    toast.error('Failed to cancel assignment');
-    throw error;
-  }
-};
-
 export const bulkCreateSeats = async (seatsData) => {
   try {
     const response = await axios.post(`${API_BASE_URL}/bulk`, { seats: seatsData });
@@ -113,17 +101,6 @@ export const bulkUpdateSeats = async (updates) => {
   }
 };
 
-export const bulkDeleteSeats = async (seatIds) => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/bulk-delete`, seatIds);
-    toast.success(`Deleted ${seatIds.length} seats`);
-    return response.data;
-  } catch (error) {
-    toast.error('Failed to delete seats');
-    throw error;
-  }
-};
-
 // Remove old bookSeat function since we're using assignStudentToSeat now
 export const reserveSeat = async (seatId, reservationData) => {
   try {
@@ -132,16 +109,6 @@ export const reserveSeat = async (seatId, reservationData) => {
     return response.data;
   } catch (error) {
     toast.error(error.response?.data?.message || 'Failed to reserve seat');
-    throw error;
-  }
-};
-
-export const getSeatStats = async (propertyId) => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/stats/seat-stats`, { params: { propertyId } });
-    return response.data;
-  } catch (error) {
-    toast.error('Failed to get seat statistics');
     throw error;
   }
 };
@@ -180,16 +147,6 @@ export const getSeatAssignmentHistory = async (seatId) => {
   }
 };
 
-export const getSeatDetailedHistory = async (seatId) => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/${seatId}/history/detailed`);
-    return response.data;
-  } catch (error) {
-    toast.error('Failed to fetch seat detailed history');
-    throw error;
-  }
-};
-
 export const deassignStudent = async (seatId, deassignData) => {
   try {
     const response = await axios.post(`${API_BASE_URL}/${seatId}/deassign`, deassignData);
@@ -220,16 +177,12 @@ export default {
   getSeatsByProperty,
   assignStudentToSeat,
   releaseStudentFromSeat,
-  cancelAssignment,
   bulkCreateSeats,
   bulkUpdateSeats,
-  bulkDeleteSeats,
   reserveSeat,
-  getSeatStats,
   updateSeatStatus,
   deleteSeat,
   getSeatAssignmentHistory,
-  getSeatDetailedHistory,
   deassignStudent,
   changeStudentSeat
 };

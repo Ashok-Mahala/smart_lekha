@@ -22,7 +22,6 @@ import PropTypes from 'prop-types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   assignStudentToSeat,
-  getSeatsByProperty
 } from "@/api/seats";
 import { 
   createStudent,
