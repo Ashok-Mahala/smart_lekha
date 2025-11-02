@@ -14,13 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { 
-  IndianRupee, 
-  Settings,
+  IndianRupee,
   Search,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  AlertCircle,
   Banknote,
   Smartphone,
   QrCode,
@@ -28,22 +23,21 @@ import {
   CreditCard,
   Calendar,
   CheckCircle2,
-  ArrowLeft,
-  Download,
   Clock,
   TrendingUp,
   TrendingDown,
-  ChevronLeft,
-  ChevronRight,
   FileText,
-  Printer,
-  Plus,
   Receipt,
   Share2,
+  Download,
+  Filter,
+  MoreHorizontal,
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { format } from "date-fns";
-import { saveAs } from "file-saver";
+import { format, startOfMonth, endOfMonth } from "date-fns";
+import { jsPDF } from "jspdf";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -60,12 +54,15 @@ import {
 } from "@/components/ui/select";
 import PropTypes from 'prop-types';
 
+// Import the existing API service
+import paymentService from '@/api/payments';
+
 export const paymentRecordPropTypes = PropTypes.shape({
   id: PropTypes.string.isRequired,
   studentId: PropTypes.string.isRequired,
   amount: PropTypes.number.isRequired,
   paymentMethod: PropTypes.string.isRequired,
-  status: PropTypes.oneOf(['pending', 'completed', 'failed', 'refunded']).isRequired,
+  status: PropTypes.oneOf(['pending', 'completed', 'failed', 'refunded', 'partial']).isRequired,
   date: PropTypes.string.isRequired,
   transactionId: PropTypes.string
 });
@@ -76,22 +73,6 @@ export const paymentResponsePropTypes = PropTypes.shape({
   data: paymentRecordPropTypes
 });
 
-// Remove mock data and add API call
-const fetchPayments = async () => {
-  try {
-    const response = await fetch('/smlekha/payments');
-    
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('API endpoint not available');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching payments:', error);
-    return [];
-  }
-};
-
 const PaymentsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -100,98 +81,84 @@ const PaymentsPage = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("");
-  const [showReminderModal, setShowReminderModal] = useState(false);
-  const [reminderDate, setReminderDate] = useState("");
-  const [reminderTime, setReminderTime] = useState("");
-  const [reminderType, setReminderType] = useState("email");
-  const [exportFormat, setExportFormat] = useState("pdf");
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [activeFilter, setActiveFilter] = useState("all");
-  const [showBulkReminderModal, setShowBulkReminderModal] = useState(false);
-  const [reminderTemplate, setReminderTemplate] = useState("default");
-  const [customMessage, setCustomMessage] = useState("");
-  const [reminderFrequency, setReminderFrequency] = useState("once");
-  const [reminderDays, setReminderDays] = useState([]);
-  const [upiId, setUpiId] = useState("");
-  const [upiAmount, setUpiAmount] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvv, setCardCvv] = useState("");
-  const [cashReceived, setCashReceived] = useState("");
-  const [changeAmount, setChangeAmount] = useState(0);
-  const [walletType, setWalletType] = useState("");
-  const [walletNumber, setWalletNumber] = useState("");
-  const [qrCode, setQrCode] = useState("");
-  const [showReceipt, setShowReceipt] = useState(false);
-  const [editableAmount, setEditableAmount] = useState("");
-  const [editableDate, setEditableDate] = useState("");
-  const [editableDescription, setEditableDescription] = useState("");
   const [collectedAmount, setCollectedAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [currentReceipt, setCurrentReceipt] = useState(null);
   const [payments, setPayments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [summaryData, setSummaryData] = useState({
     duePayments: 0,
     collections: 0,
     expenses: 0
   });
 
+  // Load payments and stats on component mount and filter changes
   useEffect(() => {
-    const loadPayments = async () => {
-      try {
-        setIsLoading(true);
-        const data = await fetchPayments();
-        setPayments(data);
-        
-        // Calculate summary data from payments
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-        
-        const summary = {
-          duePayments: 0,
-          collections: 0,
-          expenses: 0
-        };
+    loadPaymentsAndStats();
+  }, [selectedMonth, selectedYear, selectedStatus, activeFilter]);
 
-        data.forEach(payment => {
-          const paymentDate = new Date(payment.date);
-          if (paymentDate.getMonth() === currentMonth && paymentDate.getFullYear() === currentYear) {
-            if (payment.status === 'pending') {
-              summary.duePayments += payment.amount;
-            } else if (payment.status === 'completed') {
-              summary.collections += payment.amount;
-            } else if (payment.status === 'failed') {
-              summary.expenses += payment.amount;
-            }
-          }
-        });
+  const loadPaymentsAndStats = async () => {
+    try {
+      setIsLoading(true);
+      
+      const startDate = startOfMonth(new Date(selectedYear, selectedMonth));
+      const endDate = endOfMonth(new Date(selectedYear, selectedMonth));
+      
+      const [paymentsResponse, statsResponse] = await Promise.all([
+        paymentService.getPayments({
+          status: selectedStatus !== 'all' ? selectedStatus : undefined,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          search: searchQuery || undefined
+        }),
+        paymentService.getDashboardStats({
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        })
+      ]);
+      
+      // Handle response structure
+      const paymentsData = paymentsResponse.success ? paymentsResponse.data : paymentsResponse;
+      const statsData = statsResponse.success ? statsResponse.data : statsResponse;
+      
+      setPayments(paymentsData || []);
+      setSummaryData(statsData?.summary || { duePayments: 0, collections: 0, expenses: 0 });
+    } catch (error) {
+      console.error('Error loading payments:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load payments data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-        setSummaryData(summary);
-      } catch (error) {
-        console.error('Error loading payments:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load payments",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Handle search with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadPaymentsAndStats();
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
-    loadPayments();
-  }, []);
-
-  // Filter payments based on search query
+  // Filter payments based on search query for immediate UI response
   const filteredPayments = payments.filter((payment) => {
+    if (!searchQuery) return true;
+    
     const query = searchQuery.toLowerCase();
     return (
-      payment.studentName.toLowerCase().includes(query) ||
-      payment.studentId.toLowerCase().includes(query) ||
-      payment.id.toLowerCase().includes(query)
+      payment.studentName?.toLowerCase().includes(query) ||
+      payment.studentId?.toLowerCase().includes(query) ||
+      payment.seatNo?.toLowerCase().includes(query) ||
+      payment.transactionId?.toLowerCase().includes(query)
     );
   });
 
@@ -206,165 +173,221 @@ const PaymentsPage = () => {
 
   // Helper function for status badges
   const getStatusBadge = (status) => {
-    switch (status) {
-      case "completed":
-        return <Badge variant="default" className="bg-green-500">Completed</Badge>;
-      case "pending":
-        return <Badge variant="outline" className="border-amber-500 text-amber-500">Pending</Badge>;
-      case "failed":
-        return <Badge variant="destructive">Failed</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
-  const generateReceipt = (payment) => {
-    const receipt = `
-      SEATFLOW PAYMENT RECEIPT
-      ========================
-      
-      Receipt Details:
-      ---------------
-      Receipt No: ${payment.receiptNumber}
-      Date: ${format(new Date(payment.timestamp), 'dd/MM/yyyy hh:mm a')}
-      Transaction ID: ${payment.transactionId || 'N/A'}
-      Status: ${payment.paymentStatus}
-      
-      Student Details:
-      ---------------
-      Name: ${payment.studentName}
-      ID: ${payment.studentId}
-      Seat No: ${payment.seatNo}
-      
-      Payment Details:
-      ---------------
-      Due Amount: ₹${payment.dueAmount}
-      Amount Paid: ₹${payment.collectedAmount}
-      Balance Amount: ₹${payment.balanceAmount}
-      Payment Method: ${payment.paymentMethod}
-      Payment Mode: ${payment.paymentMode}
-      Payment Date: ${format(new Date(payment.paymentDate), 'dd/MM/yyyy')}
-      Description: ${payment.description}
-      
-      Transaction Details:
-      ------------------
-      Transaction Time: ${format(new Date(payment.timestamp), 'hh:mm:ss a')}
-      Payment Status: ${payment.paymentStatus}
-      ${payment.transactionId ? `Transaction ID: ${payment.transactionId}` : ''}
-      
-      ========================
-      Thank you for your payment!
-      This is a computer generated receipt.
-      Please keep this receipt for your records.
-      ========================
-    `;
-
-    const blob = new Blob([receipt], { type: 'text/plain;charset=utf-8' });
-    saveAs(blob, `receipt_${payment.receiptNumber}.txt`);
-  };
-
-  const ReceiptPreview = ({ payment }) => {
+    const statusConfig = {
+      "completed": { variant: "default", className: "bg-green-500", label: "Completed" },
+      "pending": { variant: "outline", className: "border-amber-500 text-amber-500", label: "Pending" },
+      "failed": { variant: "destructive", className: "bg-red-500", label: "Failed" },
+      "partial": { variant: "outline", className: "border-blue-500 text-blue-500", label: "Partial" },
+      "refunded": { variant: "outline", className: "border-gray-500 text-gray-500", label: "Refunded" }
+    };
+    
+    const config = statusConfig[status] || { variant: "outline", className: "", label: "Unknown" };
+    
     return (
-      <Dialog open={showReceiptPreview} onOpenChange={setShowReceiptPreview}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Payment Receipt Preview</DialogTitle>
-          </DialogHeader>
-          <div className="bg-white p-6 rounded-lg border">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-emerald-600">SEATFLOW PAYMENT RECEIPT</h2>
-              <div className="border-t border-gray-200 my-4"></div>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-2">Receipt Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Receipt No</p>
-                    <p className="font-medium">{payment.receiptNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Date</p>
-                    <p className="font-medium">{format(new Date(payment.timestamp), 'dd/MM/yyyy hh:mm a')}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Transaction ID</p>
-                    <p className="font-medium">{payment.transactionId || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Status</p>
-                    <p className="font-medium text-emerald-600">{payment.paymentStatus}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-2">Student Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Name</p>
-                    <p className="font-medium">{payment.studentName}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">ID</p>
-                    <p className="font-medium">{payment.studentId}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Seat No</p>
-                    <p className="font-medium">{payment.seatNo}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-2">Payment Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Due Amount</p>
-                    <p className="font-medium">₹{payment.dueAmount}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Amount Paid</p>
-                    <p className="font-medium text-emerald-600">₹{payment.collectedAmount}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Balance Amount</p>
-                    <p className="font-medium">₹{payment.balanceAmount}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Payment Method</p>
-                    <p className="font-medium">{payment.paymentMethod}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Payment Mode</p>
-                    <p className="font-medium">{payment.paymentMode}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Payment Date</p>
-                    <p className="font-medium">{format(new Date(payment.paymentDate), 'dd/MM/yyyy')}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-2">Description</h3>
-                <p className="text-gray-700">{payment.description}</p>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-200 my-6"></div>
-            <div className="text-center text-sm text-gray-500">
-              <p>Thank you for your payment!</p>
-              <p>This is a computer generated receipt.</p>
-              <p>Please keep this receipt for your records.</p>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <Badge variant={config.variant} className={config.className}>
+        {config.label}
+      </Badge>
     );
   };
 
+  // Generate PDF receipt
+  const generatePDFReceipt = async (payment) => {
+    try {
+      // Get enhanced receipt data from backend
+      const receiptResponse = await paymentService.getReceipt(payment.id);
+      const receiptData = receiptResponse.data;
+
+      const doc = new jsPDF();
+      
+      // Colors
+      const primaryColor = [0, 102, 204]; // Blue
+      const secondaryColor = [76, 175, 80]; // Green
+      const textColor = [51, 51, 51];
+      const lightColor = [240, 240, 240];
+
+      // Header
+      doc.setFillColor(...primaryColor);
+      doc.rect(0, 0, 210, 30, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text('SEATFLOW PAYMENT RECEIPT', 105, 15, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.text('Smart Library Management System', 105, 22, { align: 'center' });
+
+      // Receipt Details
+      let yPosition = 45;
+      
+      doc.setTextColor(...textColor);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('RECEIPT DETAILS', 15, yPosition);
+      
+      yPosition += 10;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      
+      const receiptDetails = [
+        { label: 'Receipt Number', value: receiptData.receiptNumber },
+        { label: 'Transaction ID', value: receiptData.transactionId },
+        { label: 'Payment Date', value: format(new Date(receiptData.paymentDate), 'dd/MM/yyyy') },
+        { label: 'Status', value: receiptData.status.toUpperCase() }
+      ];
+      
+      receiptDetails.forEach(detail => {
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${detail.label}:`, 15, yPosition);
+        doc.setFont('helvetica', 'normal');
+        doc.text(detail.value, 60, yPosition);
+        yPosition += 6;
+      });
+
+      // Property Details
+      yPosition += 5;
+      doc.setFont('helvetica', 'bold');
+      doc.text('LIBRARY DETAILS', 15, yPosition);
+      
+      yPosition += 10;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      
+      const propertyDetails = [
+        { label: 'Library Name', value: receiptData.propertyName },
+        { label: 'Address', value: receiptData.propertyAddress },
+        { label: 'Seat Number', value: receiptData.seatNo },
+        { label: 'Shift', value: receiptData.shiftName }
+      ];
+      
+      propertyDetails.forEach(detail => {
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${detail.label}:`, 15, yPosition);
+        doc.setFont('helvetica', 'normal');
+        doc.text(detail.value, 50, yPosition);
+        yPosition += 6;
+      });
+
+      // Student Details
+      yPosition += 5;
+      doc.setFont('helvetica', 'bold');
+      doc.text('STUDENT DETAILS', 15, yPosition);
+      
+      yPosition += 10;
+      
+      const studentDetails = [
+        { label: 'Student Name', value: receiptData.studentName },
+        { label: 'Student ID', value: receiptData.studentId },
+        { label: 'Email', value: receiptData.studentEmail },
+        { label: 'Phone', value: receiptData.studentPhone }
+      ];
+      
+      studentDetails.forEach(detail => {
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${detail.label}:`, 15, yPosition);
+        doc.setFont('helvetica', 'normal');
+        doc.text(detail.value, 45, yPosition);
+        yPosition += 6;
+      });
+
+      // Payment Details
+      yPosition += 5;
+      doc.setFont('helvetica', 'bold');
+      doc.text('PAYMENT DETAILS', 15, yPosition);
+      
+      yPosition += 10;
+      
+      // Table header
+      doc.setFillColor(...lightColor);
+      doc.rect(15, yPosition, 180, 8, 'F');
+      doc.setTextColor(...textColor);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Description', 20, yPosition + 5);
+      doc.text('Amount (₹)', 160, yPosition + 5, { align: 'right' });
+      
+      yPosition += 12;
+      
+      // Payment items
+      const paymentItems = [
+        { description: 'Seat Rent Fee', amount: receiptData.dueAmount },
+        { description: 'Amount Paid', amount: receiptData.collectedAmount },
+        { description: 'Balance Amount', amount: receiptData.balanceAmount }
+      ];
+      
+      paymentItems.forEach(item => {
+        doc.setFont('helvetica', 'normal');
+        doc.text(item.description, 20, yPosition);
+        doc.text(item.amount.toString(), 160, yPosition, { align: 'right' });
+        yPosition += 8;
+      });
+
+      // Total
+      yPosition += 5;
+      doc.setDrawColor(...secondaryColor);
+      doc.line(15, yPosition, 195, yPosition);
+      yPosition += 8;
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...secondaryColor);
+      doc.text('TOTAL PAID', 20, yPosition);
+      doc.text(`₹${receiptData.collectedAmount}`, 160, yPosition, { align: 'right' });
+
+      // Payment Method
+      yPosition += 15;
+      doc.setTextColor(...textColor);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Payment Method:', 15, yPosition);
+      doc.setFont('helvetica', 'normal');
+      doc.text(receiptData.paymentMethod, 50, yPosition);
+      
+      yPosition += 6;
+      doc.setFont('helvetica', 'bold');
+      doc.text('Payment Mode:', 15, yPosition);
+      doc.setFont('helvetica', 'normal');
+      doc.text(receiptData.paymentMode, 50, yPosition);
+
+      // Period
+      if (receiptData.period) {
+        yPosition += 15;
+        doc.setFont('helvetica', 'bold');
+        doc.text('RENTAL PERIOD:', 15, yPosition);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${format(new Date(receiptData.period.start), 'dd/MM/yyyy')} to ${format(new Date(receiptData.period.end), 'dd/MM/yyyy')}`, 50, yPosition);
+      }
+
+      // Footer
+      yPosition = 270;
+      doc.setDrawColor(200, 200, 200);
+      doc.line(15, yPosition, 195, yPosition);
+      yPosition += 10;
+      
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text('This is a computer generated receipt. No signature required.', 105, yPosition, { align: 'center' });
+      yPosition += 5;
+      doc.text('Thank you for your payment!', 105, yPosition, { align: 'center' });
+      yPosition += 5;
+      doc.text(`Generated on: ${format(new Date(), 'dd/MM/yyyy hh:mm a')}`, 105, yPosition, { align: 'center' });
+
+      // Save the PDF
+      const fileName = `receipt_${receiptData.receiptNumber}.pdf`;
+      doc.save(fileName);
+
+      toast({
+        title: "Receipt Downloaded",
+        description: "PDF receipt has been downloaded successfully",
+      });
+
+    } catch (error) {
+      console.error('Error generating PDF receipt:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF receipt",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle payment submission
   const handlePaymentSubmit = async () => {
     if (!paymentMethod) {
       toast({
@@ -384,7 +407,7 @@ const PaymentsPage = () => {
       return;
     }
 
-    const dueAmount = parseFloat(editableAmount);
+    const dueAmount = parseFloat(selectedPayment.amount);
     const paidAmount = parseFloat(collectedAmount);
 
     if (paidAmount > dueAmount) {
@@ -397,81 +420,84 @@ const PaymentsPage = () => {
     }
 
     try {
-      const receiptNumber = `RCPT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      setIsProcessing(true);
 
-      const paymentRecord = {
+      const paymentData = {
         studentId: selectedPayment.studentId,
         studentName: selectedPayment.studentName,
         seatNo: selectedPayment.seatNo,
-        dueAmount: editableAmount,
+        dueAmount: dueAmount.toString(),
         collectedAmount: collectedAmount,
         balanceAmount: (dueAmount - paidAmount).toString(),
         paymentMethod: paymentMethod,
         paymentMode: paymentMethod === "CASH" ? "Cash" : "Digital",
         paymentDate: paymentDate,
-        description: editableDescription,
-        timestamp: new Date().toISOString(),
-        receiptNumber: receiptNumber,
-        paymentStatus: "Completed",
-        transactionId: transactionId,
+        description: `Seat rent payment for ${selectedPayment.studentName}`,
+        feeType: 'seat_rent'
       };
 
-      setCurrentReceipt(paymentRecord);
-      setShowReceiptPreview(true);
-
-      const response = await fetch('/smlekha/payments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(paymentRecord),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Payment processing failed');
+      const result = await paymentService.createPayment(paymentData);
+      
+      // Generate PDF receipt automatically after successful payment
+      if (result.success) {
+        await generatePDFReceipt(result.data.payment);
       }
 
-      generateReceipt(paymentRecord);
+      // Refresh payments list
+      await loadPaymentsAndStats();
 
       toast({
         title: "Payment Successful",
-        description: `Payment of ₹${collectedAmount} recorded. Receipt No: ${receiptNumber}`,
+        description: `Payment of ₹${collectedAmount} recorded successfully`,
       });
 
+      // Reset form
       setShowPaymentModal(false);
       setSelectedPayment(null);
       setPaymentMethod("");
       setCollectedAmount("");
       setPaymentDate(new Date().toISOString().split('T')[0]);
-      setEditableDescription("");
 
     } catch (error) {
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        toast({
-          title: "Network Error",
-          description: "Unable to connect to the server. Please check your internet connection.",
-          variant: "destructive",
-        });
-      } else if (error instanceof SyntaxError) {
-        toast({
-          title: "Server Error",
-          description: "Invalid response from server. Please try again later.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to process payment",
-          variant: "destructive",
-        });
-      }
+      console.error('Payment submission error:', error);
+      toast({
+        title: "Payment Failed",
+        description: error.message || "Failed to process payment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  // Remove hardcoded months array and use date-fns
+  // Handle export report
+  const handleExportReport = async (format = 'pdf') => {
+    try {
+      const startDate = startOfMonth(new Date(selectedYear, selectedMonth));
+      const endDate = endOfMonth(new Date(selectedYear, selectedMonth));
+      
+      const report = await paymentService.generatePaymentReport({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        reportType: 'monthly',
+        format: format
+      });
+
+      toast({
+        title: "Report Generated",
+        description: `Payment report for ${getMonthName(selectedMonth)} ${selectedYear} has been generated`,
+      });
+
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to generate payment report",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Helper functions
   const getMonthName = (monthIndex) => {
     return format(new Date(2000, monthIndex, 1), 'MMMM');
   };
@@ -494,34 +520,6 @@ const PaymentsPage = () => {
     }
   };
 
-  // Filter payments based on search query, month, type, and status
-  const filteredPaymentsHistory = payments.filter((payment) => {
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = 
-      (payment.studentName?.toLowerCase().includes(query) || false) ||
-      (payment.studentId?.toLowerCase().includes(query) || false) ||
-      (payment.description?.toLowerCase().includes(query) || false) ||
-      payment.id.toLowerCase().includes(query);
-    
-    const paymentDate = payment.date ? new Date(payment.date) : null;
-    const matchesMonth = !paymentDate || (
-      paymentDate.getMonth() === selectedMonth && 
-      paymentDate.getFullYear() === selectedYear
-    );
-    
-    const matchesType = activeFilter === "all" || payment.type === activeFilter;
-    const matchesStatus = selectedStatus === "all" || payment.status === selectedStatus;
-    
-    return matchesSearch && matchesMonth && matchesType && matchesStatus;
-  });
-
-  const handleExport = (format) => {
-    toast({
-      title: "Export Started",
-      description: `Exporting payment history in ${format.toUpperCase()} format...`,
-    });
-  };
-
   const handleCardClick = (type) => {
     switch (type) {
       case "due":
@@ -538,6 +536,186 @@ const PaymentsPage = () => {
     }
   };
 
+  const openPaymentModal = (payment) => {
+    setSelectedPayment(payment);
+    setCollectedAmount(payment.amount?.toString() || "");
+    setShowPaymentModal(true);
+  };
+
+  // Receipt Preview Component
+  const ReceiptPreview = ({ payment }) => {
+    if (!payment) return null;
+
+    return (
+      <Dialog open={showReceiptPreview} onOpenChange={setShowReceiptPreview}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Payment Receipt Preview</DialogTitle>
+          </DialogHeader>
+          <div className="bg-white p-6 rounded-lg border">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-blue-600">SEATFLOW PAYMENT RECEIPT</h2>
+              <p className="text-sm text-gray-600">Smart Library Management System</p>
+              <div className="border-t border-gray-200 my-4"></div>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Receipt Details */}
+              <div>
+                <h3 className="font-semibold text-gray-700 mb-3 text-lg">Receipt Details</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Receipt No</p>
+                    <p className="font-medium">{payment.receiptNumber || payment.transactionId}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Transaction ID</p>
+                    <p className="font-medium">{payment.transactionId || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Date</p>
+                    <p className="font-medium">{format(new Date(payment.paymentDate || payment.date), 'dd/MM/yyyy')}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Status</p>
+                    <Badge className={`${
+                      payment.status === 'completed' ? 'bg-green-500' : 
+                      payment.status === 'pending' ? 'bg-amber-500' : 
+                      'bg-gray-500'
+                    }`}>
+                      {payment.status?.toUpperCase()}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Library Details */}
+              <div>
+                <h3 className="font-semibold text-gray-700 mb-3 text-lg">Library Details</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Library Name</p>
+                    <p className="font-medium">{payment.property?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Address</p>
+                    <p className="font-medium">{payment.property?.address || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Seat Number</p>
+                    <p className="font-medium">{payment.seatNo}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Shift</p>
+                    <p className="font-medium">{payment.shift?.name || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Student Details */}
+              <div>
+                <h3 className="font-semibold text-gray-700 mb-3 text-lg">Student Details</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Student Name</p>
+                    <p className="font-medium">{payment.studentName}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Student ID</p>
+                    <p className="font-medium">{payment.studentId}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Email</p>
+                    <p className="font-medium">{payment.studentEmail || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Phone</p>
+                    <p className="font-medium">{payment.studentPhone || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Details */}
+              <div>
+                <h3 className="font-semibold text-gray-700 mb-3 text-lg">Payment Details</h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left p-3 text-sm font-semibold">Description</th>
+                        <th className="text-right p-3 text-sm font-semibold">Amount (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t">
+                        <td className="p-3">Seat Rent Fee</td>
+                        <td className="p-3 text-right">{payment.dueAmount || payment.amount}</td>
+                      </tr>
+                      <tr className="border-t">
+                        <td className="p-3">Amount Paid</td>
+                        <td className="p-3 text-right text-green-600 font-semibold">
+                          {payment.collectedAmount || payment.amount}
+                        </td>
+                      </tr>
+                      <tr className="border-t">
+                        <td className="p-3">Balance Amount</td>
+                        <td className="p-3 text-right">{payment.balanceAmount || 0}</td>
+                      </tr>
+                      <tr className="border-t bg-gray-50">
+                        <td className="p-3 font-semibold">TOTAL PAID</td>
+                        <td className="p-3 text-right font-semibold text-green-600">
+                          ₹{payment.collectedAmount || payment.amount}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Payment Method */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">Payment Method</p>
+                  <p className="font-medium">{payment.paymentMethod}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Payment Mode</p>
+                  <p className="font-medium">{payment.paymentMode || (payment.paymentMethod === 'CASH' ? 'Cash' : 'Digital')}</p>
+                </div>
+              </div>
+
+              {/* Rental Period */}
+              {payment.period && (
+                <div>
+                  <h3 className="font-semibold text-gray-700 mb-2">Rental Period</h3>
+                  <p className="text-gray-700">
+                    {format(new Date(payment.period.start), 'dd/MM/yyyy')} to {format(new Date(payment.period.end), 'dd/MM/yyyy')}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 my-6"></div>
+            <div className="text-center text-sm text-gray-500">
+              <p>This is a computer generated receipt. No signature required.</p>
+              <p>Thank you for your payment!</p>
+            </div>
+            
+            <div className="flex justify-center gap-4 mt-6">
+              <Button 
+                onClick={() => generatePDFReceipt(payment)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF Receipt
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -546,8 +724,37 @@ const PaymentsPage = () => {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">Payments</h1>
             <p className="text-sm sm:text-base text-muted-foreground">
-              Manage all payment activities
+              Manage all payment activities and collections
             </p>
+          </div>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={loadPaymentsAndStats}
+              disabled={isLoading}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => handleExportReport('pdf')}>
+                  PDF Report
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExportReport('excel')}>
+                  Excel Report
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExportReport('csv')}>
+                  CSV Export
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -611,13 +818,35 @@ const PaymentsPage = () => {
           </Card>
         </div>
 
+        {/* Month Navigation */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button variant="outline" size="sm" onClick={handlePreviousMonth}>
+                  Previous
+                </Button>
+                <div className="text-lg font-semibold">
+                  {getMonthName(selectedMonth)} {selectedYear}
+                </div>
+                <Button variant="outline" size="sm" onClick={handleNextMonth}>
+                  Next
+                </Button>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {filteredPayments.length} payments found
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Filters and Search */}
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search by student name, ID, or description..."
+              placeholder="Search by student name, ID, seat no, or transaction ID..."
               className="w-full pl-8"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -643,6 +872,7 @@ const PaymentsPage = () => {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="partial">Partial</SelectItem>
                 <SelectItem value="failed">Failed</SelectItem>
               </SelectContent>
             </Select>
@@ -669,34 +899,52 @@ const PaymentsPage = () => {
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Seat No</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Student</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Amount</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Status</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Due Date</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Payment Mode</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Payment Method</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPayments.length > 0 ? (
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                          <p className="text-muted-foreground text-sm">Loading payments...</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredPayments.length > 0 ? (
                     filteredPayments.map((payment) => (
                       <TableRow key={payment.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                        <TableCell className="font-medium whitespace-nowrap text-xs border-r border-gray-100">{payment.id}</TableCell>
+                        <TableCell className="font-medium whitespace-nowrap text-xs border-r border-gray-100">
+                          {payment.seatNo}
+                        </TableCell>
                         <TableCell className="border-r border-gray-100">
                           <div>
                             <p className="font-medium text-xs">{payment.studentName}</p>
                             <p className="text-xs text-muted-foreground">{payment.studentId}</p>
                           </div>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-green-600 font-bold text-xs border-r border-gray-100">{formatRupee(payment.amount)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
-                          {payment.date ? format(new Date(payment.date), 'dd/MM/yyyy') : 
-                           payment.dueDate ? format(new Date(payment.dueDate), 'dd/MM/yyyy') : '-'}
+                        <TableCell className="whitespace-nowrap text-green-600 font-bold text-xs border-r border-gray-100">
+                          {formatRupee(payment.amount)}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">{payment.method}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
+                          {getStatusBadge(payment.status)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
+                          {payment.dueDate ? format(new Date(payment.dueDate), 'dd/MM/yyyy') : '-'}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
+                          {payment.paymentMethod}
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Button 
                               variant="outline" 
                               size="sm"
-                              className="text-xs hover:bg-green-50 hover:text-green-600 hover:border-green-200"
+                              className="text-xs hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
                               onClick={() => {
                                 setCurrentReceipt(payment);
                                 setShowReceiptPreview(true);
@@ -705,38 +953,47 @@ const PaymentsPage = () => {
                               <Receipt className="h-3 w-3 mr-1" />
                               Receipt
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
-                              onClick={() => {
-                                if (navigator.share) {
-                                  navigator.share({
-                                    title: 'Payment Receipt',
-                                    text: `Payment Receipt for ${payment.studentName}`,
-                                    url: window.location.href,
-                                  });
-                                } else {
-                                  toast({
-                                    title: "Share",
-                                    description: "Sharing is not supported on this device",
-                                  });
-                                }
-                              }}
-                            >
-                              <Share2 className="h-3 w-3 mr-1" />
-                              Share
-                            </Button>
+                            {payment.status === 'pending' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200"
+                                onClick={() => openPaymentModal(payment)}
+                              >
+                                <CreditCard className="h-3 w-3 mr-1" />
+                                Collect
+                              </Button>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => generatePDFReceipt(payment)}>
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download PDF Receipt
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8">
+                      <TableCell colSpan={7} className="text-center py-8">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <FileText className="h-8 w-8 text-gray-300" />
-                          <p className="text-muted-foreground text-xs">No payments found matching the current filters</p>
+                          <p className="text-muted-foreground text-sm">No payments found matching the current filters</p>
+                          <Button variant="outline" onClick={() => {
+                            setSearchQuery("");
+                            setSelectedStatus("all");
+                            setActiveFilter("all");
+                          }}>
+                            Clear Filters
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -750,7 +1007,7 @@ const PaymentsPage = () => {
 
       {/* Payment Modal */}
       {showPaymentModal && selectedPayment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <Card className="w-full max-w-[800px] bg-white shadow-xl">
             <CardHeader className="border-b bg-gradient-to-r from-emerald-50 to-emerald-100">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -790,22 +1047,12 @@ const PaymentsPage = () => {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <p className="text-[10px] text-gray-500 mb-0.5">Contact</p>
-                      <p className="font-medium text-gray-800 text-sm">+91 98765 43210</p>
+                      <p className="text-[10px] text-gray-500 mb-0.5">Seat No</p>
+                      <p className="font-medium text-gray-800 text-sm">{selectedPayment.seatNo}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-gray-500 mb-0.5">Admission Date</p>
-                      <p className="font-medium text-gray-800 text-sm">15 July 2023</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-[10px] text-gray-500 mb-0.5">Shift</p>
-                      <p className="font-medium text-gray-800 text-sm">Morning</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray-500 mb-0.5">Time</p>
-                      <p className="font-medium text-gray-800 text-sm">9:00 AM - 2:00 PM</p>
+                      <p className="text-[10px] text-gray-500 mb-0.5">Due Amount</p>
+                      <p className="font-medium text-gray-800 text-sm">{formatRupee(selectedPayment.amount)}</p>
                     </div>
                   </div>
                 </div>
@@ -825,11 +1072,11 @@ const PaymentsPage = () => {
                       <p className="text-[10px] text-gray-500">Due Amount</p>
                       <div className="flex items-center gap-1">
                         <span className="text-lg font-bold text-red-500">₹</span>
-                        <p className="text-lg font-bold text-red-500">{editableAmount}</p>
+                        <p className="text-lg font-bold text-red-500">{selectedPayment.amount}</p>
                       </div>
                     </div>
                     <div className="space-y-0.5">
-                      <p className="text-[10px] text-gray-500">Collected Amount</p>
+                      <p className="text-[10px] text-gray-500">Collected Amount *</p>
                       <div className="relative">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-lg font-bold text-emerald-500">₹</span>
                         <Input 
@@ -837,20 +1084,14 @@ const PaymentsPage = () => {
                           value={collectedAmount}
                           onChange={(e) => setCollectedAmount(e.target.value)}
                           className="text-lg font-bold text-emerald-500 pl-6 h-8 border-emerald-200 focus:border-emerald-500"
+                          placeholder="Enter amount"
                         />
                       </div>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-0.5">
-                      <p className="text-[10px] text-gray-500">Due Date</p>
-                      <div className="flex items-center gap-1.5 bg-white px-2 py-1.5 rounded-md border border-gray-200 h-8">
-                        <Calendar className="h-3.5 w-3.5 text-gray-400" />
-                        <p className="text-sm font-medium">{editableDate}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] text-gray-500">Payment Date</p>
+                      <p className="text-[10px] text-gray-500">Payment Date *</p>
                       <div className="relative">
                         <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                         <Input 
@@ -861,14 +1102,15 @@ const PaymentsPage = () => {
                         />
                       </div>
                     </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[10px] text-gray-500">Description</p>
-                    <Input 
-                      value={editableDescription}
-                      onChange={(e) => setEditableDescription(e.target.value)}
-                      className="text-sm font-medium h-8 border-gray-200 focus:border-emerald-500"
-                    />
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] text-gray-500">Balance Amount</p>
+                      <div className="flex items-center gap-1 bg-gray-100 px-2 py-1.5 rounded-md h-8">
+                        <span className="text-lg font-bold text-gray-600">₹</span>
+                        <p className="text-lg font-bold text-gray-600">
+                          {selectedPayment.amount - (parseFloat(collectedAmount) || 0)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -879,7 +1121,7 @@ const PaymentsPage = () => {
                   <div className="p-1.5 bg-amber-50 rounded-md">
                     <CreditCard className="h-4 w-4 text-amber-600" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-800">Payment Method</h3>
+                  <h3 className="text-sm font-semibold text-gray-800">Payment Method *</h3>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <Button
@@ -939,18 +1181,23 @@ const PaymentsPage = () => {
                   variant="outline" 
                   onClick={() => setShowPaymentModal(false)}
                   className="w-full sm:w-auto hover:bg-gray-100 h-8 text-sm"
+                  disabled={isProcessing}
                 >
                   Cancel
                 </Button>
                 <Button 
                   onClick={handlePaymentSubmit}
-                  disabled={!paymentMethod}
+                  disabled={!paymentMethod || !collectedAmount || isProcessing}
                   className={`w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 h-8 text-sm ${
-                    !paymentMethod ? "opacity-50 cursor-not-allowed" : ""
+                    (!paymentMethod || !collectedAmount || isProcessing) ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                  Confirm Payment
+                  {isProcessing ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  {isProcessing ? "Processing..." : "Confirm Payment"}
                 </Button>
               </div>
             </CardContent>
@@ -973,9 +1220,6 @@ PaymentsPage.propTypes = {
   paymentMethod: PropTypes.string,
   collectedAmount: PropTypes.string,
   paymentDate: PropTypes.string,
-  editableAmount: PropTypes.string,
-  editableDate: PropTypes.string,
-  editableDescription: PropTypes.string,
   selectedMonth: PropTypes.number,
   selectedYear: PropTypes.number,
   activeFilter: PropTypes.string,

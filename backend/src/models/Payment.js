@@ -207,4 +207,34 @@ paymentSchema.post('save', async function(doc) {
   }
 });
 
+//
+paymentSchema.statics.getPaymentSummary = function(propertyId, startDate, endDate) {
+  const match = { 
+    status: { $in: ['completed', 'partial', 'pending'] }
+  };
+  
+  if (propertyId) match.property = propertyId;
+  if (startDate || endDate) {
+    match.paymentDate = {};
+    if (startDate) match.paymentDate.$gte = new Date(startDate);
+    if (endDate) match.paymentDate.$lte = new Date(endDate);
+  }
+
+  return this.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        totalAmount: { $sum: '$amount' },
+        collectedAmount: {
+          $sum: {
+            $sum: '$paymentBreakdown.amount'
+          }
+        }
+      }
+    }
+  ]);
+};
+
 module.exports = mongoose.model('Payment', paymentSchema);
