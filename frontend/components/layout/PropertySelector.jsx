@@ -27,7 +27,7 @@ import HelpChat from "@/components/help/HelpChat";
 import PropTypes from 'prop-types';
 import { authService } from '@/services/authService';
 
-export const PropertySelector = ({ selectedProperty, onPropertyChange, onMobileMenuToggle }) => {
+export const PropertySelector = ({ selectedProperty, onPropertyChange, onMobileMenuToggle = () => {} }) => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -312,10 +312,6 @@ PropertySelector.propTypes = {
   selectedProperty: PropTypes.string.isRequired,
   onPropertyChange: PropTypes.func.isRequired,
   onMobileMenuToggle: PropTypes.func
-};
-
-PropertySelector.defaultProps = {
-  onMobileMenuToggle: () => {}
 };
 
 export default PropertySelector;
