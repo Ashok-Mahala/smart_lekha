@@ -1,53 +1,52 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { motion } from 'framer-motion';
 import { 
   Loader2, 
   Upload, 
   ArrowLeft, 
   User, 
-  BookOpen, 
+  Mail, 
   Phone, 
-  MapPin, 
-  Calendar as CalendarIcon, 
-  GraduationCap, 
-  Building2,
-  Shield,
-  CreditCard,
-  X,
-  Image as ImageIcon,
-  FileText
+  Camera, 
+  File,
+  GraduationCap,
+  BookOpen,
+  Search,
+  IndianRupee
 } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import PropTypes from 'prop-types';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { studentSchema } from '@/lib/validations';
-import { apiService } from '@/services/api';
-import { handleFormErrors } from '@/lib/errorHandler';
 import { getShifts } from '@/api/shifts';
-import { getSeatsByProperty as getAvailableSeats, getSeatsByProperty as getSeatsBySection } from '@/api/seats';
+import { getSeatsByProperty as getAvailableSeats } from '@/api/seats';
+import { createStudent, searchStudentsForAssignment } from "@/api/students";
 
 const AddStudentPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [idProofFrontPreview, setIdProofFrontPreview] = useState(null);
-  const [idProofBackPreview, setIdProofBackPreview] = useState(null);
   const [showSeatDialog, setShowSeatDialog] = useState(false);
+  
+  // Student form state - same as AvailableSeatDialog
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [shift, setShift] = useState('');
+  const [course, setCourse] = useState('');
+  const [institution, setInstitution] = useState('');
+  const [aadharNumber, setAadharNumber] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [identityProof, setIdentityProof] = useState(null);
+  const [fee, setFee] = useState('');
+  const [existingStudents, setExistingStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isCreatingNew, setIsCreatingNew] = useState(true); // Always true for add student page
   
   // State for shifts and seats
   const [availableShifts, setAvailableShifts] = useState([]);
@@ -55,6 +54,9 @@ const AddStudentPage = () => {
   const [isLoadingShifts, setIsLoadingShifts] = useState(false);
   const [isLoadingSeats, setIsLoadingSeats] = useState(false);
   
+  const profilePhotoRef = useRef(null);
+  const identityProofRef = useRef(null);
+
   // Load shifts when component mounts
   useEffect(() => {
     const loadShifts = async () => {
@@ -62,17 +64,7 @@ const AddStudentPage = () => {
       try {
         const shiftsData = await getShifts();
         if (shiftsData && shiftsData.length > 0) {
-          setAvailableShifts(shiftsData.map(shift => ({
-            id: shift.id,
-            name: shift.name
-          })));
-        } else {
-          // Fallback to default shifts if API doesn't return any
-          setAvailableShifts([
-            { id: 'morning', name: 'Morning Shift' },
-            { id: 'afternoon', name: 'Afternoon Shift' },
-            { id: 'evening', name: 'Evening Shift' }
-          ]);
+          setAvailableShifts(shiftsData);
         }
       } catch (error) {
         console.error('Failed to load shifts:', error);
@@ -81,12 +73,6 @@ const AddStudentPage = () => {
           description: "Failed to load shifts",
           variant: "destructive",
         });
-        // Set default shifts if API fails
-        setAvailableShifts([
-          { id: 'morning', name: 'Morning Shift' },
-          { id: 'afternoon', name: 'Afternoon Shift' },
-          { id: 'evening', name: 'Evening Shift' }
-        ]);
       } finally {
         setIsLoadingShifts(false);
       }
@@ -94,27 +80,37 @@ const AddStudentPage = () => {
     
     loadShifts();
   }, [toast]);
-  
+
   // Load seats when dialog opens
   useEffect(() => {
     if (showSeatDialog) {
       loadSeats();
     }
   }, [showSeatDialog]);
-  
+
+  // Update fee when shift changes - same as AvailableSeatDialog
+  useEffect(() => {
+    if (shift) {
+      const selectedShift = availableShifts.find(s => s._id === shift);
+      if (selectedShift) {
+        setFee(selectedShift.fee?.toString() || '');
+      }
+    } else {
+      setFee('');
+    }
+  }, [shift, availableShifts]);
+
   const loadSeats = async () => {
     setIsLoadingSeats(true);
     try {
-      // Try to get available seats from API
       const params = {
         date: new Date().toISOString().split('T')[0],
-        shift: form.watch('shift') || 'morning'
+        shift: shift || availableShifts[0]?._id
       };
       
       const seatsData = await getAvailableSeats(params);
       
       if (seatsData && seatsData.length > 0) {
-        // Group seats by section
         const sectionMap = {};
         seatsData.forEach(seat => {
           if (!sectionMap[seat.section]) {
@@ -122,12 +118,12 @@ const AddStudentPage = () => {
           }
           sectionMap[seat.section].push({
             id: seat.id,
+            number: seat.seatNumber,
             status: seat.status,
             ...seat
           });
         });
         
-        // Convert to array format for rendering
         const formattedSeats = Object.keys(sectionMap).map(section => ({
           section,
           seats: sectionMap[section]
@@ -135,22 +131,19 @@ const AddStudentPage = () => {
         
         setAvailableSeats(formattedSeats);
       } else {
-        // If no seats available, get all seats by section as fallback
-        const sections = ['A', 'B', 'C']; // Default sections
-        const sectionData = await Promise.all(
-          sections.map(async section => {
-            try {
-              const seats = await getSeatsBySection(section);
-              return {
-                section,
-                seats: seats.map(seat => seat.seatNumber || seat) // Handle different API responses
-              };
-            } catch (error) {
-              return { section, seats: [`${section}1`, `${section}2`, `${section}3`, `${section}4`, `${section}5`] };
-            }
-          })
-        );
-        setAvailableSeats(sectionData);
+        // Fallback to default seats
+        setAvailableSeats([
+          { section: 'A', seats: [
+            { id: 'A1', number: 'A1', status: 'available' },
+            { id: 'A2', number: 'A2', status: 'available' },
+            { id: 'A3', number: 'A3', status: 'available' }
+          ]},
+          { section: 'B', seats: [
+            { id: 'B1', number: 'B1', status: 'available' },
+            { id: 'B2', number: 'B2', status: 'available' },
+            { id: 'B3', number: 'B3', status: 'available' }
+          ]}
+        ]);
       }
     } catch (error) {
       console.error('Failed to load seats:', error);
@@ -159,274 +152,102 @@ const AddStudentPage = () => {
         description: "Failed to load seats",
         variant: "destructive",
       });
-      // Set default seats if API fails
-      setAvailableSeats([
-        { section: 'A', seats: ['A1', 'A2', 'A3', 'A4', 'A5'] },
-        { section: 'B', seats: ['B1', 'B2', 'B3', 'B4', 'B5'] },
-        { section: 'C', seats: ['C1', 'C2', 'C3', 'C4', 'C5'] }
-      ]);
     } finally {
       setIsLoadingSeats(false);
     }
   };
 
-  // Initialize form with react-hook-form and zod validation
-  const form = useForm({
-    resolver: zodResolver(studentSchema),
-    defaultValues: {
-      // Personal Information
-      name: "",
-      fatherName: "",
-      dateOfBirth: new Date(), // Initialize with Date object
-      gender: "male",
-      
-      // Academic Information
-      studentId: "",
-      admissionDate: new Date(), // Initialize with Date object
-      course: "",
-      shift: "morning",
-      seatNo: "",
-      
-      // Contact Information
-      email: "",
-      phone: "",
-      whatsapp: "",
-      address: "",
-      city: "",
-      state: "",
-      pincode: "",
-      
-      // Identification
-      idProofType: "aadhar",
-      idProofNumber: "",
-      
-      // Additional Information
-      status: "active",
-      notes: "",
-    }
-  });
-
-  // File state is managed separately from form data
-  const [photo, setPhoto] = useState(null);
-  const [idProofFront, setIdProofFront] = useState(null);
-  const [idProofBack, setIdProofBack] = useState(null);
-
-  const handlePhotoChange = (e) => {
-    const file = e.target.files?.[0];
+  const handleFileChange = (e, setFile) => {
+    const file = e.target.files[0];
     if (file) {
-      // Validate file type
-      const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
-      if (!validImageTypes.includes(file.type)) {
-        toast({
-          title: "Invalid File",
-          description: "Please upload a valid image file (JPEG, PNG, GIF)",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File Too Large",
-          description: "File size should be less than 5MB",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setPhoto(file);
-      
-      // Create preview URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+      setFile(file);
     }
   };
 
-  const handleIdProofFrontChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validate file type
-      const validFileTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-      if (!validFileTypes.includes(file.type)) {
-        toast({
-          title: "Invalid File",
-          description: "Please upload a valid file (PDF, JPEG, PNG)",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File Too Large",
-          description: "File size should be less than 5MB",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setIdProofFront(file);
-      
-      // Create preview URL for images
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setIdProofFrontPreview(reader.result);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        setIdProofFrontPreview(null);
-      }
-    }
+  const triggerFileInput = (ref) => {
+    ref.current?.click();
   };
 
-  const handleIdProofBackChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validate file type
-      const validFileTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-      if (!validFileTypes.includes(file.type)) {
-        toast({
-          title: "Invalid File",
-          description: "Please upload a valid file (PDF, JPEG, PNG)",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File Too Large",
-          description: "File size should be less than 5MB",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setIdProofBack(file);
-      
-      // Create preview URL for images
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setIdProofBackPreview(reader.result);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        setIdProofBackPreview(null);
-      }
-    }
-  };
-
-  const handleSeatSelect = (seatId) => {
-    form.setValue('seatNo', seatId);
+  const handleSeatSelect = (seat) => {
+    // Set the selected seat - you can store this in state if needed
+    console.log('Selected seat:', seat);
     setShowSeatDialog(false);
+    toast({
+      title: "Seat Selected",
+      description: `Seat ${seat.number} has been selected`,
+    });
   };
 
-  const onSubmit = async (data) => {
+  const onSubmit = async (e) => {
+    e.preventDefault();
     setIsSubmitting(true);
     
     try {
-      console.log('Form data before submission:', data);
+      // Validate required fields - same as AvailableSeatDialog
+      if (!name || !email || !phone) {
+        toast({
+          title: "Missing Information",
+          description: "Please fill in all required student information",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create student data - same as AvailableSeatDialog
+      const studentData = {
+        firstName: name.split(' ')[0],
+        lastName: name.split(' ').slice(1).join(' ') || '',
+        email,
+        phone,
+        course,
+        institution,
+        aadharNumber,
+        status: 'active'
+      };
+
+      // Create FormData for student creation - same as AvailableSeatDialog
+      const studentFormData = new FormData();
+      studentFormData.append('firstName', studentData.firstName);
+      studentFormData.append('lastName', studentData.lastName);
+      studentFormData.append('email', studentData.email);
+      studentFormData.append('phone', studentData.phone);
+      studentFormData.append('course', studentData.course || '');
+      studentFormData.append('institution', studentData.institution || '');
+      studentFormData.append('aadharNumber', studentData.aadharNumber || '');
       
-      // Create a FormData object for file uploads
-      const formData = new FormData();
-      
-      // Add all form fields to FormData
-      Object.keys(data).forEach(key => {
-        if (key === 'dateOfBirth' || key === 'admissionDate') {
-          // Ensure we're working with a Date object
-          const date = data[key] instanceof Date ? data[key] : new Date(data[key]);
-          formData.append(key, date.toISOString());
-        } else {
-          formData.append(key, data[key]);
+      if (profilePhoto) {
+        studentFormData.append('documents', profilePhoto);
+      }
+      if (identityProof) {
+        studentFormData.append('documents', identityProof);
+      }
+
+      // Create new student - same API call as AvailableSeatDialog
+      const newStudent = await createStudent(studentFormData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
         }
       });
       
-      // Add file fields if they exist
-      if (photo) formData.append('photo', photo);
-      if (idProofFront) formData.append('idProofFront', idProofFront);
-      if (idProofBack) formData.append('idProofBack', idProofBack);
-      
-      // Log FormData contents for debugging
-      for (let pair of formData.entries()) {
-        console.log(pair[0] + ': ' + pair[1]);
-      }
-      
-      // Call API using the enhanced error handling
-      const response = await apiService.students.createStudent(formData, {
-        form,
-        showToast: true,
-      });
-      
-      console.log('API Response:', response);
-      
+      console.log('New student created:', newStudent);
+
       toast({
         title: "Success",
         description: "Student added successfully",
       });
       
       navigate('/students');
+      
     } catch (error) {
       console.error('Failed to add student:', error);
-      
       toast({
         title: "Error",
-        description: error.message || "Failed to add student. Please check the form and try again.",
+        description: error.response?.data?.message || "Failed to add student. Please try again.",
         variant: "destructive",
       });
-      
-      if (error.errors) {
-        Object.entries(error.errors).forEach(([field, message]) => {
-          form.setError(field, {
-            type: 'manual',
-            message: message
-          });
-        });
-      }
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Add PropTypes validation
-  AddStudentPage.propTypes = {
-    isSubmitting: PropTypes.bool,
-    photoPreview: PropTypes.string,
-    idProofFrontPreview: PropTypes.string,
-    idProofBackPreview: PropTypes.string,
-    showSeatDialog: PropTypes.bool,
-    formData: PropTypes.shape({
-      name: PropTypes.string.isRequired,
-      fatherName: PropTypes.string.isRequired,
-      dateOfBirth: PropTypes.instanceOf(Date).isRequired,
-      gender: PropTypes.string.isRequired,
-      studentId: PropTypes.string.isRequired,
-      admissionDate: PropTypes.instanceOf(Date).isRequired,
-      course: PropTypes.string.isRequired,
-      shift: PropTypes.string.isRequired,
-      seatNo: PropTypes.string.isRequired,
-      email: PropTypes.string.isRequired,
-      phone: PropTypes.string.isRequired,
-      whatsapp: PropTypes.string,
-      address: PropTypes.string.isRequired,
-      city: PropTypes.string.isRequired,
-      state: PropTypes.string.isRequired,
-      pincode: PropTypes.string.isRequired,
-      idProofFront: PropTypes.instanceOf(File),
-      idProofBack: PropTypes.instanceOf(File),
-      idProofType: PropTypes.string.isRequired,
-      idProofNumber: PropTypes.string.isRequired,
-      status: PropTypes.string.isRequired,
-      notes: PropTypes.string,
-      photo: PropTypes.instanceOf(File)
-    }).isRequired
   };
 
   return (
@@ -458,205 +279,116 @@ const AddStudentPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="max-h-[600px] overflow-y-auto pr-4 space-y-8">
-                {/* Personal Information Section */}
+            <form onSubmit={onSubmit} className="space-y-6">
+              <div className="space-y-8">
+                {/* Student Information Section - Same as AvailableSeatDialog */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
                     <User className="h-5 w-5 text-primary" />
-                    <h3 className="text-lg font-medium">Personal Information</h3>
-                  </div>
+                    Student Information
+                  </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="name">Full Name <span className="text-red-500">*</span></Label>
+                        <Label htmlFor="name">
+                          Full Name *
+                        </Label>
                         <Input
                           id="name"
-                          {...form.register('name')}
-                          placeholder="Enter student's full name"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="Enter full name"
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="fatherName">Father's/Husband's Name <span className="text-red-500">*</span></Label>
+                        <Label htmlFor="email">
+                          Email *
+                        </Label>
                         <Input
-                          id="fatherName"
-                          {...form.register('fatherName')}
-                          placeholder="Enter father's/husband's name"
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="Enter email address"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">
+                          Phone *
+                        </Label>
+                        <Input
+                          id="phone"
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder="Enter phone number"
                           required
                         />
                       </div>
                     </div>
 
                     <div className="space-y-4">
+                      {/* Educational Information - Same as AvailableSeatDialog */}
                       <div className="space-y-2">
-                        <Label htmlFor="gender">Gender <span className="text-red-500">*</span></Label>
-                        <Select
-                          value={form.watch('gender')}
-                          onValueChange={(value) => form.setValue('gender', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select gender" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="male">Male</SelectItem>
-                            <SelectItem value="female">Female</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Label htmlFor="institution" className="flex items-center gap-2">
+                          <GraduationCap className="h-4 w-4 text-primary" />
+                          Institution
+                        </Label>
+                        <Input
+                          id="institution"
+                          value={institution}
+                          onChange={(e) => setInstitution(e.target.value)}
+                          placeholder="Enter institution name"
+                        />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="photo">Student Photo</Label>
-                        <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-md p-3 h-32 w-40 relative">
-                          {photoPreview ? (
-                            <>
-                              <img 
-                                src={photoPreview} 
-                                alt="Student photo preview" 
-                                className="h-full w-auto object-contain"
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-background/80 hover:bg-background"
-                                onClick={() => {
-                                  setPhotoPreview(null);
-                                  form.setValue('photo', null);
-                                }}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <ImageIcon className="h-8 w-8 text-muted-foreground mb-1" />
-                              <p className="text-xs text-muted-foreground text-center mb-1">
-                                Drag & drop or click to upload
-                              </p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 text-xs"
-                                onClick={() => document.getElementById('photo')?.click()}
-                              >
-                                <Upload className="mr-1 h-3 w-3" />
-                                Upload Photo
-                              </Button>
-                            </>
-                          )}
-                          <input
-                            type="file"
-                            id="photo"
-                            accept="image/*"
-                            onChange={handlePhotoChange}
-                            className="hidden"
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Recommended: Square image, max 5MB (JPEG, PNG, GIF)
-                        </p>
+                        <Label htmlFor="course" className="flex items-center gap-2">
+                          <BookOpen className="h-4 w-4 text-primary" />
+                          Course
+                        </Label>
+                        <Input
+                          id="course"
+                          value={course}
+                          onChange={(e) => setCourse(e.target.value)}
+                          placeholder="Enter course name"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="aadhar">
+                          Aadhar Number
+                        </Label>
+                        <Input
+                          id="aadhar"
+                          value={aadharNumber}
+                          onChange={(e) => setAadharNumber(e.target.value)}
+                          placeholder="Enter Aadhar number"
+                        />
                       </div>
                     </div>
                   </div>
                 </div>
-                
-                {/* Academic Information Section */}
+
+                {/* Assignment Details Section - Same as AvailableSeatDialog */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
                     <BookOpen className="h-5 w-5 text-primary" />
-                    <h3 className="text-lg font-medium">Academic Information</h3>
-                  </div>
+                    Assignment Details
+                  </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="studentId">Student ID <span className="text-red-500">*</span></Label>
-                        <Input
-                          id="studentId"
-                          {...form.register('studentId')}
-                          placeholder="Enter student ID"
-                          required
-                        />
-                      </div>
-
-                      {/* Date of Birth Field */}
-                      <div className="space-y-2">
-                        <Label htmlFor="dateOfBirth" className="text-sm font-medium flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-primary" />
-                          Date of Birth <span className="text-red-500">*</span>
+                        <Label htmlFor="shift">
+                          Shift *
                         </Label>
-                        <div className="grid gap-2">
-                          <Input
-                            type="date"
-                            id="dateOfBirth"
-                            value={form.watch('dateOfBirth') ? format(new Date(form.watch('dateOfBirth')), 'yyyy-MM-dd') : ''}
-                            onChange={(e) => {
-                              const date = e.target.value ? new Date(e.target.value) : null;
-                              form.setValue('dateOfBirth', date);
-                            }}
-                            className="w-full"
-                            required
-                            max={format(new Date(), 'yyyy-MM-dd')}
-                          />
-                          {form.formState.errors.dateOfBirth && (
-                            <p className="text-sm text-red-500">
-                              {form.formState.errors.dateOfBirth.message}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Admission Date Field */}
-                      <div className="space-y-2">
-                        <Label htmlFor="admissionDate" className="text-sm font-medium flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-primary" />
-                          Admission Date <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="grid gap-2">
-                          <Input
-                            type="date"
-                            id="admissionDate"
-                            value={form.watch('admissionDate') ? format(new Date(form.watch('admissionDate')), 'yyyy-MM-dd') : ''}
-                            onChange={(e) => {
-                              const date = e.target.value ? new Date(e.target.value) : null;
-                              form.setValue('admissionDate', date);
-                            }}
-                            className="w-full"
-                            required
-                            min={format(new Date(), 'yyyy-MM-dd')}
-                          />
-                          {form.formState.errors.admissionDate && (
-                            <p className="text-sm text-red-500">
-                              {form.formState.errors.admissionDate.message}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="course">Course <span className="text-red-500">*</span></Label>
-                        <Input
-                          id="course"
-                          {...form.register('course')}
-                          placeholder="Enter course name"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="shift">Shift <span className="text-red-500">*</span></Label>
-                        <Select
-                          value={form.watch('shift')}
-                          onValueChange={(value) => form.setValue('shift', value)}
-                          disabled={isLoadingShifts}
-                        >
+                        <Select value={shift} onValueChange={setShift} required>
                           <SelectTrigger>
-                            <SelectValue placeholder={isLoadingShifts ? "Loading shifts..." : "Select shift"} />
+                            <SelectValue placeholder="Select shift" />
                           </SelectTrigger>
                           <SelectContent>
                             {isLoadingShifts ? (
@@ -665,9 +397,12 @@ const AddStudentPage = () => {
                                 <span>Loading shifts...</span>
                               </div>
                             ) : availableShifts.length > 0 ? (
-                              availableShifts.map(shift => (
-                                <SelectItem key={shift.id} value={shift.id}>
-                                  {shift.name}
+                              availableShifts.map((shiftItem) => (
+                                <SelectItem 
+                                  key={shiftItem._id} 
+                                  value={shiftItem._id}
+                                >
+                                  {shiftItem.name} ({shiftItem.startTime} - {shiftItem.endTime}) - ₹{shiftItem.fee}
                                 </SelectItem>
                               ))
                             ) : (
@@ -680,12 +415,29 @@ const AddStudentPage = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="seatNo">Seat Number</Label>
+                        <Label htmlFor="fee" className="flex items-center gap-2">
+                          <IndianRupee className="h-4 w-4" />
+                          Fee
+                        </Label>
+                        <Input
+                          id="fee"
+                          type="number"
+                          value={fee}
+                          onChange={(e) => setFee(e.target.value)}
+                          placeholder="Fee amount"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="seat">
+                          Seat Number
+                        </Label>
                         <div className="flex gap-2">
                           <Input
-                            id="seatNo"
-                            {...form.register('seatNo')}
-                            placeholder="Enter seat number"
+                            id="seat"
+                            placeholder="Select a seat"
                             readOnly
                           />
                           <Dialog open={showSeatDialog} onOpenChange={setShowSeatDialog}>
@@ -721,7 +473,7 @@ const AddStudentPage = () => {
                                       <div className="grid grid-cols-5 gap-2">
                                         {section.seats.map(seat => (
                                           <Button
-                                            key={seat}
+                                            key={seat.id}
                                             variant={seat.status === "occupied" ? "outline" : "default"}
                                             className={`h-12 ${
                                               seat.status === "occupied" 
@@ -731,7 +483,7 @@ const AddStudentPage = () => {
                                             disabled={seat.status === "occupied"}
                                             onClick={() => handleSeatSelect(seat)}
                                           >
-                                            {seat}
+                                            {seat.number}
                                           </Button>
                                         ))}
                                       </div>
@@ -750,253 +502,62 @@ const AddStudentPage = () => {
                     </div>
                   </div>
                 </div>
-                
-                {/* Contact Information Section */}
+
+                {/* Additional Information Section - Same as AvailableSeatDialog */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <Phone className="h-5 w-5 text-primary" />
-                    <h3 className="text-lg font-medium">Contact Information</h3>
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-semibold flex items-center gap-2">
+                      <File className="h-5 w-5 text-primary" />
+                      Additional Information
+                    </span>
                   </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Email Address <span className="text-red-500">*</span></Label>
-                        <Input
-                          id="email"
-                          {...form.register('email')}
-                          type="email"
-                          placeholder="Enter student's email"
-                          required
+                    <div className="space-y-2">
+                      <Label>
+                        Profile Photo
+                      </Label>
+                      <div>
+                        <input
+                          type="file"
+                          ref={profilePhotoRef}
+                          onChange={(e) => handleFileChange(e, setProfilePhoto)}
+                          accept="image/*,.pdf"
+                          className="hidden"
                         />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number <span className="text-red-500">*</span></Label>
-                        <Input
-                          id="phone"
-                          {...form.register('phone')}
-                          placeholder="Enter student's phone number"
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="whatsapp">WhatsApp Number</Label>
-                        <Input
-                          id="whatsapp"
-                          {...form.register('whatsapp')}
-                          placeholder="Enter WhatsApp number (if different from phone)"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="address">Address <span className="text-red-500">*</span></Label>
-                        <Textarea
-                          id="address"
-                          {...form.register('address')}
-                          placeholder="Enter student's address"
-                          required
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="city">City</Label>
-                          <Input
-                            id="city"
-                            {...form.register('city')}
-                            placeholder="City"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="state">State</Label>
-                          <Input
-                            id="state"
-                            {...form.register('state')}
-                            placeholder="State"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="pincode">Pincode</Label>
-                          <Input
-                            id="pincode"
-                            {...form.register('pincode')}
-                            placeholder="Pincode"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Additional Information Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <Shield className="h-5 w-5 text-primary" />
-                    <h3 className="text-lg font-medium">Additional Information</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="idProofType">ID Proof Type <span className="text-red-500">*</span></Label>
-                        <Select
-                          value={form.watch('idProofType')}
-                          onValueChange={(value) => form.setValue('idProofType', value)}
+                        <Button
+                          variant="outline"
+                          className="w-full flex items-center gap-2"
+                          onClick={() => triggerFileInput(profilePhotoRef)}
+                          type="button"
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select ID proof type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="aadhar">Aadhar Card</SelectItem>
-                            <SelectItem value="passport">Passport</SelectItem>
-                            <SelectItem value="driving">Driving License</SelectItem>
-                            <SelectItem value="voter">Voter ID</SelectItem>
-                            <SelectItem value="pan">PAN Card</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="idProofNumber">ID Proof Number <span className="text-red-500">*</span></Label>
-                        <Input
-                          id="idProofNumber"
-                          {...form.register('idProofNumber')}
-                          placeholder="Enter ID proof number"
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>ID Proof Documents</Label>
-                        <div className="flex gap-6">
-                          <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-md p-4 h-48 w-72 relative">
-                            {idProofFrontPreview ? (
-                              <>
-                                <img 
-                                  src={idProofFrontPreview} 
-                                  alt="ID proof front preview" 
-                                  className="h-full w-auto object-contain"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="absolute top-2 right-2 h-8 w-8 rounded-full bg-background/80 hover:bg-background"
-                                  onClick={() => {
-                                    setIdProofFrontPreview(null);
-                                    form.setValue('idProofFront', null);
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <ImageIcon className="h-12 w-12 text-muted-foreground mb-2" />
-                                <p className="text-sm text-muted-foreground text-center mb-2">
-                                  Front side
-                                </p>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="default"
-                                  onClick={() => document.getElementById('idProofFront')?.click()}
-                                >
-                                  <Upload className="mr-2 h-4 w-4" />
-                                  Upload
-                                </Button>
-                              </>
-                            )}
-                            <input
-                              type="file"
-                              id="idProofFront"
-                              accept="image/*,.pdf"
-                              onChange={handleIdProofFrontChange}
-                              className="hidden"
-                            />
-                          </div>
-
-                          <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-md p-4 h-48 w-72 relative">
-                            {idProofBackPreview ? (
-                              <>
-                                <img 
-                                  src={idProofBackPreview} 
-                                  alt="ID proof back preview" 
-                                  className="h-full w-auto object-contain"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="absolute top-2 right-2 h-8 w-8 rounded-full bg-background/80 hover:bg-background"
-                                  onClick={() => {
-                                    setIdProofBackPreview(null);
-                                    form.setValue('idProofBack', null);
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <ImageIcon className="h-12 w-12 text-muted-foreground mb-2" />
-                                <p className="text-sm text-muted-foreground text-center mb-2">
-                                  Back side
-                                </p>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="default"
-                                  onClick={() => document.getElementById('idProofBack')?.click()}
-                                >
-                                  <Upload className="mr-2 h-4 w-4" />
-                                  Upload
-                                </Button>
-                              </>
-                            )}
-                            <input
-                              type="file"
-                              id="idProofBack"
-                              accept="image/*,.pdf"
-                              onChange={handleIdProofBackChange}
-                              className="hidden"
-                            />
-                          </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Accepted formats: PDF, JPEG, PNG (max 5MB)
-                        </p>
+                          <Camera className="h-4 w-4" />
+                          {profilePhoto ? profilePhoto.name : 'Upload Profile Photo'}
+                        </Button>
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="status">Status</Label>
-                        <Select
-                          value={form.watch('status')}
-                          onValueChange={(value) => form.setValue('status', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="inactive">Inactive</SelectItem>
-                            <SelectItem value="suspended">Suspended</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="notes">Additional Notes</Label>
-                        <Textarea
-                          id="notes"
-                          {...form.register('notes')}
-                          placeholder="Enter any additional notes about the student"
+                    <div className="space-y-2">
+                      <Label>
+                        Identity Proof
+                      </Label>
+                      <div>
+                        <input
+                          type="file"
+                          ref={identityProofRef}
+                          onChange={(e) => handleFileChange(e, setIdentityProof)}
+                          accept="image/*"
+                          className="hidden"
                         />
+                        <Button
+                          variant="outline"
+                          className="w-full flex items-center gap-2"
+                          onClick={() => triggerFileInput(identityProofRef)}
+                          type="button"
+                        >
+                          <Camera className="h-4 w-4" />
+                          {identityProof ? identityProof.name : 'Upload Identity Proof'}
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -1007,7 +568,7 @@ const AddStudentPage = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => navigate('/students/list')}
+                  onClick={() => navigate('/students')}
                 >
                   Cancel
                 </Button>
@@ -1030,4 +591,4 @@ const AddStudentPage = () => {
   );
 };
 
-export default AddStudentPage; 
+export default AddStudentPage;
