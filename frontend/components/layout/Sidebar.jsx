@@ -67,11 +67,11 @@ const Sidebar = ({ isCollapsed, toggleSidebar }) => {
       icon: CreditCard,
       href: "/payments",
     },
-    {
-      title: "Settings",
-      icon: Settings,
-      href: "/settings",
-    },
+    // {
+    //   title: "Settings",
+    //   icon: Settings,
+    //   href: "/settings",
+    // },
   ];
 
   const NavItem = ({ item, isCollapsed }) => {

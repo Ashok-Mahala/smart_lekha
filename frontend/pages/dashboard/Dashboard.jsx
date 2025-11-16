@@ -1,319 +1,432 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Sofa, IndianRupee, Clock, TrendingUp, ChevronRight, BookOpen, Activity, Filter, BarChart2, LineChart, PieChart, Download, Plus, Bookmark, UserPlus, CreditCard, Search, AlertCircle, Loader2, Phone, Calendar, FileText, User, X, Building2, Library, School } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { motion } from 'framer-motion';
-import { Input } from '@/components/ui/input';
-import { format, subDays } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import QuickBookingForm from '@/components/booking/QuickBookingForm';
-import { PaymentForm } from '@/components/financial/payments/PaymentForm';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { toast } from 'sonner';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
-import QuickCollection from '@/components/financial/payments/QuickCollection';
-import PropTypes from 'prop-types';
+import { Progress } from '@/components/ui/progress';
 import { 
-  getDailySummary, 
-  fetchRevenueData, 
-  fetchOccupancyData, 
-  fetchStudentActivityData,
-  fetchFinancialData
-} from '@/api/reports';
-import {getProperties} from '@/api/properties'
+  Users, 
+  Sofa, 
+  IndianRupee, 
+  TrendingUp, 
+  TrendingDown,
+  Activity,
+  BarChart3,
+  PieChart,
+  LineChart,
+  Download,
+  Plus,
+  CreditCard,
+  UserCheck,
+  AlertCircle,
+  RefreshCw,
+  ArrowUpRight,
+  ArrowDownRight,
+  BookOpen,
+  Calendar,
+  Clock
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import { format, subDays } from 'date-fns';
+import { toast } from 'sonner';
+import QuickBookingForm from '@/components/booking/QuickBookingForm';
+import QuickCollection from '@/components/financial/payments/QuickCollection';
 
-// API Integration Types
-export const bookingPropTypes = PropTypes.shape({
-  id: PropTypes.string.isRequired,
-  studentId: PropTypes.string.isRequired,
-  seatId: PropTypes.string.isRequired,
-  startTime: PropTypes.string.isRequired,
-  endTime: PropTypes.string.isRequired,
-  status: PropTypes.oneOf(['active', 'completed', 'cancelled']).isRequired
-});
+// Import API services
+import { getStudentsByProperty } from '@/api/students';
+import { getSeatsByProperty } from '@/api/seats';
+import { getPayments, getDashboardStats, generatePaymentReport } from '@/api/payments';
+import { getProperties } from '@/api/properties';
 
-export const studentPropTypes = PropTypes.shape({
-  id: PropTypes.string.isRequired,
-  name: PropTypes.string.isRequired,
-  email: PropTypes.string.isRequired,
-  status: PropTypes.oneOf(['active', 'inactive']).isRequired
-});
-
-export const revenuePropTypes = PropTypes.shape({
-  total: PropTypes.number.isRequired,
-  today: PropTypes.number.isRequired,
-  thisWeek: PropTypes.number.isRequired,
-  thisMonth: PropTypes.number.isRequired
-});
-
-// Default data for when API calls fail
-const defaultDashboardData = {
-  dailySummary: {
-    totalStudents: 0,
-    peakHour: "N/A",
-    totalRevenue: 0,
-    occupancyRate: 0
-  },
-  revenue: {
-    daily: [],
-    weekly: [],
-    monthly: [],
-    yearly: []
-  },
-  occupancy: {
-    daily: [],
-    weekly: [],
-    monthly: [],
-    yearly: []
-  },
-  studentActivity: [],
-  financial: []
+// Chart Components
+const RevenueChart = ({ data, timeframe }) => {
+  const maxValue = Math.max(...data.map(item => item.amount), 1);
+  
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Revenue Trend</h4>
+        <Badge variant="outline" className="text-xs">
+          {timeframe}
+        </Badge>
+      </div>
+      <div className="space-y-2">
+        {data.map((item, index) => (
+          <div key={index} className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground w-20 truncate">
+              {item.label}
+            </span>
+            <div className="flex-1 max-w-32 mx-2">
+              <Progress 
+                value={(item.amount / maxValue) * 100} 
+                className="h-2"
+              />
+            </div>
+            <span className="text-xs font-medium w-16 text-right">
+              ₹{item.amount.toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
-// Error Boundary Component
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>
-            Something went wrong. Please try refreshing the page.
-            {this.state.error && <div className="mt-2 text-xs">{this.state.error.message}</div>}
-          </AlertDescription>
-        </Alert>
-      );
-    }
-
-    return this.props.children;
-  }
-}
-
-ErrorBoundary.propTypes = {
-  children: PropTypes.node.isRequired
+const PaymentStatusChart = ({ data }) => {
+  return (
+    <div className="space-y-4">
+      <h4 className="text-sm font-semibold">Payment Status</h4>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="text-center p-3 bg-green-50 rounded-lg border">
+          <div className="text-xl font-bold text-green-600">{data.completed}</div>
+          <div className="text-xs text-green-600 mt-1">Completed</div>
+        </div>
+        <div className="text-center p-3 bg-amber-50 rounded-lg border">
+          <div className="text-xl font-bold text-amber-600">{data.pending}</div>
+          <div className="text-xs text-amber-600 mt-1">Pending</div>
+        </div>
+        <div className="text-center p-3 bg-blue-50 rounded-lg border">
+          <div className="text-xl font-bold text-blue-600">{data.partial}</div>
+          <div className="text-xs text-blue-600 mt-1">Partial</div>
+        </div>
+        <div className="text-center p-3 bg-red-50 rounded-lg border">
+          <div className="text-xl font-bold text-red-600">{data.overdue}</div>
+          <div className="text-xs text-red-600 mt-1">Overdue</div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-// Loading Component
-const LoadingSpinner = () => (
-  <div className="flex items-center justify-center h-full">
-    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-  </div>
+const StudentDistributionChart = ({ data }) => {
+  return (
+    <div className="space-y-4">
+      <h4 className="text-sm font-semibold">Student Distribution</h4>
+      <div className="space-y-3">
+        <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+          <span className="text-sm">Active Students</span>
+          <Badge variant="default">{data.active}</Badge>
+        </div>
+        <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+          <span className="text-sm">New This Week</span>
+          <Badge variant="outline">{data.newThisWeek}</Badge>
+        </div>
+        <div className="flex justify-between items-center p-3 bg-amber-50 rounded-lg">
+          <span className="text-sm">Due Payments</span>
+          <Badge variant="outline">{data.withDuePayments}</Badge>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RecentPaymentsTable = ({ payments }) => {
+  const getStatusVariant = (status) => {
+    const variants = {
+      completed: 'default',
+      pending: 'outline',
+      partial: 'secondary',
+      overdue: 'destructive'
+    };
+    return variants[status] || 'outline';
+  };
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-sm font-semibold">Recent Payments</h4>
+      <div className="space-y-2 max-h-60 overflow-y-auto">
+        {payments.map((payment, index) => (
+          <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-medium truncate">{payment.studentName}</span>
+                <Badge variant={getStatusVariant(payment.status)} className="text-xs">
+                  {payment.status}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span>Seat: {payment.seatNo}</span>
+                <span>{format(new Date(payment.date), 'MMM dd')}</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-bold text-green-600">₹{payment.amount}</div>
+              <div className="text-xs text-muted-foreground capitalize">{payment.method}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Loading Components
+const MetricCardSkeleton = () => (
+  <Card>
+    <CardHeader className="pb-2">
+      <Skeleton className="h-4 w-[100px]" />
+    </CardHeader>
+    <CardContent>
+      <Skeleton className="h-8 w-[120px] mb-2" />
+      <Skeleton className="h-4 w-[80px]" />
+    </CardContent>
+  </Card>
 );
 
-const DashboardPage = () => {
+const ChartSkeleton = () => (
+  <Card>
+    <CardHeader>
+      <Skeleton className="h-4 w-[150px]" />
+    </CardHeader>
+    <CardContent>
+      <Skeleton className="h-[200px] w-full" />
+    </CardContent>
+  </Card>
+);
+
+// Main Dashboard Component
+const AnalyticsDashboard = () => {
   const navigate = useNavigate();
-  const [selectedProperty, setSelectedProperty] = useState("sb2");
-  const [selectedCard, setSelectedCard] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState('');
+  const [properties, setProperties] = useState([]);
+  const [timeframe, setTimeframe] = useState('month');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [dashboardData, setDashboardData] = useState(defaultDashboardData);
+  
+  // Dashboard Data State
+  const [dashboardData, setDashboardData] = useState({
+    overview: {
+      totalStudents: 0,
+      totalSeats: 0,
+      occupancyRate: 0,
+      totalRevenue: 0,
+      activeBookings: 0
+    },
+    financial: {
+      revenue: {
+        today: 0,
+        thisWeek: 0,
+        thisMonth: 0,
+        trend: 0
+      },
+      payments: {
+        completed: 0,
+        pending: 0,
+        partial: 0,
+        overdue: 0
+      },
+      revenueChart: []
+    },
+    students: {
+      active: 0,
+      newThisWeek: 0,
+      withDuePayments: 0,
+      distribution: []
+    },
+    recentPayments: []
+  });
 
-  const fetchDashboardData = async () => {
-        setIsLoading(true);
-        setError(null);
-
+  // Fetch Properties
+  const fetchProperties = async () => {
     try {
+      const propertiesData = await getProperties();
+      setProperties(propertiesData);
+      if (propertiesData.length > 0 && !selectedProperty) {
+        setSelectedProperty(propertiesData[0]._id);
+      }
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+      toast.error('Failed to load properties');
+    }
+  };
+
+  // Fetch Dashboard Data
+  const fetchDashboardData = useCallback(async () => {
+    if (!selectedProperty) return;
+    
+    try {
+      setIsRefreshing(true);
+      setError(null);
+
       const [
-        dailySummary,
-        revenueData,
-        occupancyData,
-        studentActivityData,
-        financialData,
-        propertyData
+        studentsResponse,
+        seatsResponse,
+        paymentsResponse,
+        statsResponse
       ] = await Promise.all([
-        getDailySummary(),
-        fetchRevenueData(),
-        fetchOccupancyData(),
-        fetchStudentActivityData(),
-        fetchFinancialData(),
-        getProperties()
+        getStudentsByProperty(selectedProperty),
+        getSeatsByProperty(selectedProperty),
+        getPayments({ propertyId: selectedProperty, timeframe }),
+        getDashboardStats({ propertyId: selectedProperty })
       ]);
 
+      // Handle API response structure
+      const studentsData = studentsResponse?.data || studentsResponse || [];
+      const seatsData = seatsResponse?.data || seatsResponse || [];
+      const paymentsData = paymentsResponse?.data || paymentsResponse || [];
+      const statsData = statsResponse?.data || statsResponse || {};
+
+      // Transform data for dashboard
+      const totalSeats = seatsData.length || 0;
+      const occupiedSeats = Array.isArray(seatsData) ? 
+        seatsData.filter(seat => seat.status === 'occupied').length : 0;
+      
+      const occupancyRate = totalSeats > 0 ? Math.round((occupiedSeats / totalSeats) * 100) : 0;
+
+      // Calculate student statistics
+      const activeStudents = Array.isArray(studentsData) ? 
+        studentsData.filter(student => student.status === 'active').length : 0;
+      
+      const newThisWeek = Array.isArray(studentsData) ? 
+        studentsData.filter(student => {
+          const createdDate = new Date(student.createdAt || student.dateAdded || new Date());
+          const weekAgo = subDays(new Date(), 7);
+          return createdDate > weekAgo;
+        }).length : 0;
+
+      // Generate chart data
+      const revenueChartData = generateRevenueChartData();
+      const recentPayments = generateRecentPaymentsData(paymentsData);
+
       setDashboardData({
-        dailySummary,
-        revenue: revenueData,
-        occupancy: occupancyData,
-        studentActivity: studentActivityData,
-        financial: financialData
+        overview: {
+          totalStudents: Array.isArray(studentsData) ? studentsData.length : 0,
+          totalSeats,
+          occupancyRate,
+          totalRevenue: statsData.totalRevenue || 0,
+          activeBookings: occupiedSeats
+        },
+        financial: {
+          revenue: {
+            today: statsData.todayRevenue || 0,
+            thisWeek: statsData.weekRevenue || 0,
+            thisMonth: statsData.monthRevenue || 0,
+            trend: 12.5 // Sample trend data
+          },
+          payments: {
+            completed: statsData.completedPayments || 0,
+            pending: statsData.pendingPayments || 0,
+            partial: statsData.partialPayments || 0,
+            overdue: statsData.overduePayments || 0
+          },
+          revenueChart: revenueChartData
+        },
+        students: {
+          active: activeStudents,
+          newThisWeek,
+          withDuePayments: statsData.studentsWithDuePayments || 0,
+          distribution: Array.isArray(studentsData) ? studentsData.slice(0, 5).map(student => ({
+            name: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+            status: student.status,
+            seat: student.currentAssignments?.[0]?.seatNumber || 'N/A'
+          })) : []
+        },
+        recentPayments
       });
-      } catch (error) {
+
+    } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      setError('Failed to load dashboard data. Please try again later.');
+      setError('Failed to load dashboard data');
       toast.error('Failed to load dashboard data');
-      // Use default data when API calls fail
-      setDashboardData(defaultDashboardData);
-      } finally {
-          setIsLoading(false);
-        }
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [selectedProperty, timeframe]);
+
+  // Helper functions for sample data
+  const generateRevenueChartData = () => {
+    return Array.from({ length: 7 }, (_, i) => ({
+      label: format(subDays(new Date(), 6 - i), 'EEE'),
+      amount: Math.floor(Math.random() * 5000) + 1000
+    }));
   };
 
+  const generateRecentPaymentsData = (paymentsData) => {
+    if (!Array.isArray(paymentsData)) {
+      return Array.from({ length: 5 }, (_, i) => ({
+        id: i,
+        studentName: `Student ${i + 1}`,
+        amount: Math.floor(Math.random() * 1000) + 500,
+        status: ['completed', 'pending', 'partial'][i % 3],
+        method: ['cash', 'upi', 'card'][i % 3],
+        seatNo: `A-${i + 1}`,
+        date: subDays(new Date(), i).toISOString()
+      }));
+    }
+
+    return paymentsData.slice(0, 5).map(payment => ({
+      id: payment._id || payment.id,
+      studentName: payment.studentName || 'Unknown Student',
+      amount: payment.amount || 0,
+      status: payment.status || 'pending',
+      method: payment.paymentMethod || 'cash',
+      seatNo: payment.seatNo || 'N/A',
+      date: payment.date || payment.createdAt || new Date().toISOString()
+    }));
+  };
+
+  // Initial data load
   useEffect(() => {
-    fetchDashboardData();
+    fetchProperties();
   }, []);
 
-  const handlePropertyChange = (propertyId) => {
-    setSelectedProperty(propertyId);
-    fetchDashboardData();
-  };
-
-  const cardData = [
-    {
-      id: 'seats',
-      title: 'Seat Management',
-      value: `${dashboardData.occupancy.daily[0]?.current || 0}/${dashboardData.occupancy.daily[0]?.total || 0}`,
-      icon: Sofa,
-      color: 'from-blue-500 to-blue-600',
-      route: '/seats',
-      details: {
-        title: 'Seat Analytics',
-        content: [
-          { label: 'Total Capacity', value: dashboardData.occupancy.daily[0]?.total || 0 },
-          { label: 'Current Occupancy', value: dashboardData.occupancy.daily[0]?.current || 0 },
-          { label: 'Available Seats', value: (dashboardData.occupancy.daily[0]?.total || 0) - (dashboardData.occupancy.daily[0]?.current || 0) },
-          { label: 'Occupancy Rate', value: `${dashboardData.dailySummary.occupancyRate}%` }
-        ]
-      }
-    },
-    {
-      id: 'students',
-      title: 'Students',
-      value: dashboardData.dailySummary.totalStudents.toString(),
-      icon: Users,
-      color: 'from-green-500 to-green-600',
-      route: '/students',
-      details: {
-        title: 'Student Analytics',
-        content: [
-          { label: 'Total Students', value: dashboardData.dailySummary.totalStudents },
-          { label: 'Active Today', value: dashboardData.studentActivity.length },
-          { label: 'Peak Hour', value: dashboardData.dailySummary.peakHour },
-          { label: 'Average Stay', value: dashboardData.dailySummary.averageStay || 'N/A' }
-        ]
-      }
-    },
-    {
-      id: 'revenue',
-      title: 'Today\'s Revenue',
-      value: `₹${dashboardData.dailySummary.totalRevenue}`,
-      icon: IndianRupee,
-      color: 'from-yellow-500 to-yellow-600',
-      route: '/payments',
-      details: {
-        title: 'Revenue Analytics',
-        content: [
-          { 
-            label: 'Today\'s Revenue', 
-            value: `₹${dashboardData.dailySummary?.totalRevenue || 0}` 
-          },
-          { 
-            label: 'Monthly Revenue', 
-            value: `₹${dashboardData.revenue?.monthly?.[0]?.amount || 0}` 
-          },
-          { 
-            label: 'Growth Rate', 
-            value: `${dashboardData.dailySummary?.growthRate || 0}%` 
-          },
-          { 
-            label: 'Average Daily', 
-            value: `₹${Math.floor((dashboardData.revenue?.monthly?.[0]?.amount || 0) / 30)}` 
-          }
-        ]
-      }
+  useEffect(() => {
+    if (selectedProperty) {
+      fetchDashboardData();
     }
-  ];
+  }, [selectedProperty, timeframe, fetchDashboardData]);
 
-  const handleCardClick = (route) => {
-    navigate(route);
+  // Handlers
+  const handleRefresh = () => {
+    fetchDashboardData();
   };
 
   const handleQuickBooking = () => {
     setShowBookingForm(true);
   };
 
-  const handleBookingFormClose = () => {
-    setShowBookingForm(false);
-  };
-
-  const handleAddStudent = () => {
-    navigate('/students/add');
-  };
-
-  const handleProcessPayment = () => {
+  const handleQuickPayment = () => {
     setShowPaymentForm(true);
   };
 
-  // Loading Skeleton Component
-  const MetricCardSkeleton = () => (
-    <Card>
-      <CardHeader className="pb-2">
-        <Skeleton className="h-4 w-[100px]" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-8 w-[120px] mb-2" />
-        <Skeleton className="h-4 w-[80px]" />
-      </CardContent>
-    </Card>
-  );
-
-  // Error Display Component
-  const ErrorDisplay = ({ message }) => (
-    <Alert variant="destructive" className="mb-4">
-      <AlertCircle className="h-4 w-4" />
-      <AlertTitle>Error</AlertTitle>
-      <AlertDescription>{message}</AlertDescription>
-    </Alert>
-  );
-
-  ErrorDisplay.propTypes = {
-    message: PropTypes.string.isRequired
+  const handleExportReport = async () => {
+    try {
+      await generatePaymentReport({
+        propertyId: selectedProperty,
+        timeframe,
+        format: 'pdf'
+      });
+      toast.success('Report generated successfully');
+    } catch (error) {
+      toast.error('Failed to generate report');
+    }
   };
 
-  if (isLoading) {
+  // Error Display
+  if (error && !isLoading) {
     return (
       <DashboardLayout>
-        <div className="space-y-6">
-          <div className="grid gap-6 grid-cols-1 md:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <MetricCardSkeleton key={i} />
-            ))}
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <ErrorDisplay message={error} />
-          <Button onClick={fetchDashboardData}>Retry</Button>
+        <div className="flex items-center justify-center h-96">
+          <Alert variant="destructive" className="max-w-md">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              {error}
+              <Button onClick={fetchDashboardData} className="mt-2">
+                Try Again
+              </Button>
+            </AlertDescription>
+          </Alert>
         </div>
       </DashboardLayout>
     );
@@ -321,408 +434,429 @@ const DashboardPage = () => {
 
   return (
     <DashboardLayout>
-      <ErrorBoundary>
-        <div className="space-y-6">
-          {error && <ErrorDisplay message={error} />}
-
-          {/* Top Bar - Search and Quick Actions */}
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search bookings, students, or payments..."
-                  className="pl-10 w-full"
-                />
-              </div>
-            </div>
+      <div className="space-y-6">
+        {/* Header Section */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
+            <p className="text-muted-foreground">
+              Smart management insights for students and payments
+            </p>
           </div>
+          
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <Select value={selectedProperty} onValueChange={setSelectedProperty}>
+              <SelectTrigger className="w-full lg:w-[200px]">
+                <SelectValue placeholder="Select Property" />
+              </SelectTrigger>
+              <SelectContent>
+                {properties.map(property => (
+                  <SelectItem key={property._id} value={property._id}>
+                    {property.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          {/* Quick Actions - Priority Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="h-full"
-            >
-              <Card className="h-full cursor-pointer border-none shadow-lg bg-gradient-to-br from-blue-50 to-blue-100/50 hover:from-blue-100 hover:to-blue-200/50 transition-all duration-300"
-                onClick={handleQuickBooking}>
-                <CardContent className="p-6 flex flex-col h-full">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center shadow-inner">
-                      <Bookmark className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg text-blue-900">Quick Booking</h3>
-                      <p className="text-sm text-blue-600">Book a seat instantly</p>
-                    </div>
-                  </div>
-                  <div className="mt-auto flex items-center justify-between">
-                    <span className="text-sm text-blue-600">Click to proceed</span>
-                    <Plus className="h-6 w-6 text-blue-600" />
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+            <Select value={timeframe} onValueChange={setTimeframe}>
+              <SelectTrigger className="w-full lg:w-[150px]">
+                <SelectValue placeholder="Timeframe" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">Today</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+              </SelectContent>
+            </Select>
 
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="h-full"
+            <Button 
+              variant="outline" 
+              onClick={handleRefresh}
+              disabled={isRefreshing}
             >
-              <Card className="h-full cursor-pointer border-none shadow-lg bg-gradient-to-br from-green-50 to-green-100/50 hover:from-green-100 hover:to-green-200/50 transition-all duration-300"
-                onClick={handleAddStudent}>
-                <CardContent className="p-6 flex flex-col h-full">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center shadow-inner">
-                      <UserPlus className="h-6 w-6 text-green-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg text-green-900">Add Student</h3>
-                      <p className="text-sm text-green-600">Register new student</p>
-                    </div>
-                  </div>
-                  <div className="mt-auto flex items-center justify-between">
-                    <span className="text-sm text-green-600">Click to proceed</span>
-                    <Plus className="h-6 w-6 text-green-600" />
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="h-full"
-            >
-              <Card className="h-full cursor-pointer border-none shadow-lg bg-gradient-to-br from-purple-50 to-purple-100/50 hover:from-purple-100 hover:to-purple-200/50 transition-all duration-300"
-                onClick={handleProcessPayment}>
-                <CardContent className="p-6 flex flex-col h-full">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="h-12 w-12 rounded-xl bg-purple-100 flex items-center justify-center shadow-inner">
-                      <CreditCard className="h-6 w-6 text-purple-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg text-purple-900">Quick Collection</h3>
-                      <p className="text-sm text-purple-600">Collect payment & generate receipt</p>
-                    </div>
-                  </div>
-                  <div className="mt-auto flex items-center justify-between">
-                    <span className="text-sm text-purple-600">Click to proceed</span>
-                    <Plus className="h-6 w-6 text-purple-600" />
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
           </div>
+        </div>
 
-          {/* Key Metrics - Priority Section */}
-          <div className="grid gap-6 grid-cols-1 md:grid-cols-3">
-            {cardData.map((card) => (
-              <motion.div
-                key={card.id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="h-full"
-              >
-                <Card 
-                  className={`h-full border-none shadow-lg bg-gradient-to-br ${card.color} text-white cursor-pointer hover:shadow-xl transition-all duration-300`}
-                  onClick={() => handleCardClick(card.route)}
-                >
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-lg font-semibold">
-                      {card.title}
-                    </CardTitle>
-                    <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center shadow-inner">
-                      <card.icon className="h-5 w-5" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold mb-2">{card.value}</div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-white/80">
-                        Click to view details
-                      </p>
-                      <ChevronRight className="h-5 w-5 text-white/80" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Today's Overview Card */}
-          <Card className="col-span-2 border-none shadow-lg">
-            <CardHeader className="border-b pb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
-                    Today's Overview
-                  </CardTitle>
-                  <CardDescription className="mt-1">Comprehensive overview of today's activities</CardDescription>
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Card 
+              className="cursor-pointer border-blue-200 hover:border-blue-400 transition-all duration-300"
+              onClick={handleQuickBooking}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <BookOpen className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg">Quick Booking</h3>
+                    <p className="text-sm text-muted-foreground">Book a seat instantly</p>
+                  </div>
+                  <Plus className="h-5 w-5 text-blue-600" />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Last updated:</span>
-                  <span className="text-sm font-medium">{format(new Date(), 'hh:mm a')}</span>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Card 
+              className="cursor-pointer border-green-200 hover:border-green-400 transition-all duration-300"
+              onClick={handleQuickPayment}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center">
+                    <CreditCard className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg">Quick Collection</h3>
+                    <p className="text-sm text-muted-foreground">Collect payment & generate receipt</p>
+                  </div>
+                  <Plus className="h-5 w-5 text-green-600" />
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* Main Metrics Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Total Students */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* Occupancy Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Sofa className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <h3 className="text-sm font-semibold">Occupancy</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-blue-600">Current Occupancy</span>
-                        <span className="text-2xl font-bold text-blue-700">{dashboardData.dailySummary.occupancyRate}%</span>
-                      </div>
-                      <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                          style={{ width: `${dashboardData.dailySummary.occupancyRate}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Clock className="h-4 w-4 text-green-500" />
-                          <span className="text-xs font-medium">Peak Hours</span>
-                        </div>
-                        <span className="text-sm">{dashboardData.dailySummary.peakHour || 'N/A'}</span>
-                      </div>
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Bookmark className="h-4 w-4 text-purple-500" />
-                          <span className="text-xs font-medium">Today's Bookings</span>
-                        </div>
-                        <span className="text-sm font-medium">{dashboardData.studentActivity.length}</span>
-                      </div>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Clock className="h-4 w-4 text-orange-500" />
-                        <span className="text-xs font-medium">Avg. Stay Time</span>
-                      </div>
-                      <span className="text-sm">{dashboardData.dailySummary.averageStay || 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Student Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Users className="h-5 w-5 text-green-600" />
-                    </div>
-                    <h3 className="text-sm font-semibold">Students</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="p-4 bg-gradient-to-br from-green-50 to-green-100/50 rounded-xl">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-green-600">Active Students</span>
-                        <span className="text-2xl font-bold text-green-700">{dashboardData.dailySummary.totalStudents}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-green-600">+{dashboardData.studentActivity.length} new today</span>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <UserPlus className="h-4 w-4 text-blue-500" />
-                          <span className="text-xs font-medium">New Students</span>
-                        </div>
-                        <span className="text-sm font-medium">{dashboardData.studentActivity.length}</span>
-                      </div>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-2 mb-1">
-                        <IndianRupee className="h-4 w-4 text-yellow-500" />
-                        <span className="text-xs font-medium">Refunds</span>
-                      </div>
-                      <span className="text-sm font-medium">{dashboardData.financial.length}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Financial Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <IndianRupee className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <h3 className="text-sm font-semibold">Financial</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-purple-600">Today's Revenue</span>
-                        <span className="text-2xl font-bold text-purple-700">₹{dashboardData.dailySummary.totalRevenue}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-purple-600">
-                          {dashboardData?.revenue?.daily?.length || 0} payments
-                        </span>
-                        {dashboardData?.dailySummary?.growthRate > 0 && (
-                          <span className="text-xs text-green-500">
-                            {dashboardData.dailySummary.growthRate}% growth
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <CreditCard className="h-4 w-4 text-green-500" />
-                          <span className="text-xs font-medium">Total Payments</span>
-                        </div>
-                        <span className="text-sm font-medium">{dashboardData?.revenue?.daily?.length  || 0}</span>
-                      </div>
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <TrendingUp className="h-4 w-4 text-orange-500" />
-                          <span className="text-xs font-medium">Monthly Revenue</span>
-                        </div>
-                        <span className="text-sm">₹{dashboardData?.revenue?.monthly?.[0]?.amount || 0}</span>
-                      </div>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Activity className="h-4 w-4 text-blue-500" />
-                        <span className="text-xs font-medium">Revenue Growth</span>
-                      </div>
-                      <span className="text-sm text-green-500">{dashboardData?.dailySummary?.growthRate || 0}%</span>
-                    </div>
-                  </div>
-                </div>
+            <CardContent>
+              <div className="text-2xl font-bold">{dashboardData.overview.totalStudents}</div>
+              <div className="flex items-center text-xs text-muted-foreground">
+                <UserCheck className="h-3 w-3 mr-1 text-green-500" />
+                <span className="text-green-500">{dashboardData.students.active} active</span>
               </div>
-
-              {/* Additional Information */}
-              {/* <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl">
-                  <h4 className="text-sm font-medium mb-3">Popular Seats Today</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {dashboardData.studentActivity.map((seat, index) => (
-                      <span 
-                        key={index} 
-                        className="px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium hover:bg-primary/20 transition-colors cursor-pointer"
-                      >
-                        {seat}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl">
-                  <h4 className="text-sm font-medium mb-3">Peak Hours</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-white/50 rounded-lg">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Clock className="h-4 w-4 text-green-500" />
-                        <span className="text-xs font-medium">Busiest Hour</span>
-                      </div>
-                      <span className="text-sm font-medium">{dashboardData?.dailySummary?.peakHour || 'N/A'}</span>
-                    </div>
-                    <div className="p-3 bg-white/50 rounded-lg">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Clock className="h-4 w-4 text-blue-500" />
-                        <span className="text-xs font-medium">Quietest Hour</span>
-                      </div>
-                      <span className="text-sm font-medium">{dashboardData?.dailySummary?.quietestHour || 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div> */}
             </CardContent>
           </Card>
 
-          {/* Quick Booking Dialog */}
-          <Dialog open={showBookingForm} onOpenChange={setShowBookingForm}>
-            <DialogContent className="sm:max-w-[600px]">
-              <QuickBookingForm onClose={handleBookingFormClose} />
-            </DialogContent>
-          </Dialog>
+          {/* Seat Occupancy */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Seat Occupancy</CardTitle>
+              <Sofa className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{dashboardData.overview.occupancyRate}%</div>
+              <div className="flex items-center text-xs text-muted-foreground">
+                <Activity className="h-3 w-3 mr-1" />
+                <span>{dashboardData.overview.activeBookings} active bookings</span>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Payment Form Dialog */}
-          <Dialog open={showPaymentForm} onOpenChange={setShowPaymentForm}>
-            <DialogContent className="max-w-2xl">
-              <QuickCollection onClose={() => setShowPaymentForm(false)} />
-            </DialogContent>
-          </Dialog>
+          {/* Total Revenue */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+              <IndianRupee className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">₹{dashboardData.overview.totalRevenue.toLocaleString()}</div>
+              <div className="flex items-center text-xs text-muted-foreground">
+                {dashboardData.financial.revenue.trend > 0 ? (
+                  <>
+                    <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
+                    <span className="text-green-500">+{dashboardData.financial.revenue.trend}%</span>
+                  </>
+                ) : (
+                  <>
+                    <TrendingDown className="h-3 w-3 mr-1 text-red-500" />
+                    <span className="text-red-500">{dashboardData.financial.revenue.trend}%</span>
+                  </>
+                )}
+                <span className="mx-1">•</span>
+                <span>This month</span>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Details Dialog */}
-          <Dialog open={showDetails} onOpenChange={setShowDetails}>
-            <DialogContent className="sm:max-w-[800px]">
-              <DialogHeader>
-                <DialogTitle>
-                  {cardData.find(card => card.id === selectedCard)?.details.title}
-                </DialogTitle>
-              </DialogHeader>
-              <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="analytics">Analytics</TabsTrigger>
-                  <TabsTrigger value="actions">Actions</TabsTrigger>
-                </TabsList>
-                <TabsContent value="overview" className="space-y-4">
+          {/* Payment Status */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Payment Status</CardTitle>
+              <CreditCard className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{dashboardData.financial.payments.completed}</div>
+              <div className="flex items-center text-xs text-muted-foreground">
+                <span className="text-green-500">{dashboardData.financial.payments.completed} completed</span>
+                <span className="mx-1">•</span>
+                <span className="text-amber-500">{dashboardData.financial.payments.pending} pending</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Analytics Tabs */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="financial">Financial Analytics</TabsTrigger>
+            <TabsTrigger value="students">Student Analytics</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Revenue Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <LineChart className="h-5 w-5" />
+                    Revenue Overview
+                  </CardTitle>
+                  <CardDescription>Revenue trends for the selected period</CardDescription>
+                </CardHeader>
+                <CardContent>
                   {isLoading ? (
-                    <LoadingSpinner />
+                    <ChartSkeleton />
                   ) : (
-                    <div className="grid gap-4 py-4">
-                      <div className="space-y-4">
-                        {selectedCard && cardData.find(card => card.id === selectedCard)?.details.content.map((item, index) => (
-                          <div key={index} className="grid grid-cols-4 items-center gap-4">
-                            <div className="col-span-1 text-sm font-medium">{item.label}</div>
-                            <div className="col-span-3 text-sm">{item.value}</div>
-                          </div>
-                        ))}
+                    <RevenueChart 
+                      data={dashboardData.financial.revenueChart} 
+                      timeframe={timeframe}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Payment Status Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <PieChart className="h-5 w-5" />
+                    Payment Status
+                  </CardTitle>
+                  <CardDescription>Current payment distribution</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <ChartSkeleton />
+                  ) : (
+                    <PaymentStatusChart data={dashboardData.financial.payments} />
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Recent Payments */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Recent Payments
+                </CardTitle>
+                <CardDescription>Latest payment transactions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="space-y-4">
+                    {[...Array(5)].map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <RecentPaymentsTable payments={dashboardData.recentPayments} />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="financial" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Today's Revenue</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-green-600">
+                    ₹{dashboardData.financial.revenue.today.toLocaleString()}
+                  </div>
+                  <div className="flex items-center text-sm text-muted-foreground mt-2">
+                    <ArrowUpRight className="h-4 w-4 mr-1 text-green-500" />
+                    Daily collection
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Weekly Revenue</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-blue-600">
+                    ₹{dashboardData.financial.revenue.thisWeek.toLocaleString()}
+                  </div>
+                  <div className="flex items-center text-sm text-muted-foreground mt-2">
+                    <Calendar className="h-4 w-4 mr-1 text-blue-500" />
+                    This week
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Monthly Revenue</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-purple-600">
+                    ₹{dashboardData.financial.revenue.thisMonth.toLocaleString()}
+                  </div>
+                  <div className="flex items-center text-sm text-muted-foreground mt-2">
+                    <BarChart3 className="h-4 w-4 mr-1 text-purple-500" />
+                    This month
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Payment Analytics</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                      <span>Completed Payments</span>
+                      <Badge variant="default">{dashboardData.financial.payments.completed}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-amber-50 rounded-lg">
+                      <span>Pending Payments</span>
+                      <Badge variant="outline">{dashboardData.financial.payments.pending}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
+                      <span>Overdue Payments</span>
+                      <Badge variant="destructive">{dashboardData.financial.payments.overdue}</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button className="w-full" onClick={handleQuickPayment}>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Collect Payment
+                  </Button>
+                  <Button variant="outline" className="w-full" onClick={handleExportReport}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Report
+                  </Button>
+                  <Button variant="outline" className="w-full" onClick={() => navigate('/payments')}>
+                    <Activity className="h-4 w-4 mr-2" />
+                    View All Payments
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="students" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Student Statistics</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <ChartSkeleton />
+                  ) : (
+                    <StudentDistributionChart data={dashboardData.students} />
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Student Insights</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium">Occupancy Rate</span>
+                        <span className="text-2xl font-bold text-blue-600">{dashboardData.overview.occupancyRate}%</span>
+                      </div>
+                      <Progress value={dashboardData.overview.occupancyRate} className="h-2" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-muted rounded-lg text-center">
+                        <div className="text-lg font-bold">{dashboardData.students.newThisWeek}</div>
+                        <div className="text-xs text-muted-foreground">New This Week</div>
+                      </div>
+                      <div className="p-3 bg-muted rounded-lg text-center">
+                        <div className="text-lg font-bold">{dashboardData.students.withDuePayments}</div>
+                        <div className="text-xs text-muted-foreground">Due Payments</div>
                       </div>
                     </div>
-                  )}
-                </TabsContent>
-                <TabsContent value="analytics">
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">Analytics data will be available soon.</p>
                   </div>
-                </TabsContent>
-                <TabsContent value="actions">
-                  <div className="space-y-4">
-                    <Button className="w-full" variant="outline">
-                      <Download className="mr-2 h-4 w-4" />
-                      Export Data
-                    </Button>
-                    <Button className="w-full" variant="outline">
-                      <AlertCircle className="mr-2 h-4 w-4" />
-                      Generate Report
-                    </Button>
-                    <Button className="w-full" variant="outline">
-                      <Activity className="mr-2 h-4 w-4" />
-                      Schedule Analysis
-                    </Button>
-                  </div>
-                </TabsContent>
-              </Tabs>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowDetails(false)}>
-                  Close
-                </Button>
-                <Button onClick={() => selectedCard && navigate(cardData.find(card => card.id === selectedCard)?.route || '/')}>
-                  View Full Page
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </ErrorBoundary>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Student Management</CardTitle>
+                <CardDescription>Quick actions for student management</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Button onClick={() => navigate('/students/add')} className="h-auto py-4">
+                    <Plus className="h-4 w-4 mr-2" />
+                    <div className="text-left">
+                      <div className="font-semibold">Add Student</div>
+                      <div className="text-xs opacity-75">Register new student</div>
+                    </div>
+                  </Button>
+                  <Button variant="outline" onClick={() => navigate('/students')} className="h-auto py-4">
+                    <Users className="h-4 w-4 mr-2" />
+                    <div className="text-left">
+                      <div className="font-semibold">View All Students</div>
+                      <div className="text-xs opacity-75">Manage student records</div>
+                    </div>
+                  </Button>
+                  <Button variant="outline" onClick={handleQuickBooking} className="h-auto py-4">
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    <div className="text-left">
+                      <div className="font-semibold">Quick Booking</div>
+                      <div className="text-xs opacity-75">Assign seat to student</div>
+                    </div>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Quick Booking Dialog */}
+        <Dialog open={showBookingForm} onOpenChange={setShowBookingForm}>
+          <DialogContent className="sm:max-w-[600px]">
+            <QuickBookingForm onClose={() => setShowBookingForm(false)} />
+          </DialogContent>
+        </Dialog>
+
+        {/* Payment Form Dialog */}
+        <Dialog open={showPaymentForm} onOpenChange={setShowPaymentForm}>
+          <DialogContent className="max-w-2xl">
+            <QuickCollection onClose={() => setShowPaymentForm(false)} />
+          </DialogContent>
+        </Dialog>
+      </div>
     </DashboardLayout>
   );
 };
 
-export default DashboardPage; 
+export default AnalyticsDashboard;

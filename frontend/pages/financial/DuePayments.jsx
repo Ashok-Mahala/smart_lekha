@@ -324,7 +324,7 @@ const DuePaymentsPage = () => {
   // Update the generateReceipt function
   const generateReceipt = (payment) => {
     const receipt = `
-      SEATFLOW PAYMENT RECEIPT
+      PAYMENT RECEIPT
       ========================
       
       Receipt Details:

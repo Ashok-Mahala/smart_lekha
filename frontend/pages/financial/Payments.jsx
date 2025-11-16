@@ -211,7 +211,7 @@ const PaymentsPage = () => {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(20);
       doc.setFont('helvetica', 'bold');
-      doc.text('SEATFLOW PAYMENT RECEIPT', 105, 15, { align: 'center' });
+      doc.text('PAYMENT RECEIPT', 105, 15, { align: 'center' });
       
       doc.setFontSize(10);
       doc.text('Smart Library Management System', 105, 22, { align: 'center' });
@@ -554,7 +554,7 @@ const PaymentsPage = () => {
           </DialogHeader>
           <div className="bg-white p-6 rounded-lg border">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-blue-600">SEATFLOW PAYMENT RECEIPT</h2>
+              <h2 className="text-2xl font-bold text-blue-600">PAYMENT RECEIPT</h2>
               <p className="text-sm text-gray-600">Smart Library Management System</p>
               <div className="border-t border-gray-200 my-4"></div>
             </div>
