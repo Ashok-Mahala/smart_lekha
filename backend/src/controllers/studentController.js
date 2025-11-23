@@ -1,4 +1,3 @@
-// controllers/studentController.js - Fixed with proper payment mapping (original response structure)
 const Student = require('../models/Student');
 const Seat = require('../models/Seat');
 const Shift = require('../models/Shift');
@@ -19,7 +18,7 @@ const getPaymentDetailsForStudentAssignments = async (assignments) => {
     const payments = await Payment.find({
       assignment: { $in: assignmentIds }
     })
-    .select('assignment amount collectedAmount balanceAmount status dueDate period paymentMethod transactionId paymentDate')
+    .select('assignment totalAmount totalCollected balanceAmount status dueDate period paymentMethod transactionId paymentDate installments')
     .lean();
 
     const paymentMap = {};
@@ -27,15 +26,16 @@ const getPaymentDetailsForStudentAssignments = async (assignments) => {
     payments.forEach(payment => {
       if (payment.assignment) {
         paymentMap[payment.assignment.toString()] = {
-          amount: payment.amount || 0,
-          collected: payment.collectedAmount || 0,
+          amount: payment.totalAmount || 0,
+          collected: payment.totalCollected || 0,
           balance: payment.balanceAmount || 0,
           status: payment.status || 'pending',
           dueDate: payment.dueDate || null,
           period: payment.period || null,
-          paymentMethod: payment.paymentMethod || 'pending',
-          transactionId: payment.transactionId || null,
-          paymentDate: payment.paymentDate || null
+          paymentMethod: getLatestPaymentMethod(payment.installments),
+          transactionId: getLatestTransactionId(payment.installments),
+          paymentDate: payment.paymentDate || null,
+          installments: payment.installments || []
         };
       }
     });
@@ -47,7 +47,26 @@ const getPaymentDetailsForStudentAssignments = async (assignments) => {
   }
 };
 
-// Enhanced getStudentsByProperty to include payment details - FIXED (original structure)
+// Helper functions for payment data transformation
+function getLatestPaymentMethod(installments) {
+  if (!installments || installments.length === 0) return 'PENDING';
+  const latest = installments.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))[0];
+  const methodMap = {
+    'cash': 'CASH',
+    'online': 'UPI',
+    'card': 'CARD',
+    'bank_transfer': 'BANK_TRANSFER'
+  };
+  return methodMap[latest.paymentMethod] || 'CASH';
+}
+
+function getLatestTransactionId(installments) {
+  if (!installments || installments.length === 0) return null;
+  const latest = installments.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))[0];
+  return latest.transactionId;
+}
+
+// Enhanced getStudentsByProperty to include payment details
 const getStudentsByProperty = asyncHandler(async (req, res) => {
   const { propertyId } = req.params;
   if (!propertyId) throw new ApiError(400, 'Property ID is required');
@@ -94,13 +113,13 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
 
     propertyAssignments.forEach(assignment => {
       const paymentInfo = paymentMap[assignment._id.toString()];
-      const shiftFee = assignment.shift?.fee || 0;
+      const shiftFee = assignment.shift?.fee || assignment.monthlyRent || 0;
       
       if (paymentInfo) {
         // Use payment data if available
         totalAssigned += paymentInfo.amount;
         
-        if (paymentInfo.status === 'pending') {
+        if (paymentInfo.status === 'pending' || paymentInfo.status === 'overdue') {
           totalDue += paymentInfo.balance;
         } else if (paymentInfo.status === 'partial') {
           totalDue += paymentInfo.balance;
@@ -126,7 +145,7 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
       // Add individual assignment payment details for frontend
       currentAssignments: propertyAssignments.map(assignment => {
         const paymentInfo = paymentMap[assignment._id.toString()];
-        const shiftFee = assignment.shift?.fee || 0;
+        const shiftFee = assignment.shift?.fee || assignment.monthlyRent || 0;
         
         let feeDetails = {
           amount: shiftFee,
@@ -140,7 +159,7 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
             amount: paymentInfo.amount,
             collected: paymentInfo.collected,
             balance: paymentInfo.balance,
-            status: paymentInfo.status,
+            status: paymentInfo.status === 'overdue' ? 'pending' : paymentInfo.status,
             dueDate: paymentInfo.dueDate,
             period: paymentInfo.period,
             paymentMethod: paymentInfo.paymentMethod,
@@ -167,7 +186,6 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
     };
   }, { totalAssigned: 0, totalDue: 0, totalCollected: 0, totalBalance: 0 });
 
-  // ORIGINAL RESPONSE STRUCTURE
   res.json({ 
     students: enhancedStudents,
     paymentSummary: {
@@ -177,7 +195,7 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
   });
 });
 
-// Enhanced getStudentById with detailed payment history - FIXED (original structure)
+// Enhanced getStudentById with detailed payment history
 const getStudentById = asyncHandler(async (req, res) => {
   const student = await Student.findById(req.params.id)
     .populate({
@@ -210,50 +228,50 @@ const getStudentById = asyncHandler(async (req, res) => {
   ];
   const paymentMap = await getPaymentDetailsForStudentAssignments(allAssignments);
 
-  // Get all payments for this student using new fields
+  // Get all payments for this student
   const allPayments = await Payment.find({ student: req.params.id })
     .populate('seat', 'seatNumber')
     .populate('shift', 'name')
     .populate('property', 'name')
     .sort('-paymentDate');
 
-  // Calculate payment statistics using new fields
+  // Calculate payment statistics
   const paymentStats = {
     totalPayments: allPayments.length,
     completedPayments: allPayments.filter(p => p.status === 'completed').length,
-    pendingPayments: allPayments.filter(p => p.status === 'pending').length,
+    pendingPayments: allPayments.filter(p => p.status === 'pending' || p.status === 'overdue').length,
     partialPayments: allPayments.filter(p => p.status === 'partial').length,
-    totalAmount: allPayments.reduce((sum, p) => sum + p.amount, 0),
-    collectedAmount: allPayments.reduce((sum, p) => sum + p.collectedAmount, 0),
+    totalAmount: allPayments.reduce((sum, p) => sum + p.totalAmount, 0),
+    collectedAmount: allPayments.reduce((sum, p) => sum + p.totalCollected, 0),
     balanceAmount: allPayments.reduce((sum, p) => sum + p.balanceAmount, 0),
     overduePayments: allPayments.filter(p => 
-      p.status === 'pending' && p.dueDate && new Date() > new Date(p.dueDate)
+      (p.status === 'pending' || p.status === 'overdue') && p.dueDate && new Date() > new Date(p.dueDate)
     ).length
   };
 
   // Transform payments for frontend
   const transformedPayments = allPayments.map(payment => ({
     id: payment._id.toString(),
-    amount: payment.amount,
-    collectedAmount: payment.collectedAmount,
+    amount: payment.totalAmount,
+    collectedAmount: payment.totalCollected,
     balanceAmount: payment.balanceAmount,
-    status: payment.status,
-    paymentMethod: payment.paymentMethod,
+    status: payment.status === 'overdue' ? 'pending' : payment.status,
+    paymentMethod: getLatestPaymentMethod(payment.installments),
     paymentDate: payment.paymentDate,
     dueDate: payment.dueDate,
-    transactionId: payment.transactionId,
+    transactionId: getLatestTransactionId(payment.installments),
     description: payment.description,
     seatNumber: payment.seat?.seatNumber || 'N/A',
     shiftName: payment.shift?.name || 'N/A',
     propertyName: payment.property?.name || 'N/A',
     period: payment.period,
-    isOverdue: payment.status === 'pending' && payment.dueDate && new Date() > new Date(payment.dueDate)
+    isOverdue: (payment.status === 'pending' || payment.status === 'overdue') && payment.dueDate && new Date() > new Date(payment.dueDate)
   }));
 
   // Enhance current assignments with payment info
   const enhancedCurrentAssignments = student.currentAssignments.map(assignment => {
     const paymentInfo = paymentMap[assignment._id.toString()];
-    const shiftFee = assignment.shift?.fee || 0;
+    const shiftFee = assignment.shift?.fee || assignment.monthlyRent || 0;
 
     return {
       ...assignment.toObject(),
@@ -261,7 +279,7 @@ const getStudentById = asyncHandler(async (req, res) => {
         amount: paymentInfo.amount,
         collected: paymentInfo.collected,
         balance: paymentInfo.balance,
-        status: paymentInfo.status,
+        status: paymentInfo.status === 'overdue' ? 'pending' : paymentInfo.status,
         dueDate: paymentInfo.dueDate,
         period: paymentInfo.period,
         paymentMethod: paymentInfo.paymentMethod,
@@ -279,7 +297,7 @@ const getStudentById = asyncHandler(async (req, res) => {
   // Enhance assignment history with payment info
   const enhancedAssignmentHistory = student.assignmentHistory.map(assignment => {
     const paymentInfo = paymentMap[assignment._id.toString()];
-    const shiftFee = assignment.shift?.fee || 0;
+    const shiftFee = assignment.shift?.fee || assignment.monthlyRent || 0;
 
     return {
       ...assignment.toObject(),
@@ -287,19 +305,18 @@ const getStudentById = asyncHandler(async (req, res) => {
         amount: paymentInfo.amount,
         collected: paymentInfo.collected,
         balance: paymentInfo.balance,
-        status: paymentInfo.status,
+        status: paymentInfo.status === 'overdue' ? 'pending' : paymentInfo.status,
         dueDate: paymentInfo.dueDate,
         period: paymentInfo.period
       } : {
         amount: shiftFee,
-        collected: 0,
-        balance: shiftFee,
+        collected: shiftFee,
+        balance: 0,
         status: 'completed'
       }
     };
   });
 
-  // ORIGINAL RESPONSE STRUCTURE
   res.json({
     ...student.toObject(),
     currentAssignments: enhancedCurrentAssignments,
@@ -309,7 +326,7 @@ const getStudentById = asyncHandler(async (req, res) => {
   });
 });
 
-// Enhanced getStudentStatsByProperty with payment statistics - FIXED (original structure)
+// Enhanced getStudentStatsByProperty with payment statistics
 const getStudentStatsByProperty = asyncHandler(async (req, res) => {
   const { propertyId } = req.query;
   if (!propertyId) throw new ApiError(400, 'Property ID is required');
@@ -338,10 +355,10 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
 
   const paymentMap = await getPaymentDetailsForStudentAssignments(allAssignments);
 
-  // Calculate payment-related statistics using new fields
+  // Calculate payment-related statistics
   const totalDue = allAssignments.reduce((sum, assignment) => {
     const paymentInfo = paymentMap[assignment._id.toString()];
-    if (paymentInfo && paymentInfo.status === 'pending') {
+    if (paymentInfo && (paymentInfo.status === 'pending' || paymentInfo.status === 'overdue')) {
       return sum + paymentInfo.balance;
     }
     return sum;
@@ -361,7 +378,7 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
       return sum + paymentInfo.amount;
     }
     // If no payment record, use shift fee
-    return sum + (assignment.shift?.fee || 0);
+    return sum + (assignment.shift?.fee || assignment.monthlyRent || 0);
   }, 0);
 
   const stats = {
@@ -373,14 +390,15 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
     studentsWithPendingPayments: filtered.filter(s => 
       s.currentAssignments.some(a => 
         a.seat && a.seat.propertyId.toString() === propertyId && 
-        paymentMap[a._id.toString()] && paymentMap[a._id.toString()].status === 'pending'
+        paymentMap[a._id.toString()] && 
+        (paymentMap[a._id.toString()].status === 'pending' || paymentMap[a._id.toString()].status === 'overdue')
       )
     ).length,
     studentsWithOverduePayments: filtered.filter(s => 
       s.currentAssignments.some(a => 
         a.seat && a.seat.propertyId.toString() === propertyId && 
         paymentMap[a._id.toString()] && 
-        paymentMap[a._id.toString()].status === 'pending' && 
+        (paymentMap[a._id.toString()].status === 'pending' || paymentMap[a._id.toString()].status === 'overdue') && 
         paymentMap[a._id.toString()].dueDate && 
         new Date() > new Date(paymentMap[a._id.toString()].dueDate)
       )
@@ -394,11 +412,10 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
     }
   };
 
-  // ORIGINAL RESPONSE STRUCTURE
   res.json(stats);
 });
 
-// Enhanced getStudentCurrentAssignments with payment details - FIXED (original structure)
+// Enhanced getStudentCurrentAssignments with payment details
 const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
   const student = await Student.findById(req.params.id)
     .populate('currentAssignments.seat')
@@ -409,17 +426,17 @@ const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
   // Get payment details for current assignments
   const paymentMap = await getPaymentDetailsForStudentAssignments(student.currentAssignments);
 
-  // Enhance assignments with payment status using new fields
+  // Enhance assignments with payment status
   const enhancedAssignments = student.currentAssignments.map(assignment => {
     const paymentInfo = paymentMap[assignment._id.toString()];
-    const shiftFee = assignment.shift?.fee || 0;
+    const shiftFee = assignment.shift?.fee || assignment.monthlyRent || 0;
     
     const amountDue = paymentInfo ? paymentInfo.amount : shiftFee;
     const amountPaid = paymentInfo ? paymentInfo.collected : 0;
     const balanceDue = paymentInfo ? paymentInfo.balance : shiftFee;
-    const paymentStatus = paymentInfo ? paymentInfo.status : 'pending';
+    const paymentStatus = paymentInfo ? (paymentInfo.status === 'overdue' ? 'pending' : paymentInfo.status) : 'pending';
     const isOverdue = paymentInfo && 
-                     paymentInfo.status === 'pending' && 
+                     (paymentInfo.status === 'pending' || paymentInfo.status === 'overdue') && 
                      paymentInfo.dueDate && 
                      new Date() > new Date(paymentInfo.dueDate);
 
@@ -439,7 +456,6 @@ const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
     };
   });
 
-  // ORIGINAL RESPONSE STRUCTURE
   res.json({
     success: true,
     data: enhancedAssignments,
@@ -455,7 +471,7 @@ const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
   });
 });
 
-// Enhanced getStudentAssignmentHistory with payment details - FIXED (original structure)
+// Enhanced getStudentAssignmentHistory with payment details
 const getStudentAssignmentHistory = asyncHandler(async (req, res) => {
   const student = await Student.findById(req.params.id)
     .populate('assignmentHistory.seat')
@@ -466,19 +482,19 @@ const getStudentAssignmentHistory = asyncHandler(async (req, res) => {
   // Get payment details for assignment history
   const paymentMap = await getPaymentDetailsForStudentAssignments(student.assignmentHistory);
 
-  // Enhance assignment history with payment information using new fields
+  // Enhance assignment history with payment information
   const enhancedHistory = student.assignmentHistory.map(assignment => {
     const paymentInfo = paymentMap[assignment._id.toString()];
-    const shiftFee = assignment.shift?.fee || 0;
+    const shiftFee = assignment.shift?.fee || assignment.monthlyRent || 0;
     
     const amountDue = paymentInfo ? paymentInfo.amount : shiftFee;
-    const amountPaid = paymentInfo ? paymentInfo.collected : 0;
-    const balanceDue = paymentInfo ? paymentInfo.balance : 0; // For history, balance should be 0 if completed
+    const amountPaid = paymentInfo ? paymentInfo.collected : shiftFee;
+    const balanceDue = paymentInfo ? paymentInfo.balance : 0;
 
     return {
       ...assignment.toObject(),
       paymentSummary: {
-        status: paymentInfo ? paymentInfo.status : 'completed',
+        status: paymentInfo ? (paymentInfo.status === 'overdue' ? 'pending' : paymentInfo.status) : 'completed',
         amountDue,
         amountPaid,
         balanceDue,
@@ -488,7 +504,6 @@ const getStudentAssignmentHistory = asyncHandler(async (req, res) => {
     };
   });
 
-  // ORIGINAL RESPONSE STRUCTURE
   res.json({
     success: true,
     data: enhancedHistory,
@@ -501,18 +516,13 @@ const getStudentAssignmentHistory = asyncHandler(async (req, res) => {
   });
 });
 
-// Keep other functions the same (they don't directly handle payment calculations)
+// Keep other functions the same
 const createStudent = asyncHandler(async (req, res) => {
   try {
-    console.log('=== CREATE STUDENT REQUEST START ===');
-    
     let studentData = {};
     
     // Check if the request contains files (FormData)
     if (req.files && Object.keys(req.files).length > 0) {
-      console.log('Processing FormData request');
-      
-      // If it's FormData, parse the text fields from req.body
       studentData = {
         firstName: req.body.firstName,
         lastName: req.body.lastName || '',
@@ -532,16 +542,12 @@ const createStudent = asyncHandler(async (req, res) => {
         })
       };
     } else {
-      console.log('Processing JSON request');
-      // If it's JSON data, use req.body directly
       studentData = {
         ...req.body,
         status: req.body.status || 'active',
         documents: []
       };
     }
-
-    console.log('Processed studentData:', studentData);
 
     // Validate required fields
     if (!studentData.firstName) {
@@ -560,15 +566,12 @@ const createStudent = asyncHandler(async (req, res) => {
       throw new ApiError(400, 'Student with this email already exists');
     }
 
-    console.log('Creating new student in database...');
     const student = new Student(studentData);
     await student.save();
     
     const populatedStudent = await Student.findById(student._id)
       .populate('currentAssignments.seat')
       .populate('currentAssignments.shift');
-
-    console.log('=== CREATE STUDENT REQUEST END ===');
 
     res.status(201).json({
       success: true,
@@ -577,7 +580,6 @@ const createStudent = asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Create student error:', error);
     if (error.code === 11000) {
       throw new ApiError(400, 'Student with this email already exists');
     }
@@ -623,7 +625,7 @@ const searchStudentsForAssignment = asyncHandler(async (req, res) => {
   
   if (!propertyId) throw new ApiError(400, 'Property ID is required');
 
-  // Build search query - remove any property-based filtering
+  // Build search query
   const searchQuery = {
     status: 'active'
   };
@@ -658,7 +660,7 @@ const searchStudentsForAssignment = asyncHandler(async (req, res) => {
   const enhancedStudents = students.map(student => {
     const enhancedAssignments = student.currentAssignments.map(assignment => {
       const paymentInfo = paymentMap[assignment._id.toString()];
-      const shiftFee = assignment.shift?.fee || 0;
+      const shiftFee = assignment.shift?.fee || assignment.monthlyRent || 0;
 
       return {
         ...assignment.toObject(),
@@ -666,7 +668,7 @@ const searchStudentsForAssignment = asyncHandler(async (req, res) => {
           amount: paymentInfo.amount,
           collected: paymentInfo.collected,
           balance: paymentInfo.balance,
-          status: paymentInfo.status
+          status: paymentInfo.status === 'overdue' ? 'pending' : paymentInfo.status
         } : {
           amount: shiftFee,
           collected: 0,
@@ -682,7 +684,6 @@ const searchStudentsForAssignment = asyncHandler(async (req, res) => {
     };
   });
 
-  // ORIGINAL RESPONSE STRUCTURE
   res.json({ 
     students: enhancedStudents,
     count: enhancedStudents.length 

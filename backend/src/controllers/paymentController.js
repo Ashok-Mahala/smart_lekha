@@ -1,4 +1,3 @@
-// controllers/paymentController.js - Fixed with proper payment mapping (original response structure)
 const { asyncHandler } = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const Payment = require('../models/Payment');
@@ -8,13 +7,115 @@ const Shift = require('../models/Shift');
 const Property = require('../models/Property');
 const mongoose = require('mongoose');
 
+// Helper function to map UI payment method to backend
+function mapPaymentMethod(uiMethod) {
+  const methodMap = {
+    'CASH': 'cash',
+    'PHONEPE': 'online',
+    'PAYTM': 'online',
+    'UPI': 'online',
+    'CARD': 'card',
+    'BANK_TRANSFER': 'bank_transfer',
+    'PENDING': 'pending'
+  };
+  return methodMap[uiMethod] || 'cash';
+}
+
+// Helper function to map backend payment method to UI
+function mapPaymentMethodToUI(backendMethod) {
+  const methodMap = {
+    'cash': 'CASH',
+    'online': 'UPI',
+    'card': 'CARD',
+    'bank_transfer': 'BANK_TRANSFER',
+    'pending': 'PENDING'
+  };
+  return methodMap[backendMethod] || 'CASH';
+}
+
+// Helper function to get latest payment method from installments
+function getLatestPaymentMethod(installments) {
+  if (!installments || installments.length === 0) return 'PENDING';
+  const latest = installments.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))[0];
+  return mapPaymentMethodToUI(latest.paymentMethod);
+}
+
+// Helper function to get payment mode
+function getPaymentMode(installments) {
+  if (!installments || installments.length === 0) return 'Pending';
+  const latest = installments.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))[0];
+  return latest.paymentMethod === 'cash' ? 'Cash' : 'Digital';
+}
+
+// Helper function to get latest transaction ID
+function getLatestTransactionId(installments) {
+  if (!installments || installments.length === 0) return null;
+  const latest = installments.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))[0];
+  return latest.transactionId;
+}
+
+// Helper function to get latest receipt number
+function getLatestReceiptNumber(installments) {
+  if (!installments || installments.length === 0) return null;
+  const latest = installments.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))[0];
+  return latest.receiptNumber;
+}
+
+// Helper function to transform payment for response (maintains API compatibility)
+function transformPaymentForResponse(payment) {
+  return {
+    id: payment._id.toString(),
+    studentId: payment.student?._id?.toString() || '',
+    studentName: payment.student ? `${payment.student.firstName} ${payment.student.lastName || ''}`.trim() : 'Unknown Student',
+    studentEmail: payment.student?.email || '',
+    studentPhone: payment.student?.phone || '',
+    seatNo: payment.seat?.seatNumber || 'N/A',
+    seatDetails: payment.seat ? {
+      seatNumber: payment.seat.seatNumber,
+      row: payment.seat.row,
+      column: payment.seat.column
+    } : null,
+    shift: payment.shift ? {
+      name: payment.shift.name,
+      startTime: payment.shift.startTime,
+      endTime: payment.shift.endTime
+    } : null,
+    property: payment.property ? {
+      name: payment.property.name,
+      address: payment.property.address
+    } : null,
+    amount: payment.totalAmount,
+    collectedAmount: payment.totalCollected,
+    dueAmount: payment.totalAmount,
+    balanceAmount: payment.balanceAmount,
+    paymentMethod: getLatestPaymentMethod(payment.installments),
+    paymentMode: getPaymentMode(payment.installments),
+    status: payment.status === 'overdue' ? 'pending' : payment.status,
+    date: payment.paymentDate || payment.createdAt,
+    dueDate: payment.dueDate,
+    description: payment.description,
+    transactionId: getLatestTransactionId(payment.installments),
+    receiptNumber: getLatestReceiptNumber(payment.installments),
+    feeType: payment.feeType,
+    period: payment.period,
+    paymentBreakdown: payment.installments.map(inst => ({
+      description: inst.description,
+      amount: inst.amount,
+      type: 'base_fee',
+      date: inst.paymentDate
+    })),
+    notes: payment.notes,
+    isOverdue: payment.status === 'overdue' || (payment.status === 'pending' && payment.dueDate && new Date() > new Date(payment.dueDate)),
+    overdueDays: payment.daysOverdue || 0,
+    createdAt: payment.createdAt,
+    updatedAt: payment.updatedAt
+  };
+}
+
 // @desc    Get all payments with enhanced filtering
 // @route   GET /smlekha/payments
 // @access  Private
 exports.getPayments = asyncHandler(async (req, res) => {
-  console.log('=== DEBUG: GET PAYMENTS ===');
-  console.log('Query params:', req.query);
-
   const {
     page = 1,
     limit = 10,
@@ -36,29 +137,22 @@ exports.getPayments = asyncHandler(async (req, res) => {
   // Build query
   const query = {};
   
-  console.log('Initial query:', query);
-
-  // Build the actual query
   if (student) query.student = student;
-  if (status && status !== 'all') query.status = status;
+  if (status && status !== 'all') {
+    let mappedStatus = status;
+    if (status === 'pending') mappedStatus = { $in: ['pending', 'overdue'] };
+    query.status = mappedStatus;
+  }
   if (paymentMethod && paymentMethod !== 'all') {
     query.paymentMethod = mapPaymentMethod(paymentMethod);
   }
   if (propertyId) query.property = propertyId;
   
-  // Handle date filtering properly
+  // Handle date filtering
   if (startDate || endDate) {
     query.createdAt = {};
-    if (startDate) {
-      const actualStartDate = new Date(startDate);
-      console.log('Start date:', actualStartDate);
-      query.createdAt.$gte = actualStartDate;
-    }
-    if (endDate) {
-      const actualEndDate = new Date(endDate);
-      console.log('End date:', actualEndDate);
-      query.createdAt.$lte = actualEndDate;
-    }
+    if (startDate) query.createdAt.$gte = new Date(startDate);
+    if (endDate) query.createdAt.$lte = new Date(endDate);
   }
 
   // Search filter
@@ -74,18 +168,16 @@ exports.getPayments = asyncHandler(async (req, res) => {
     
     query.$or = [
       { student: { $in: studentIds.map(s => s._id) } },
-      { transactionId: { $regex: search, $options: 'i' } }
+      { transactionId: { $regex: search, $options: 'i' } },
+      { 'installments.transactionId': { $regex: search, $options: 'i' } }
     ];
   }
 
-  console.log('Final query:', JSON.stringify(query, null, 2));
-
-  // Define sort object properly
+  // Define sort object
   const sort = {};
   sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-  console.log('Sort object:', sort);
 
-  // Execute the actual query
+  // Execute query
   const payments = await Payment.find(query)
     .populate('student', 'firstName lastName email phone')
     .populate('seat', 'seatNumber row column')
@@ -95,69 +187,24 @@ exports.getPayments = asyncHandler(async (req, res) => {
     .skip(skip)
     .limit(limitNum);
 
-  console.log('Final payments found:', payments.length);
-
   const total = await Payment.countDocuments(query);
-  console.log('Total matching documents:', total);
 
-  // Transform data for frontend - USING NEW MODEL FIELDS
-  const transformedPayments = payments.map(payment => ({
-    id: payment._id.toString(),
-    studentId: payment.student?._id?.toString() || '',
-    studentName: payment.student ? `${payment.student.firstName} ${payment.student.lastName || ''}`.trim() : 'Unknown Student',
-    studentEmail: payment.student?.email || '',
-    studentPhone: payment.student?.phone || '',
-    seatNo: payment.seat?.seatNumber || 'N/A',
-    seatDetails: payment.seat ? {
-      seatNumber: payment.seat.seatNumber,
-      row: payment.seat.row,
-      column: payment.seat.column
-    } : null,
-    shift: payment.shift ? {
-      name: payment.shift.name,
-      startTime: payment.shift.startTime,
-      endTime: payment.shift.endTime
-    } : null,
-    property: payment.property ? {
-      name: payment.property.name,
-      address: payment.property.address
-    } : null,
-    amount: payment.amount,
-    collectedAmount: payment.collectedAmount,
-    dueAmount: payment.amount,
-    balanceAmount: payment.balanceAmount,
-    paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
-    paymentMode: payment.paymentMethod === 'cash' ? 'Cash' : 'Digital',
-    status: payment.status,
-    date: payment.paymentDate || payment.createdAt,
-    dueDate: payment.dueDate,
-    description: payment.description,
-    transactionId: payment.transactionId,
-    receiptNumber: payment.transactionId,
-    feeType: payment.feeType,
-    period: payment.period,
-    paymentBreakdown: payment.paymentBreakdown,
-    notes: payment.notes,
-    isOverdue: payment.status === 'pending' && payment.dueDate && new Date() > new Date(payment.dueDate),
-    overdueDays: payment.status === 'pending' && payment.dueDate ? 
-      Math.ceil((new Date() - new Date(payment.dueDate)) / (1000 * 60 * 60 * 24)) : 0,
-    createdAt: payment.createdAt,
-    updatedAt: payment.updatedAt
-  }));
+  // Transform data for frontend
+  const transformedPayments = payments.map(payment => transformPaymentForResponse(payment));
 
-  // Calculate summary statistics using new fields
+  // Calculate summary statistics
   const summaryStats = await Payment.aggregate([
     { $match: query },
     {
       $group: {
         _id: null,
-        totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' },
+        totalAmount: { $sum: '$totalAmount' },
+        totalCollected: { $sum: '$totalCollected' },
         totalPending: {
           $sum: {
             $cond: {
-              if: { $eq: ['$status', 'pending'] },
-              then: '$amount',
+              if: { $in: ['$status', ['pending', 'overdue']] },
+              then: '$balanceAmount',
               else: 0
             }
           }
@@ -203,7 +250,7 @@ exports.createPayment = asyncHandler(async (req, res) => {
     studentId,
     studentName,
     seatNo,
-    dueAmount, // This should be the CURRENT installment amount, not total
+    dueAmount,
     collectedAmount,
     balanceAmount,
     paymentMethod,
@@ -215,12 +262,9 @@ exports.createPayment = asyncHandler(async (req, res) => {
     feeType = 'seat_rent',
     paymentBreakdown = [],
     notes,
-    previousPaymentId, // Reference to previous payment
-    isInstallment = true // Flag to indicate this is an installment
+    previousPaymentId,
+    isInstallment = true
   } = req.body;
-
-  console.log('=== CREATE PAYMENT START ===');
-  console.log('Payment data:', req.body);
 
   // Validate required fields
   if (!studentId || !collectedAmount || !paymentMethod) {
@@ -254,101 +298,54 @@ exports.createPayment = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'No active assignment found for this student and seat');
   }
 
-  // Calculate remaining balance from previous payments
-  let totalPreviousCollected = 0;
-  let previousPayments = [];
-  
-  if (isInstallment) {
-    previousPayments = await Payment.find({
-      student: studentId,
-      seat: seat._id,
-      assignment: activeAssignment._id,
-      feeType: feeType,
-      status: { $in: ['completed', 'partial'] }
-    }).sort({ paymentDate: 1 });
-
-    totalPreviousCollected = previousPayments.reduce((sum, payment) => {
-      return sum + payment.collectedAmount;
-    }, 0);
-  }
-
-  const monthlyRent = activeAssignment.monthlyRent || 1600; // Get from assignment
-  const totalDue = monthlyRent;
-  const remainingBalance = totalDue - totalPreviousCollected;
-
-  console.log('Payment Calculation:', {
-    monthlyRent,
-    totalPreviousCollected,
-    remainingBalance,
-    previousPaymentsCount: previousPayments.length
+  // Find or create payment record
+  let payment = await Payment.findOne({
+    assignment: activeAssignment._id
   });
 
-  // Validate that collected amount doesn't exceed remaining balance
+  const monthlyRent = activeAssignment.monthlyRent || 1600;
   const numericCollected = parseFloat(collectedAmount);
-  if (numericCollected > remainingBalance) {
-    throw new ApiError(400, `Collected amount (₹${numericCollected}) exceeds remaining balance (₹${remainingBalance})`);
+
+  if (!payment) {
+    // Create new payment record
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 30);
+
+    payment = await Payment.create({
+      student: studentId,
+      seat: seat._id,
+      shift: activeAssignment.shift,
+      property: seat.propertyId,
+      assignment: activeAssignment._id,
+      totalAmount: monthlyRent,
+      dueDate: dueDate,
+      period: {
+        start: activeAssignment.startDate,
+        end: dueDate
+      },
+      feeType: feeType,
+      description: `Seat rent for ${student.firstName} ${student.lastName || ''}`,
+      createdBy: req.user?.id
+    });
   }
 
-  // Generate receipt and transaction IDs
-  const receiptNumber = `RCPT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-  // For new installment payments, the "dueAmount" should be the collected amount
-  // and we track the overall progress separately
-  const installmentAmount = numericCollected;
-  const newBalance = remainingBalance - numericCollected;
-  
-  // Determine payment status for THIS installment
-  let status = 'completed';
-  if (newBalance > 0) {
-    status = 'partial';
+  // Validate that collected amount doesn't exceed remaining balance
+  if (numericCollected > payment.balanceAmount) {
+    throw new ApiError(400, `Collected amount (₹${numericCollected}) exceeds remaining balance (₹${payment.balanceAmount})`);
   }
 
-  // Create payment record for this installment
-  const paymentData = {
-    student: studentId,
-    seat: seat._id,
-    shift: activeAssignment.shift,
-    property: seat.propertyId,
-    assignment: activeAssignment._id,
-    amount: installmentAmount, // This installment amount
-    collectedAmount: installmentAmount, // Same as amount for installment
-    balanceAmount: 0, // This installment is fully paid
-    status: status,
+  // Add installment
+  const installmentData = {
+    amount: numericCollected,
     paymentMethod: mapPaymentMethod(paymentMethod),
-    transactionId: transactionId,
     paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-    dueDate: activeAssignment.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    period: {
-      start: activeAssignment.startDate,
-      end: activeAssignment.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    },
-    feeType: feeType,
-    description: description || `Seat rent installment - ${previousPayments.length + 1}`,
-    paymentBreakdown: paymentBreakdown.length > 0 ? paymentBreakdown : [
-      {
-        description: `Seat Rent Installment ${previousPayments.length + 1}`,
-        amount: installmentAmount,
-        type: 'base_fee',
-        date: new Date(),
-        installmentNumber: previousPayments.length + 1
-      }
-    ],
-    // Track overall progress
-    overallProgress: {
-      totalMonthlyRent: monthlyRent,
-      totalCollectedSoFar: totalPreviousCollected + installmentAmount,
-      remainingBalance: newBalance,
-      installmentsCount: previousPayments.length + 1,
-      previousPaymentId: previousPaymentId || (previousPayments.length > 0 ? previousPayments[previousPayments.length - 1]._id : null)
-    },
-    createdBy: req.user?.id,
-    notes: notes || `Installment ${previousPayments.length + 1} of seat rent`
+    collectedBy: req.user?.id,
+    description: description || `Payment installment`,
+    receiptNumber: `RCPT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    notes: notes
   };
 
-  console.log('Creating installment payment:', paymentData);
-
-  const payment = await Payment.create(paymentData);
+  await payment.addInstallment(installmentData);
 
   // Populate the response
   const populatedPayment = await Payment.findById(payment._id)
@@ -357,12 +354,10 @@ exports.createPayment = asyncHandler(async (req, res) => {
     .populate('shift', 'name startTime endTime')
     .populate('property', 'name address');
 
-  console.log('=== CREATE PAYMENT END - SUCCESS ===');
-
-  // Enhanced receipt data that shows proper context
+  // Enhanced receipt data
   const receiptData = {
-    receiptNumber: receiptNumber,
-    transactionId: transactionId,
+    receiptNumber: installmentData.receiptNumber,
+    transactionId: installmentData.transactionId,
     studentName: student.firstName + ' ' + (student.lastName || ''),
     studentId: studentId,
     studentEmail: student.email || '',
@@ -371,42 +366,37 @@ exports.createPayment = asyncHandler(async (req, res) => {
     propertyName: property.name,
     propertyAddress: property.address,
     shiftName: populatedPayment.shift?.name || 'N/A',
-    
-    // Installment details
-    installmentAmount: installmentAmount,
-    installmentNumber: previousPayments.length + 1,
-    
-    // Overall progress
+    installmentAmount: numericCollected,
+    installmentNumber: payment.installments.length,
     totalMonthlyRent: monthlyRent,
-    totalCollectedSoFar: totalPreviousCollected + installmentAmount,
-    remainingBalance: newBalance,
-    
+    totalCollectedSoFar: payment.totalCollected,
+    remainingBalance: payment.balanceAmount,
     paymentMethod: paymentMethod,
     paymentMode: paymentMode,
     paymentDate: paymentDate || new Date().toISOString().split('T')[0],
     description: description,
     timestamp: new Date().toISOString(),
-    period: paymentData.period,
+    period: payment.period,
     isInstallment: true
   };
 
   res.status(201).json({
     success: true,
-    message: `Installment ${previousPayments.length + 1} recorded successfully`,
+    message: `Payment recorded successfully`,
     data: {
-      payment: populatedPayment,
+      payment: transformPaymentForResponse(populatedPayment),
       receipt: receiptData,
       overallProgress: {
         totalMonthlyRent: monthlyRent,
-        totalCollected: totalPreviousCollected + installmentAmount,
-        remainingBalance: newBalance,
-        installmentsCount: previousPayments.length + 1
+        totalCollected: payment.totalCollected,
+        remainingBalance: payment.balanceAmount,
+        installmentsCount: payment.installments.length
       }
     }
   });
 });
 
-// @desc    Get payment statistics (original function)
+// @desc    Get payment statistics
 // @route   GET /smlekha/payments/stats/payment-stats
 // @access  Private
 exports.getPaymentStats = asyncHandler(async (req, res) => {
@@ -426,8 +416,8 @@ exports.getPaymentStats = asyncHandler(async (req, res) => {
       $group: {
         _id: '$status',
         count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' },
+        totalAmount: { $sum: '$totalAmount' },
+        totalCollected: { $sum: '$totalCollected' },
         totalBalance: { $sum: '$balanceAmount' }
       }
     }
@@ -439,23 +429,26 @@ exports.getPaymentStats = asyncHandler(async (req, res) => {
     {
       $group: {
         _id: null,
-        total: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' },
+        total: { $sum: '$totalAmount' },
+        totalCollected: { $sum: '$totalCollected' },
         totalBalance: { $sum: '$balanceAmount' }
       }
     }
   ]);
 
   // Get overdue payments
-  const overduePayments = await Payment.find({
-    status: 'pending',
+  const overduePayments = await Payment.countDocuments({
+    status: { $in: ['pending', 'partial', 'overdue'] },
     dueDate: { $lt: new Date() }
-  }).countDocuments();
+  });
 
   res.status(200).json({
     success: true,
     data: {
-      stats,
+      stats: stats.map(stat => ({
+        ...stat,
+        _id: stat._id === 'overdue' ? 'pending' : stat._id
+      })),
       totalPayments,
       totalAmount: totalAmount[0]?.total || 0,
       totalCollected: totalAmount[0]?.totalCollected || 0,
@@ -476,7 +469,7 @@ exports.getOverduePayments = asyncHandler(async (req, res) => {
   const skip = (pageNum - 1) * limitNum;
 
   const query = {
-    status: 'pending',
+    status: { $in: ['pending', 'partial', 'overdue'] },
     dueDate: { $lt: new Date() }
   };
 
@@ -493,31 +486,8 @@ exports.getOverduePayments = asyncHandler(async (req, res) => {
 
   const total = await Payment.countDocuments(query);
 
-  // Transform data for frontend compatibility - USING NEW FIELDS
-  const transformedPayments = overduePayments.map(payment => ({
-    id: payment._id.toString(),
-    studentId: payment.student?._id?.toString() || '',
-    studentName: payment.student ? `${payment.student.firstName} ${payment.student.lastName || ''}`.trim() : 'Unknown Student',
-    studentEmail: payment.student?.email || '',
-    studentPhone: payment.student?.phone || '',
-    seatNo: payment.seat?.seatNumber || 'N/A',
-    property: payment.property ? {
-      name: payment.property.name,
-      address: payment.property.address
-    } : null,
-    amount: payment.amount,
-    dueAmount: payment.amount,
-    collectedAmount: payment.collectedAmount,
-    balanceAmount: payment.balanceAmount,
-    paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
-    paymentMode: payment.paymentMethod === 'cash' ? 'Cash' : 'Digital',
-    status: payment.status,
-    date: payment.paymentDate || payment.createdAt,
-    dueDate: payment.dueDate,
-    overdueDays: Math.ceil((new Date() - new Date(payment.dueDate)) / (1000 * 60 * 60 * 24)),
-    description: payment.description,
-    transactionId: payment.transactionId
-  }));
+  // Transform data for frontend compatibility
+  const transformedPayments = overduePayments.map(payment => transformPaymentForResponse(payment));
 
   res.status(200).json({
     success: true,
@@ -530,7 +500,7 @@ exports.getOverduePayments = asyncHandler(async (req, res) => {
     },
     summary: {
       totalOverdue: total,
-      totalOverdueAmount: transformedPayments.reduce((sum, payment) => sum + payment.amount, 0),
+      totalOverdueAmount: transformedPayments.reduce((sum, payment) => sum + payment.balanceAmount, 0),
       totalCollected: transformedPayments.reduce((sum, payment) => sum + payment.collectedAmount, 0),
       totalBalance: transformedPayments.reduce((sum, payment) => sum + payment.balanceAmount, 0),
       averageOverdueDays: transformedPayments.reduce((sum, payment) => sum + payment.overdueDays, 0) / transformedPayments.length || 0
@@ -552,7 +522,9 @@ exports.getStudentPayments = asyncHandler(async (req, res) => {
   // Build query
   const query = { student: studentId };
   if (status && status !== 'all') {
-    query.status = status;
+    let mappedStatus = status;
+    if (status === 'pending') mappedStatus = { $in: ['pending', 'overdue'] };
+    query.status = mappedStatus;
   }
 
   const payments = await Payment.find(query)
@@ -565,34 +537,34 @@ exports.getStudentPayments = asyncHandler(async (req, res) => {
 
   const total = await Payment.countDocuments(query);
 
-  // Calculate student payment statistics using new fields
+  // Calculate student payment statistics
   const paymentStats = await Payment.aggregate([
     { $match: { student: new mongoose.Types.ObjectId(studentId) } },
     {
       $group: {
         _id: '$status',
         count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' },
+        totalAmount: { $sum: '$totalAmount' },
+        totalCollected: { $sum: '$totalCollected' },
         totalBalance: { $sum: '$balanceAmount' }
       }
     }
   ]);
 
-  // Transform data for frontend compatibility - USING NEW FIELDS
+  // Transform data for frontend compatibility
   const transformedPayments = payments.map(payment => ({
     id: payment._id.toString(),
-    receiptNumber: payment.transactionId,
+    receiptNumber: getLatestReceiptNumber(payment.installments),
     studentId: studentId,
-    amount: payment.amount,
-    collectedAmount: payment.collectedAmount,
+    amount: payment.totalAmount,
+    collectedAmount: payment.totalCollected,
     balanceAmount: payment.balanceAmount,
-    paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
-    status: payment.status,
+    paymentMethod: getLatestPaymentMethod(payment.installments),
+    status: payment.status === 'overdue' ? 'pending' : payment.status,
     date: payment.paymentDate || payment.createdAt,
     dueDate: payment.dueDate,
     description: payment.description,
-    transactionId: payment.transactionId,
+    transactionId: getLatestTransactionId(payment.installments),
     seatNo: payment.seat?.seatNumber || 'N/A',
     shiftName: payment.shift?.name || 'N/A',
     property: payment.property ? {
@@ -601,14 +573,15 @@ exports.getStudentPayments = asyncHandler(async (req, res) => {
     } : null
   }));
 
-  // Calculate summary statistics using new fields
+  // Calculate summary statistics
   const summary = {
     totalPayments: total,
     totalAmount: paymentStats.reduce((sum, stat) => sum + stat.totalAmount, 0),
     totalCollected: paymentStats.reduce((sum, stat) => sum + stat.totalCollected, 0),
     totalBalance: paymentStats.reduce((sum, stat) => sum + stat.totalBalance, 0),
     paymentCounts: paymentStats.reduce((acc, stat) => {
-      acc[stat._id] = stat.count;
+      const statusKey = stat._id === 'overdue' ? 'pending' : stat._id;
+      acc[statusKey] = (acc[statusKey] || 0) + stat.count;
       return acc;
     }, {})
   };
@@ -623,116 +596,6 @@ exports.getStudentPayments = asyncHandler(async (req, res) => {
       total,
       totalPages: Math.ceil(total / limitNum)
     }
-  });
-});
-
-// @desc    Generate payment report
-// @route   GET /smlekha/payments/report
-// @access  Private
-exports.generatePaymentReport = asyncHandler(async (req, res) => {
-  const { startDate, endDate, propertyId, reportType = 'monthly', format = 'json' } = req.query;
-
-  const match = { status: { $in: ['completed', 'partial'] } };
-  
-  if (propertyId) match.property = propertyId;
-  if (startDate || endDate) {
-    match.createdAt = {};
-    if (startDate) match.createdAt.$gte = new Date(startDate);
-    if (endDate) match.createdAt.$lte = new Date(endDate);
-  }
-
-  let groupBy;
-  switch (reportType) {
-    case 'daily':
-      groupBy = {
-        year: { $year: '$createdAt' },
-        month: { $month: '$createdAt' },
-        day: { $dayOfMonth: '$createdAt' }
-      };
-      break;
-    case 'weekly':
-      groupBy = {
-        year: { $year: '$createdAt' },
-        week: { $week: '$createdAt' }
-      };
-      break;
-    case 'yearly':
-      groupBy = {
-        year: { $year: '$createdAt' }
-      };
-      break;
-    default: // monthly
-      groupBy = {
-        year: { $year: '$createdAt' },
-        month: { $month: '$createdAt' }
-      };
-  }
-
-  const report = await Payment.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: groupBy,
-        totalCollections: { $sum: '$collectedAmount' },
-        totalDue: { $sum: '$amount' },
-        totalBalance: { $sum: '$balanceAmount' },
-        paymentCount: { $sum: 1 },
-        averagePayment: { $avg: '$amount' },
-        minPayment: { $min: '$amount' },
-        maxPayment: { $max: '$amount' }
-      }
-    },
-    { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1, '_id.week': 1 } }
-  ]);
-
-  // Get payment method distribution
-  const paymentMethodStats = await Payment.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: '$paymentMethod',
-        count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' }
-      }
-    }
-  ]);
-
-  // Get status distribution
-  const statusStats = await Payment.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' }
-      }
-    }
-  ]);
-
-  const reportData = {
-    reportType,
-    period: { 
-      startDate: startDate || 'Beginning', 
-      endDate: endDate || 'Current' 
-    },
-    summary: {
-      totalCollections: report.reduce((sum, item) => sum + item.totalCollections, 0),
-      totalDue: report.reduce((sum, item) => sum + item.totalDue, 0),
-      totalBalance: report.reduce((sum, item) => sum + item.totalBalance, 0),
-      totalPayments: report.reduce((sum, item) => sum + item.paymentCount, 0),
-      averagePayment: report.reduce((sum, item) => sum + item.averagePayment, 0) / report.length || 0
-    },
-    timeSeries: report,
-    paymentMethodDistribution: paymentMethodStats,
-    statusDistribution: statusStats,
-    generatedAt: new Date().toISOString()
-  };
-
-  res.status(200).json({
-    success: true,
-    data: reportData
   });
 });
 
@@ -751,55 +614,59 @@ exports.getPaymentById = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Payment not found');
   }
 
-  // Transform data for frontend compatibility - USING NEW FIELDS
-  const transformedPayment = {
-    id: payment._id.toString(),
-    studentId: payment.student?._id?.toString() || '',
-    studentName: payment.student ? `${payment.student.firstName} ${payment.student.lastName || ''}`.trim() : 'Unknown Student',
-    studentEmail: payment.student?.email || '',
-    studentPhone: payment.student?.phone || '',
-    seatNo: payment.seat?.seatNumber || 'N/A',
-    seatDetails: payment.seat ? {
-      seatNumber: payment.seat.seatNumber,
-      row: payment.seat.row,
-      column: payment.seat.column
-    } : null,
-    shift: payment.shift ? {
-      name: payment.shift.name,
-      startTime: payment.shift.startTime,
-      endTime: payment.shift.endTime
-    } : null,
-    property: payment.property ? {
-      name: payment.property.name,
-      address: payment.property.address
-    } : null,
-    amount: payment.amount,
-    collectedAmount: payment.collectedAmount,
-    dueAmount: payment.amount,
-    balanceAmount: payment.balanceAmount,
-    paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
-    paymentMode: payment.paymentMethod === 'cash' ? 'Cash' : 'Digital',
-    status: payment.status,
-    date: payment.paymentDate || payment.createdAt,
-    dueDate: payment.dueDate,
-    description: payment.description,
-    transactionId: payment.transactionId,
-    receiptNumber: payment.transactionId,
-    feeType: payment.feeType,
-    period: payment.period,
-    paymentBreakdown: payment.paymentBreakdown,
-    notes: payment.notes,
-    createdBy: payment.createdBy ? {
-      name: payment.createdBy.name,
-      email: payment.createdBy.email
-    } : null,
-    createdAt: payment.createdAt,
-    updatedAt: payment.updatedAt
-  };
+  const transformedPayment = transformPaymentForResponse(payment);
 
   res.status(200).json({
     success: true,
     data: transformedPayment
+  });
+});
+
+// @desc    Add installment to payment
+// @route   POST /smlekha/payments/:id/installments
+// @access  Private
+exports.addInstallment = asyncHandler(async (req, res) => {
+  const payment = await Payment.findById(req.params.id);
+
+  if (!payment) {
+    throw new ApiError(404, 'Payment not found');
+  }
+
+  const {
+    amount,
+    paymentMethod,
+    paymentDate,
+    description,
+    receiptNumber,
+    notes
+  } = req.body;
+
+  const installmentData = {
+    amount: parseFloat(amount),
+    paymentMethod: mapPaymentMethod(paymentMethod),
+    paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+    collectedBy: req.user?.id,
+    description: description || `Additional payment installment`,
+    receiptNumber: receiptNumber,
+    notes: notes
+  };
+
+  await payment.addInstallment(installmentData);
+
+  const updatedPayment = await Payment.findById(payment._id)
+    .populate('student', 'firstName lastName email phone')
+    .populate('seat', 'seatNumber')
+    .populate('shift', 'name startTime endTime')
+    .populate('property', 'name address');
+
+  res.status(200).json({
+    success: true,
+    message: 'Installment added successfully',
+    data: {
+      payment: transformPaymentForResponse(updatedPayment),
+      installment: installmentData,
+      paymentProgress: updatedPayment.getPaymentProgress()
+    }
   });
 });
 
@@ -819,8 +686,7 @@ exports.updatePayment = asyncHandler(async (req, res) => {
 
   // Only allow certain fields to be updated
   const allowedUpdates = [
-    'amount', 'collectedAmount', 'balanceAmount', 'paymentMethod', 'dueDate', 
-    'description', 'paymentBreakdown', 'notes', 'feeType', 'period'
+    'totalAmount', 'dueDate', 'description', 'notes', 'feeType', 'period'
   ];
   
   const updates = {};
@@ -829,11 +695,6 @@ exports.updatePayment = asyncHandler(async (req, res) => {
       updates[field] = req.body[field];
     }
   });
-
-  // Handle payment method mapping
-  if (updates.paymentMethod) {
-    updates.paymentMethod = mapPaymentMethod(updates.paymentMethod);
-  }
 
   const updatedPayment = await Payment.findByIdAndUpdate(
     req.params.id,
@@ -851,7 +712,7 @@ exports.updatePayment = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Payment updated successfully',
-    data: updatedPayment
+    data: transformPaymentForResponse(updatedPayment)
   });
 });
 
@@ -871,12 +732,21 @@ exports.completePayment = asyncHandler(async (req, res) => {
 
   const { transactionId, paymentDate, notes } = req.body;
 
-  payment.status = 'completed';
-  payment.paymentDate = paymentDate ? new Date(paymentDate) : new Date();
-  payment.transactionId = transactionId || payment.transactionId;
-  payment.notes = notes || payment.notes;
-  
-  await payment.save();
+  // Add final installment to complete the payment
+  const remainingBalance = payment.balanceAmount;
+  if (remainingBalance > 0) {
+    const installmentData = {
+      amount: remainingBalance,
+      paymentMethod: payment.paymentMethod,
+      paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+      collectedBy: req.user?.id,
+      description: 'Final payment to complete',
+      receiptNumber: `RCPT-${Date.now()}`,
+      notes: notes
+    };
+
+    await payment.addInstallment(installmentData);
+  }
 
   const populatedPayment = await Payment.findById(payment._id)
     .populate('student', 'firstName lastName email phone')
@@ -887,88 +757,17 @@ exports.completePayment = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Payment completed successfully',
-    data: populatedPayment
+    data: transformPaymentForResponse(populatedPayment)
   });
 });
 
-// @desc    Refund payment
-// @route   PUT /smlekha/payments/:id/refund
-// @access  Private
-exports.refundPayment = asyncHandler(async (req, res) => {
-  const payment = await Payment.findById(req.params.id);
-
-  if (!payment) {
-    throw new ApiError(404, 'Payment not found');
-  }
-
-  if (payment.status !== 'completed') {
-    throw new ApiError(400, 'Only completed payments can be refunded');
-  }
-
-  const { refundAmount, reason, processedBy } = req.body;
-
-  const refundAmt = refundAmount || payment.amount;
-
-  if (refundAmt > payment.amount) {
-    throw new ApiError(400, 'Refund amount cannot exceed payment amount');
-  }
-
-  payment.status = 'refunded';
-  payment.refundDetails = {
-    amount: refundAmt,
-    reason: reason || 'Payment refund',
-    refundDate: new Date(),
-    processedBy: processedBy || req.user?.id
-  };
-
-  await payment.save();
-
-  const populatedPayment = await Payment.findById(payment._id)
-    .populate('student', 'firstName lastName email phone')
-    .populate('seat', 'seatNumber')
-    .populate('shift', 'name');
-
-  res.status(200).json({
-    success: true,
-    message: `Payment refunded successfully. Amount: ${refundAmt}`,
-    data: populatedPayment
-  });
-});
-
-// @desc    Delete payment
-// @route   DELETE /smlekha/payments/:id
-// @access  Private/Admin
-exports.deletePayment = asyncHandler(async (req, res) => {
-  const payment = await Payment.findById(req.params.id);
-
-  if (!payment) {
-    throw new ApiError(404, 'Payment not found');
-  }
-
-  // Only allow deletion of pending or failed payments
-  if (payment.status === 'completed' || payment.status === 'refunded') {
-    throw new ApiError(400, 'Cannot delete completed or refunded payments');
-  }
-
-  await Payment.findByIdAndDelete(req.params.id);
-
-  res.status(200).json({
-    success: true,
-    message: 'Payment deleted successfully',
-    data: {
-      id: req.params.id,
-      transactionId: payment.transactionId
-    }
-  });
-});
-
-// @desc    Get payments summary for dashboard
+// @desc    Get payment summary for dashboard
 // @route   GET /smlekha/payments/stats/dashboard
 // @access  Private
 exports.getDashboardStats = asyncHandler(async (req, res) => {
   const { propertyId, startDate, endDate } = req.query;
   
-  const match = { status: { $in: ['completed', 'partial', 'pending'] } };
+  const match = { status: { $in: ['completed', 'partial', 'pending', 'overdue'] } };
   
   if (propertyId) match.property = propertyId;
   if (startDate || endDate) {
@@ -983,14 +782,14 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       $group: {
         _id: '$status',
         count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' },
+        totalAmount: { $sum: '$totalAmount' },
+        totalCollected: { $sum: '$totalCollected' },
         totalBalance: { $sum: '$balanceAmount' }
       }
     }
   ]);
 
-  // Calculate summary for frontend - FIXED VERSION
+  // Calculate summary for frontend
   const summary = {
     duePayments: 0,
     collections: 0,
@@ -998,45 +797,15 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
   };
 
   stats.forEach(stat => {
-    if (stat._id === 'pending') {
-      // For pending payments, the entire amount is due
-      summary.duePayments += stat.totalAmount;
+    if (stat._id === 'pending' || stat._id === 'overdue') {
+      summary.duePayments += stat.totalBalance;
     } else if (stat._id === 'partial') {
-      // For partial payments, only the balance amount is due
       summary.duePayments += stat.totalBalance;
       summary.collections += stat.totalCollected;
     } else if (stat._id === 'completed') {
-      // For completed payments, add to collections
       summary.collections += stat.totalCollected;
-    } else if (stat._id === 'failed') {
-      summary.expenses += stat.totalAmount;
     }
   });
-
-  // Get monthly trend using new fields
-  const monthlyTrend = await Payment.aggregate([
-    {
-      $match: {
-        status: { $in: ['completed', 'partial'] },
-        createdAt: { 
-          $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-          $lte: new Date()
-        }
-      }
-    },
-    {
-      $group: {
-        _id: {
-          year: { $year: '$createdAt' },
-          month: { $month: '$createdAt' },
-          day: { $dayOfMonth: '$createdAt' }
-        },
-        dailyCollection: { $sum: '$collectedAmount' },
-        paymentCount: { $sum: 1 }
-      }
-    },
-    { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } }
-  ]);
 
   // Get recent payments
   const recentPayments = await Payment.find({
@@ -1053,7 +822,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
     studentName: payment.student ? `${payment.student.firstName} ${payment.student.lastName || ''}`.trim() : 'Unknown',
     seatNo: payment.seat?.seatNumber || 'N/A',
     propertyName: payment.property?.name || 'N/A',
-    amount: payment.collectedAmount,
+    amount: payment.totalCollected,
     date: payment.paymentDate || payment.createdAt,
     status: payment.status
   }));
@@ -1063,7 +832,6 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
     data: {
       summary,
       stats,
-      monthlyTrend,
       recentPayments: transformedRecentPayments
     }
   });
@@ -1086,8 +854,8 @@ exports.generateReceipt = asyncHandler(async (req, res) => {
 
   // Enhanced receipt data
   const receiptData = {
-    receiptNumber: payment.transactionId,
-    transactionId: payment.transactionId,
+    receiptNumber: getLatestReceiptNumber(payment.installments),
+    transactionId: getLatestTransactionId(payment.installments),
     studentName: payment.student ? `${payment.student.firstName} ${payment.student.lastName || ''}`.trim() : 'Unknown Student',
     studentId: payment.student?._id?.toString() || '',
     studentEmail: payment.student?.email || '',
@@ -1096,17 +864,18 @@ exports.generateReceipt = asyncHandler(async (req, res) => {
     propertyName: payment.property?.name || 'N/A',
     propertyAddress: payment.property?.address || 'N/A',
     shiftName: payment.shift?.name || 'N/A',
-    dueAmount: payment.amount,
-    collectedAmount: payment.collectedAmount,
+    dueAmount: payment.totalAmount,
+    collectedAmount: payment.totalCollected,
     balanceAmount: payment.balanceAmount,
-    paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
-    paymentMode: payment.paymentMethod === 'cash' ? 'Cash' : 'Digital',
+    paymentMethod: getLatestPaymentMethod(payment.installments),
+    paymentMode: getPaymentMode(payment.installments),
     paymentDate: payment.paymentDate || payment.createdAt,
     description: payment.description,
     period: payment.period,
     status: payment.status,
     createdBy: payment.createdBy?.name || 'System',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    installments: payment.installments
   };
 
   res.status(200).json({
@@ -1114,32 +883,6 @@ exports.generateReceipt = asyncHandler(async (req, res) => {
     data: receiptData
   });
 });
-
-// Helper function to map UI payment method to backend
-function mapPaymentMethod(uiMethod) {
-  const methodMap = {
-    'CASH': 'cash',
-    'PHONEPE': 'online',
-    'PAYTM': 'online',
-    'UPI': 'online',
-    'CARD': 'card',
-    'BANK_TRANSFER': 'bank_transfer',
-    'PENDING': 'pending'
-  };
-  return methodMap[uiMethod] || 'cash';
-}
-
-// Helper function to map backend payment method to UI
-function mapPaymentMethodToUI(backendMethod) {
-  const methodMap = {
-    'cash': 'CASH',
-    'online': 'UPI',
-    'card': 'CARD',
-    'bank_transfer': 'BANK_TRANSFER',
-    'pending': 'PENDING'
-  };
-  return methodMap[backendMethod] || 'CASH';
-}
 
 // @desc    Get payment summary for a student
 // @route   GET /smlekha/payments/student/:studentId/summary
@@ -1165,9 +908,9 @@ exports.getStudentPaymentSummary = asyncHandler(async (req, res) => {
     .populate('seat', 'seatNumber')
     .sort({ paymentDate: 1 });
 
-  const monthlyRent = 1600; // This should come from assignment
-  const totalCollected = payments.reduce((sum, payment) => sum + payment.collectedAmount, 0);
-  const remainingBalance = monthlyRent - totalCollected;
+  const monthlyRent = 1600;
+  const totalCollected = payments.reduce((sum, payment) => sum + payment.totalCollected, 0);
+  const remainingBalance = payments.reduce((sum, payment) => sum + payment.balanceAmount, 0);
 
   res.status(200).json({
     success: true,
@@ -1183,9 +926,9 @@ exports.getStudentPaymentSummary = asyncHandler(async (req, res) => {
         totalCollected,
         remainingBalance,
         paymentCount: payments.length,
-        lastPayment: payments[payments.length - 1]
+        lastPayment: payments[payments.length - 1] ? transformPaymentForResponse(payments[payments.length - 1]) : null
       },
-      paymentHistory: payments
+      paymentHistory: payments.map(payment => transformPaymentForResponse(payment))
     }
   });
 });

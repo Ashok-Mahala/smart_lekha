@@ -6,145 +6,64 @@ const ApiError = require('../utils/ApiError');
 const { asyncHandler } = require('../utils/asyncHandler');
 const mongoose = require('mongoose');
 
-// NEW: Helper function to find student assignments that match seat assignments
-const findMatchingStudentAssignments = async (seatAssignments) => {
-  if (!seatAssignments || seatAssignments.length === 0) {
-    return {};
-  }
-
-  try {
-    // Extract unique student-shift combinations from seat assignments
-    const studentShiftCombinations = [];
-    const seatAssignmentMap = {};
-    
-    seatAssignments.forEach(seatAssignment => {
-      const studentId = seatAssignment.student?._id || seatAssignment.student;
-      const shiftId = seatAssignment.shift?._id || seatAssignment.shift;
-      
-      if (studentId && shiftId) {
-        const key = `${studentId.toString()}_${shiftId.toString()}`;
-        studentShiftCombinations.push({ studentId, shiftId });
-        if (!seatAssignmentMap[key]) {
-          seatAssignmentMap[key] = [];
-        }
-        seatAssignmentMap[key].push(seatAssignment);
-      }
-    });
-
-    // Find matching student assignments
-    const studentAssignments = await Student.aggregate([
-      { $match: { 
-        '_id': { $in: [...new Set(studentShiftCombinations.map(c => new mongoose.Types.ObjectId(c.studentId)))] }
-      }},
-      { $unwind: '$currentAssignments' },
-      { $match: {
-        'currentAssignments.status': 'active',
-        'currentAssignments.shift': { $in: [...new Set(studentShiftCombinations.map(c => new mongoose.Types.ObjectId(c.shiftId)))] }
-      }},
-      { $project: {
-        studentId: '$_id',
-        assignmentId: '$currentAssignments._id',
-        shiftId: '$currentAssignments.shift',
-        seatId: '$currentAssignments.seat'
-      }}
-    ]);
-
-    // Create mapping from seat assignment to student assignment ID
-    const assignmentMapping = {};
-    
-    studentAssignments.forEach(sa => {
-      const key = `${sa.studentId.toString()}_${sa.shiftId.toString()}`;
-      if (seatAssignmentMap[key]) {
-        seatAssignmentMap[key].forEach(seatAssignment => {
-          assignmentMapping[seatAssignment._id.toString()] = sa.assignmentId;
-        });
-      }
-    });
-
-    return assignmentMapping;
-  } catch (error) {
-    console.error('Error finding matching student assignments:', error);
-    return {};
-  }
-};
-
-// UPDATED: Helper function to get payment details for assignments
+// Helper function to get payment details for assignments
 const getPaymentDetailsForAssignments = async (assignments) => {
   if (!assignments || assignments.length === 0) {
     return {};
   }
 
+  const assignmentIds = assignments.map(assignment => assignment._id);
+  
   try {
-    // Step 1: Find matching student assignment IDs for seat assignments
-    const assignmentMapping = await findMatchingStudentAssignments(assignments);
-    
-    // Step 2: Get all student assignment IDs that we found
-    const studentAssignmentIds = Object.values(assignmentMapping);
-    
-    if (studentAssignmentIds.length === 0) {
-      console.log('No matching student assignments found for seat assignments');
-      return {};
-    }
-
-    // Step 3: Find payments for these student assignments
     const payments = await Payment.find({
-      assignment: { $in: studentAssignmentIds }
+      assignment: { $in: assignmentIds }
     })
-    .select('assignment amount collectedAmount balanceAmount status dueDate period paymentMethod transactionId paymentDate')
+    .select('assignment totalAmount totalCollected balanceAmount status dueDate period paymentMethod transactionId paymentDate installments')
     .lean();
 
-    // Step 4: Create payment map keyed by student assignment ID
-    const paymentMapByStudentAssignment = {};
+    const paymentMap = {};
     
     payments.forEach(payment => {
       if (payment.assignment) {
-        paymentMapByStudentAssignment[payment.assignment.toString()] = {
-          amount: payment.amount || 0,
-          collected: payment.collectedAmount || 0,
+        paymentMap[payment.assignment.toString()] = {
+          amount: payment.totalAmount || 0,
+          collected: payment.totalCollected || 0,
           balance: payment.balanceAmount || 0,
           status: payment.status || 'pending',
           dueDate: payment.dueDate || null,
           period: payment.period || null,
-          paymentMethod: payment.paymentMethod || 'pending',
-          transactionId: payment.transactionId || null,
+          paymentMethod: getLatestPaymentMethod(payment.installments),
+          transactionId: getLatestTransactionId(payment.installments),
           paymentDate: payment.paymentDate || null
         };
       }
     });
 
-    // Step 5: Map payments back to seat assignments using our mapping
-    const paymentMapForSeatAssignments = {};
-    
-    assignments.forEach(assignment => {
-      const assignmentId = assignment._id.toString();
-      const studentAssignmentId = assignmentMapping[assignmentId];
-      
-      if (studentAssignmentId && paymentMapByStudentAssignment[studentAssignmentId.toString()]) {
-        // Found payment for this seat assignment via student assignment
-        paymentMapForSeatAssignments[assignmentId] = paymentMapByStudentAssignment[studentAssignmentId.toString()];
-      } else {
-        // No payment found, create default info
-        const shiftFee = assignment.shift?.fee || 0;
-        paymentMapForSeatAssignments[assignmentId] = {
-          amount: shiftFee,
-          collected: 0,
-          balance: shiftFee,
-          status: 'pending',
-          dueDate: null,
-          period: null,
-          paymentMethod: 'pending',
-          transactionId: null,
-          paymentDate: null
-        };
-      }
-    });
-
-    return paymentMapForSeatAssignments;
+    return paymentMap;
   } catch (error) {
     console.error('Error fetching payment details:', error);
     return {};
   }
 };
+
+// Helper functions for payment data
+function getLatestPaymentMethod(installments) {
+  if (!installments || installments.length === 0) return 'PENDING';
+  const latest = installments.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))[0];
+  const methodMap = {
+    'cash': 'CASH',
+    'online': 'UPI',
+    'card': 'CARD',
+    'bank_transfer': 'BANK_TRANSFER'
+  };
+  return methodMap[latest.paymentMethod] || 'CASH';
+}
+
+function getLatestTransactionId(installments) {
+  if (!installments || installments.length === 0) return null;
+  const latest = installments.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))[0];
+  return latest.transactionId;
+}
 
 // Get seats by property with payment information
 const getSeatsByProperty = asyncHandler(async (req, res) => {
@@ -181,13 +100,13 @@ const getSeatsByProperty = asyncHandler(async (req, res) => {
       
       seatObj.currentAssignments = seatObj.currentAssignments.map(assignment => {
         const paymentInfo = paymentMap[assignment._id.toString()] || {
-          amount: 0,
+          amount: assignment.shift?.fee || 0,
           collected: 0,
-          balance: 0,
+          balance: assignment.shift?.fee || 0,
           status: 'pending',
           dueDate: null,
           period: null,
-          paymentMethod: 'pending',
+          paymentMethod: 'PENDING',
           transactionId: null,
           paymentDate: null
         };
@@ -227,8 +146,6 @@ const assignStudentToSeat = asyncHandler(async (req, res) => {
     const { seatId } = req.params;
     const { studentId, shiftId, startDate, documents, createdBy, feeDetails } = req.body;
 
-    console.log('=== ASSIGN STUDENT TO SEAT START ===');
-
     // Validate inputs
     if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
       throw new ApiError(400, 'Invalid student ID format');
@@ -262,10 +179,10 @@ const assignStudentToSeat = asyncHandler(async (req, res) => {
     // Use feeDetails from request or calculate from shift fee
     const amount = feeDetails?.amount || shift.fee;
     const collectedAmount = feeDetails?.collected || 0;
-    const balanceAmount = feeDetails?.balance || (amount - collectedAmount);
     
     const assignmentData = {
       startDate: assignmentStartDate,
+      monthlyRent: amount,
       documents: documents || [],
       createdBy: createdBy || req.user?._id
     };
@@ -280,9 +197,6 @@ const assignStudentToSeat = asyncHandler(async (req, res) => {
       // 2. Create assignment in student record and get the assignment
       studentAssignment = await student.assignToSeat(seatId, shiftId, assignmentData);
 
-      console.log('Seat Assignment ID:', seatAssignment._id);
-      console.log('Student Assignment ID:', studentAssignment._id);
-
       // 3. Create payment record linked to STUDENT assignment
       const periodEndDate = new Date(assignmentStartDate);
       periodEndDate.setDate(periodEndDate.getDate() + 30);
@@ -295,22 +209,13 @@ const assignStudentToSeat = asyncHandler(async (req, res) => {
         paymentStatus = 'partial';
       }
 
-      // Set payment date if amount is collected
-      const paymentDate = collectedAmount > 0 ? new Date() : null;
-
       const paymentData = {
         student: studentId,
         seat: seatId,
         shift: shiftId,
         property: seat.propertyId,
-        assignment: studentAssignment._id, // Link to STUDENT assignment
-        amount: amount,
-        collectedAmount: collectedAmount,
-        balanceAmount: balanceAmount,
-        status: paymentStatus,
-        paymentMethod: collectedAmount > 0 ? (feeDetails?.paymentMethod || 'cash') : 'pending',
-        transactionId: collectedAmount > 0 ? `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}` : null,
-        paymentDate: paymentDate,
+        assignment: studentAssignment._id,
+        totalAmount: amount,
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         period: {
           start: assignmentStartDate,
@@ -318,32 +223,23 @@ const assignStudentToSeat = asyncHandler(async (req, res) => {
         },
         feeType: 'seat_rent',
         description: `Seat rent for ${student.firstName} ${student.lastName || ''} - ${shift.name} shift`,
-        paymentBreakdown: [
-          {
-            description: 'Seat Rent',
-            amount: amount,
-            type: 'base_fee'
-          }
-        ],
         createdBy: createdBy || req.user?._id,
         notes: `Auto-generated payment for seat assignment`
       };
 
-      // If there's collected amount, add it to payment breakdown
-      if (collectedAmount > 0) {
-        paymentData.paymentBreakdown.push({
-          description: 'Initial Payment',
-          amount: collectedAmount,
-          type: 'base_fee',
-          date: new Date()
-        });
-      }
-
       const payment = await Payment.create(paymentData);
 
-      console.log('=== ASSIGN STUDENT TO SEAT END - SUCCESS ===');
-      console.log('Payment created with ID:', payment._id);
-      console.log('Linked to student assignment:', studentAssignment._id);
+      // If there's collected amount, add it as first installment
+      if (collectedAmount > 0) {
+        await payment.addInstallment({
+          amount: collectedAmount,
+          paymentMethod: feeDetails?.paymentMethod || 'cash',
+          paymentDate: new Date(),
+          collectedBy: createdBy || req.user?._id,
+          description: 'Initial payment for seat assignment',
+          receiptNumber: `RCPT-${Date.now()}`
+        });
+      }
 
       // Fetch updated seat with populated data
       const updatedSeat = await Seat.findById(seatId)
@@ -463,7 +359,7 @@ const releaseStudentFromSeat = asyncHandler(async (req, res) => {
   }
 });
 
-// Other controller functions (simplified for brevity)
+// Other controller functions
 const bulkCreateSeats = asyncHandler(async (req, res) => {
   const { seats } = req.body;
   
@@ -595,13 +491,13 @@ const getSeatAssignmentHistory = asyncHandler(async (req, res) => {
 
   const enhancedHistory = seat.assignmentHistory.map(assignment => {
     const paymentInfo = paymentMap[assignment._id.toString()] || {
-      amount: 0,
-      collected: 0,
+      amount: assignment.shift?.fee || 0,
+      collected: assignment.shift?.fee || 0,
       balance: 0,
-      status: 'unknown',
+      status: 'completed',
       dueDate: null,
       period: null,
-      paymentMethod: 'pending',
+      paymentMethod: 'CASH',
       transactionId: null,
       paymentDate: null
     };
@@ -643,7 +539,7 @@ const deassignStudent = asyncHandler(async (req, res) => {
   });
 });
 
-// Change student seat (simplified for brevity)
+// Change student seat
 const changeStudentSeat = asyncHandler(async (req, res) => {
   const { currentSeatId, newSeatId, studentId, shiftId, reason } = req.body;
 

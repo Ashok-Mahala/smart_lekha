@@ -28,14 +28,17 @@ const studentAssignmentSchema = new mongoose.Schema({
     enum: ['active', 'completed', 'cancelled'],
     default: 'active'
   },
-  payment: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Payment' 
+  monthlyRent: {
+    type: Number,
+    default: 1600
   },
-  feeDetails: {
-    amount: Number,
-    collected: Number,
-    balance: Number
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  notes: {
+    type: String,
+    maxlength: 500
   }
 }, { timestamps: true });
 
@@ -54,7 +57,6 @@ const studentSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-    unique: true,
     trim: true,
     lowercase: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please fill a valid email address']
@@ -79,7 +81,7 @@ const studentSchema = new mongoose.Schema({
     trim: true
   },
   aadharNumber: {
-    type: String, // Changed from Number to String
+    type: String,
     trim: true,
     validate: {
       validator: function(v) {
@@ -92,6 +94,12 @@ const studentSchema = new mongoose.Schema({
     type: String,
     enum: ['active', 'inactive'],
     default: 'active'
+  },
+  library: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Library',
+    required: false,
+    index: true
   },
   currentAssignments: [studentAssignmentSchema],
   assignmentHistory: [studentAssignmentSchema],
@@ -120,14 +128,16 @@ const studentSchema = new mongoose.Schema({
   }
 });
 
+// Compound index for unique email per library
+studentSchema.index({ email: 1, library: 1 }, { unique: true });
+
 // Virtual for full name
 studentSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`.trim();
 });
 
-// Virtual for active assignments count - FIXED
+// Virtual for active assignments count
 studentSchema.virtual('activeAssignmentsCount').get(function() {
-  // Add null check to prevent the error
   if (!this.currentAssignments || !Array.isArray(this.currentAssignments)) {
     return 0;
   }
@@ -135,17 +145,18 @@ studentSchema.virtual('activeAssignmentsCount').get(function() {
 });
 
 // Static method to find students with active assignments
-studentSchema.statics.findWithActiveAssignments = function() {
+studentSchema.statics.findWithActiveAssignments = function(libraryId) {
   return this.find({ 
     'currentAssignments.status': 'active',
-    status: 'active'
+    status: 'active',
+    library: libraryId
   });
 };
 
 // Methods
 studentSchema.methods.assignToSeat = async function(seatId, shiftId, assignmentData) {
   const Seat = mongoose.model('Seat');
-  const seat = await Seat.findById(seatId);
+  const seat = await Seat.findOne({ _id: seatId, library: this.library });
   
   if (!seat) throw new Error('Seat not found');
   
@@ -155,11 +166,11 @@ studentSchema.methods.assignToSeat = async function(seatId, shiftId, assignmentD
     shift: shiftId,
     property: seat.propertyId,
     startDate: assignmentData.startDate || new Date(),
-    feeDetails: assignmentData.feeDetails,
-    payment: assignmentData.payment
+    monthlyRent: assignmentData.monthlyRent || 1600,
+    createdBy: assignmentData.createdBy,
+    notes: assignmentData.notes
   };
 
-  // Add null check for currentAssignments
   if (!this.currentAssignments) {
     this.currentAssignments = [];
   }
@@ -167,7 +178,7 @@ studentSchema.methods.assignToSeat = async function(seatId, shiftId, assignmentD
   this.currentAssignments.push(assignment);
   await this.save();
   
-  return this;
+  return this.currentAssignments[this.currentAssignments.length - 1];
 };
 
 studentSchema.methods.releaseFromSeat = async function(seatId, shiftId) {
@@ -185,7 +196,6 @@ studentSchema.methods.releaseFromSeat = async function(seatId, shiftId) {
   assignment.status = 'completed';
   assignment.endDate = new Date();
 
-  // Add null check for assignmentHistory
   if (!this.assignmentHistory) {
     this.assignmentHistory = [];
   }
@@ -214,7 +224,6 @@ studentSchema.methods.cancelAssignment = async function(seatId, shiftId) {
   assignment.status = 'cancelled';
   assignment.endDate = new Date();
 
-  // Add null check for assignmentHistory
   if (!this.assignmentHistory) {
     this.assignmentHistory = [];
   }
