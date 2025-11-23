@@ -1,4 +1,4 @@
-// controllers/paymentController.js - Updated to use new Payment model fields
+// controllers/paymentController.js - Fixed with proper payment mapping (original response structure)
 const { asyncHandler } = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const Payment = require('../models/Payment');
@@ -74,8 +74,7 @@ exports.getPayments = asyncHandler(async (req, res) => {
     
     query.$or = [
       { student: { $in: studentIds.map(s => s._id) } },
-      { transactionId: { $regex: search, $options: 'i' } },
-      { 'seat.seatNumber': { $regex: search, $options: 'i' } }
+      { transactionId: { $regex: search, $options: 'i' } }
     ];
   }
 
@@ -124,9 +123,9 @@ exports.getPayments = asyncHandler(async (req, res) => {
       address: payment.property.address
     } : null,
     amount: payment.amount,
-    collectedAmount: payment.collectedAmount, // Use direct field
+    collectedAmount: payment.collectedAmount,
     dueAmount: payment.amount,
-    balanceAmount: payment.balanceAmount, // Use direct field
+    balanceAmount: payment.balanceAmount,
     paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
     paymentMode: payment.paymentMethod === 'cash' ? 'Cash' : 'Digital',
     status: payment.status,
@@ -153,7 +152,7 @@ exports.getPayments = asyncHandler(async (req, res) => {
       $group: {
         _id: null,
         totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' }, // Use collectedAmount field
+        totalCollected: { $sum: '$collectedAmount' },
         totalPending: {
           $sum: {
             $cond: {
@@ -163,7 +162,7 @@ exports.getPayments = asyncHandler(async (req, res) => {
             }
           }
         },
-        totalBalance: { $sum: '$balanceAmount' }, // Use balanceAmount field
+        totalBalance: { $sum: '$balanceAmount' },
         paymentCount: { $sum: 1 }
       }
     }
@@ -204,7 +203,7 @@ exports.createPayment = asyncHandler(async (req, res) => {
     studentId,
     studentName,
     seatNo,
-    dueAmount,
+    dueAmount, // This should be the CURRENT installment amount, not total
     collectedAmount,
     balanceAmount,
     paymentMethod,
@@ -215,7 +214,9 @@ exports.createPayment = asyncHandler(async (req, res) => {
     assignment,
     feeType = 'seat_rent',
     paymentBreakdown = [],
-    notes
+    notes,
+    previousPaymentId, // Reference to previous payment
+    isInstallment = true // Flag to indicate this is an installment
   } = req.body;
 
   console.log('=== CREATE PAYMENT START ===');
@@ -253,33 +254,66 @@ exports.createPayment = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'No active assignment found for this student and seat');
   }
 
+  // Calculate remaining balance from previous payments
+  let totalPreviousCollected = 0;
+  let previousPayments = [];
+  
+  if (isInstallment) {
+    previousPayments = await Payment.find({
+      student: studentId,
+      seat: seat._id,
+      assignment: activeAssignment._id,
+      feeType: feeType,
+      status: { $in: ['completed', 'partial'] }
+    }).sort({ paymentDate: 1 });
+
+    totalPreviousCollected = previousPayments.reduce((sum, payment) => {
+      return sum + payment.collectedAmount;
+    }, 0);
+  }
+
+  const monthlyRent = activeAssignment.monthlyRent || 1600; // Get from assignment
+  const totalDue = monthlyRent;
+  const remainingBalance = totalDue - totalPreviousCollected;
+
+  console.log('Payment Calculation:', {
+    monthlyRent,
+    totalPreviousCollected,
+    remainingBalance,
+    previousPaymentsCount: previousPayments.length
+  });
+
+  // Validate that collected amount doesn't exceed remaining balance
+  const numericCollected = parseFloat(collectedAmount);
+  if (numericCollected > remainingBalance) {
+    throw new ApiError(400, `Collected amount (₹${numericCollected}) exceeds remaining balance (₹${remainingBalance})`);
+  }
+
   // Generate receipt and transaction IDs
   const receiptNumber = `RCPT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-  // Use provided values or calculate
-  const numericAmount = parseFloat(dueAmount);
-  const numericCollected = parseFloat(collectedAmount);
-  const numericBalance = parseFloat(balanceAmount) || (numericAmount - numericCollected);
+  // For new installment payments, the "dueAmount" should be the collected amount
+  // and we track the overall progress separately
+  const installmentAmount = numericCollected;
+  const newBalance = remainingBalance - numericCollected;
   
-  // Determine payment status based on collected amount
-  let status = 'pending';
-  if (numericCollected === numericAmount) {
-    status = 'completed';
-  } else if (numericCollected > 0 && numericCollected < numericAmount) {
+  // Determine payment status for THIS installment
+  let status = 'completed';
+  if (newBalance > 0) {
     status = 'partial';
   }
 
-  // Create payment record with new fields
+  // Create payment record for this installment
   const paymentData = {
     student: studentId,
     seat: seat._id,
     shift: activeAssignment.shift,
     property: seat.propertyId,
     assignment: activeAssignment._id,
-    amount: numericAmount,
-    collectedAmount: numericCollected,
-    balanceAmount: numericBalance,
+    amount: installmentAmount, // This installment amount
+    collectedAmount: installmentAmount, // Same as amount for installment
+    balanceAmount: 0, // This installment is fully paid
     status: status,
     paymentMethod: mapPaymentMethod(paymentMethod),
     transactionId: transactionId,
@@ -290,20 +324,29 @@ exports.createPayment = asyncHandler(async (req, res) => {
       end: activeAssignment.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     },
     feeType: feeType,
-    description: description,
+    description: description || `Seat rent installment - ${previousPayments.length + 1}`,
     paymentBreakdown: paymentBreakdown.length > 0 ? paymentBreakdown : [
       {
-        description: 'Seat Rent Payment',
-        amount: numericCollected,
+        description: `Seat Rent Installment ${previousPayments.length + 1}`,
+        amount: installmentAmount,
         type: 'base_fee',
-        date: new Date()
+        date: new Date(),
+        installmentNumber: previousPayments.length + 1
       }
     ],
+    // Track overall progress
+    overallProgress: {
+      totalMonthlyRent: monthlyRent,
+      totalCollectedSoFar: totalPreviousCollected + installmentAmount,
+      remainingBalance: newBalance,
+      installmentsCount: previousPayments.length + 1,
+      previousPaymentId: previousPaymentId || (previousPayments.length > 0 ? previousPayments[previousPayments.length - 1]._id : null)
+    },
     createdBy: req.user?.id,
-    notes: notes
+    notes: notes || `Installment ${previousPayments.length + 1} of seat rent`
   };
 
-  console.log('Creating payment with data:', paymentData);
+  console.log('Creating installment payment:', paymentData);
 
   const payment = await Payment.create(paymentData);
 
@@ -316,7 +359,7 @@ exports.createPayment = asyncHandler(async (req, res) => {
 
   console.log('=== CREATE PAYMENT END - SUCCESS ===');
 
-  // Enhanced receipt data
+  // Enhanced receipt data that shows proper context
   const receiptData = {
     receiptNumber: receiptNumber,
     transactionId: transactionId,
@@ -328,23 +371,37 @@ exports.createPayment = asyncHandler(async (req, res) => {
     propertyName: property.name,
     propertyAddress: property.address,
     shiftName: populatedPayment.shift?.name || 'N/A',
-    dueAmount: numericAmount,
-    collectedAmount: numericCollected,
-    balanceAmount: numericBalance,
+    
+    // Installment details
+    installmentAmount: installmentAmount,
+    installmentNumber: previousPayments.length + 1,
+    
+    // Overall progress
+    totalMonthlyRent: monthlyRent,
+    totalCollectedSoFar: totalPreviousCollected + installmentAmount,
+    remainingBalance: newBalance,
+    
     paymentMethod: paymentMethod,
     paymentMode: paymentMode,
     paymentDate: paymentDate || new Date().toISOString().split('T')[0],
     description: description,
     timestamp: new Date().toISOString(),
-    period: paymentData.period
+    period: paymentData.period,
+    isInstallment: true
   };
 
   res.status(201).json({
     success: true,
-    message: 'Payment recorded successfully',
+    message: `Installment ${previousPayments.length + 1} recorded successfully`,
     data: {
       payment: populatedPayment,
-      receipt: receiptData
+      receipt: receiptData,
+      overallProgress: {
+        totalMonthlyRent: monthlyRent,
+        totalCollected: totalPreviousCollected + installmentAmount,
+        remainingBalance: newBalance,
+        installmentsCount: previousPayments.length + 1
+      }
     }
   });
 });
@@ -370,8 +427,8 @@ exports.getPaymentStats = asyncHandler(async (req, res) => {
         _id: '$status',
         count: { $sum: 1 },
         totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' }, // Use new field
-        totalBalance: { $sum: '$balanceAmount' } // Use new field
+        totalCollected: { $sum: '$collectedAmount' },
+        totalBalance: { $sum: '$balanceAmount' }
       }
     }
   ]);
@@ -383,8 +440,8 @@ exports.getPaymentStats = asyncHandler(async (req, res) => {
       $group: {
         _id: null,
         total: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' }, // Use new field
-        totalBalance: { $sum: '$balanceAmount' } // Use new field
+        totalCollected: { $sum: '$collectedAmount' },
+        totalBalance: { $sum: '$balanceAmount' }
       }
     }
   ]);
@@ -450,8 +507,8 @@ exports.getOverduePayments = asyncHandler(async (req, res) => {
     } : null,
     amount: payment.amount,
     dueAmount: payment.amount,
-    collectedAmount: payment.collectedAmount, // Use direct field
-    balanceAmount: payment.balanceAmount, // Use direct field
+    collectedAmount: payment.collectedAmount,
+    balanceAmount: payment.balanceAmount,
     paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
     paymentMode: payment.paymentMethod === 'cash' ? 'Cash' : 'Digital',
     status: payment.status,
@@ -516,8 +573,8 @@ exports.getStudentPayments = asyncHandler(async (req, res) => {
         _id: '$status',
         count: { $sum: 1 },
         totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' }, // Use new field
-        totalBalance: { $sum: '$balanceAmount' } // Use new field
+        totalCollected: { $sum: '$collectedAmount' },
+        totalBalance: { $sum: '$balanceAmount' }
       }
     }
   ]);
@@ -528,8 +585,8 @@ exports.getStudentPayments = asyncHandler(async (req, res) => {
     receiptNumber: payment.transactionId,
     studentId: studentId,
     amount: payment.amount,
-    collectedAmount: payment.collectedAmount, // Use direct field
-    balanceAmount: payment.balanceAmount, // Use direct field
+    collectedAmount: payment.collectedAmount,
+    balanceAmount: payment.balanceAmount,
     paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
     status: payment.status,
     date: payment.paymentDate || payment.createdAt,
@@ -616,9 +673,9 @@ exports.generatePaymentReport = asyncHandler(async (req, res) => {
     {
       $group: {
         _id: groupBy,
-        totalCollections: { $sum: '$collectedAmount' }, // Use new field
+        totalCollections: { $sum: '$collectedAmount' },
         totalDue: { $sum: '$amount' },
-        totalBalance: { $sum: '$balanceAmount' }, // Use new field
+        totalBalance: { $sum: '$balanceAmount' },
         paymentCount: { $sum: 1 },
         averagePayment: { $avg: '$amount' },
         minPayment: { $min: '$amount' },
@@ -636,7 +693,7 @@ exports.generatePaymentReport = asyncHandler(async (req, res) => {
         _id: '$paymentMethod',
         count: { $sum: 1 },
         totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' } // Use new field
+        totalCollected: { $sum: '$collectedAmount' }
       }
     }
   ]);
@@ -649,7 +706,7 @@ exports.generatePaymentReport = asyncHandler(async (req, res) => {
         _id: '$status',
         count: { $sum: 1 },
         totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' } // Use new field
+        totalCollected: { $sum: '$collectedAmount' }
       }
     }
   ]);
@@ -717,9 +774,9 @@ exports.getPaymentById = asyncHandler(async (req, res) => {
       address: payment.property.address
     } : null,
     amount: payment.amount,
-    collectedAmount: payment.collectedAmount, // Use direct field
+    collectedAmount: payment.collectedAmount,
     dueAmount: payment.amount,
-    balanceAmount: payment.balanceAmount, // Use direct field
+    balanceAmount: payment.balanceAmount,
     paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
     paymentMode: payment.paymentMethod === 'cash' ? 'Cash' : 'Digital',
     status: payment.status,
@@ -927,13 +984,13 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         _id: '$status',
         count: { $sum: 1 },
         totalAmount: { $sum: '$amount' },
-        totalCollected: { $sum: '$collectedAmount' }, // Use new field
-        totalBalance: { $sum: '$balanceAmount' } // Use new field
+        totalCollected: { $sum: '$collectedAmount' },
+        totalBalance: { $sum: '$balanceAmount' }
       }
     }
   ]);
 
-  // Calculate summary for frontend
+  // Calculate summary for frontend - FIXED VERSION
   const summary = {
     duePayments: 0,
     collections: 0,
@@ -942,8 +999,14 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
 
   stats.forEach(stat => {
     if (stat._id === 'pending') {
-      summary.duePayments = stat.totalAmount;
-    } else if (stat._id === 'completed' || stat._id === 'partial') {
+      // For pending payments, the entire amount is due
+      summary.duePayments += stat.totalAmount;
+    } else if (stat._id === 'partial') {
+      // For partial payments, only the balance amount is due
+      summary.duePayments += stat.totalBalance;
+      summary.collections += stat.totalCollected;
+    } else if (stat._id === 'completed') {
+      // For completed payments, add to collections
       summary.collections += stat.totalCollected;
     } else if (stat._id === 'failed') {
       summary.expenses += stat.totalAmount;
@@ -968,7 +1031,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
           month: { $month: '$createdAt' },
           day: { $dayOfMonth: '$createdAt' }
         },
-        dailyCollection: { $sum: '$collectedAmount' }, // Use new field
+        dailyCollection: { $sum: '$collectedAmount' },
         paymentCount: { $sum: 1 }
       }
     },
@@ -990,7 +1053,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
     studentName: payment.student ? `${payment.student.firstName} ${payment.student.lastName || ''}`.trim() : 'Unknown',
     seatNo: payment.seat?.seatNumber || 'N/A',
     propertyName: payment.property?.name || 'N/A',
-    amount: payment.collectedAmount, // Use new field
+    amount: payment.collectedAmount,
     date: payment.paymentDate || payment.createdAt,
     status: payment.status
   }));
@@ -1034,8 +1097,8 @@ exports.generateReceipt = asyncHandler(async (req, res) => {
     propertyAddress: payment.property?.address || 'N/A',
     shiftName: payment.shift?.name || 'N/A',
     dueAmount: payment.amount,
-    collectedAmount: payment.collectedAmount, // Use new field
-    balanceAmount: payment.balanceAmount, // Use new field
+    collectedAmount: payment.collectedAmount,
+    balanceAmount: payment.balanceAmount,
     paymentMethod: mapPaymentMethodToUI(payment.paymentMethod),
     paymentMode: payment.paymentMethod === 'cash' ? 'Cash' : 'Digital',
     paymentDate: payment.paymentDate || payment.createdAt,
@@ -1077,3 +1140,52 @@ function mapPaymentMethodToUI(backendMethod) {
   };
   return methodMap[backendMethod] || 'CASH';
 }
+
+// @desc    Get payment summary for a student
+// @route   GET /smlekha/payments/student/:studentId/summary
+// @access  Private
+exports.getStudentPaymentSummary = asyncHandler(async (req, res) => {
+  const { studentId } = req.params;
+  const { seatId, assignmentId } = req.query;
+
+  const student = await Student.findById(studentId);
+  if (!student) {
+    throw new ApiError(404, 'Student not found');
+  }
+
+  const query = {
+    student: studentId,
+    feeType: 'seat_rent'
+  };
+
+  if (seatId) query.seat = seatId;
+  if (assignmentId) query.assignment = assignmentId;
+
+  const payments = await Payment.find(query)
+    .populate('seat', 'seatNumber')
+    .sort({ paymentDate: 1 });
+
+  const monthlyRent = 1600; // This should come from assignment
+  const totalCollected = payments.reduce((sum, payment) => sum + payment.collectedAmount, 0);
+  const remainingBalance = monthlyRent - totalCollected;
+
+  res.status(200).json({
+    success: true,
+    data: {
+      student: {
+        id: student._id,
+        name: student.firstName + ' ' + (student.lastName || ''),
+        email: student.email,
+        phone: student.phone
+      },
+      summary: {
+        monthlyRent,
+        totalCollected,
+        remainingBalance,
+        paymentCount: payments.length,
+        lastPayment: payments[payments.length - 1]
+      },
+      paymentHistory: payments
+    }
+  });
+});

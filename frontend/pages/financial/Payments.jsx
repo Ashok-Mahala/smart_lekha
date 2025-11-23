@@ -33,10 +33,13 @@ import {
   Filter,
   MoreHorizontal,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  AlertCircle,
+  DollarSign,
+  Wallet
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { format, startOfMonth, endOfMonth } from "date-fns";
+import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { jsPDF } from "jspdf";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -91,10 +94,15 @@ const PaymentsPage = () => {
   const [payments, setPayments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [summaryData, setSummaryData] = useState({
-    duePayments: 0,
-    collections: 0,
-    expenses: 0
+  const [dashboardStats, setDashboardStats] = useState({
+    summary: {
+      duePayments: 0,
+      collections: 0,
+      expenses: 0
+    },
+    stats: [],
+    monthlyTrend: [],
+    recentPayments: []
   });
 
   // Load payments and stats on component mount and filter changes
@@ -122,12 +130,20 @@ const PaymentsPage = () => {
         })
       ]);
       
-      // Handle response structure
-      const paymentsData = paymentsResponse.success ? paymentsResponse.data : paymentsResponse;
-      const statsData = statsResponse.success ? statsResponse.data : statsResponse;
+      console.log('Payments Response:', paymentsResponse);
+      console.log('Stats Response:', statsResponse);
+      
+      // Handle response structure - payments data is in paymentsResponse.data
+      const paymentsData = paymentsResponse.success ? paymentsResponse.data : [];
+      const statsData = statsResponse.success ? statsResponse.data : {
+        summary: { duePayments: 0, collections: 0, expenses: 0 },
+        stats: [],
+        monthlyTrend: [],
+        recentPayments: []
+      };
       
       setPayments(paymentsData || []);
-      setSummaryData(statsData?.summary || { duePayments: 0, collections: 0, expenses: 0 });
+      setDashboardStats(statsData);
     } catch (error) {
       console.error('Error loading payments:', error);
       toast({
@@ -149,6 +165,32 @@ const PaymentsPage = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery]);
 
+  // Calculate proper summary data from payments
+  const calculateSummaryFromPayments = () => {
+    const duePayments = payments
+      .filter(p => p.status === 'pending' || p.status === 'partial')
+      .reduce((sum, p) => sum + (p.balanceAmount || 0), 0);
+    
+    const collections = payments
+      .filter(p => p.status === 'completed' || p.status === 'partial')
+      .reduce((sum, p) => sum + (p.collectedAmount || 0), 0);
+    
+    const expenses = payments
+      .filter(p => p.status === 'failed' || p.status === 'refunded')
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    return {
+      duePayments,
+      collections,
+      expenses
+    };
+  };
+
+  // Use calculated summary if dashboard stats are not available
+  const summaryData = dashboardStats.summary?.collections > 0 
+    ? dashboardStats.summary 
+    : calculateSummaryFromPayments();
+
   // Filter payments based on search query for immediate UI response
   const filteredPayments = payments.filter((payment) => {
     if (!searchQuery) return true;
@@ -158,7 +200,8 @@ const PaymentsPage = () => {
       payment.studentName?.toLowerCase().includes(query) ||
       payment.studentId?.toLowerCase().includes(query) ||
       payment.seatNo?.toLowerCase().includes(query) ||
-      payment.transactionId?.toLowerCase().includes(query)
+      payment.transactionId?.toLowerCase().includes(query) ||
+      payment.studentEmail?.toLowerCase().includes(query)
     );
   });
 
@@ -174,9 +217,9 @@ const PaymentsPage = () => {
   // Helper function for status badges
   const getStatusBadge = (status) => {
     const statusConfig = {
-      "completed": { variant: "default", className: "bg-green-500", label: "Completed" },
+      "completed": { variant: "default", className: "bg-green-500 text-white", label: "Completed" },
       "pending": { variant: "outline", className: "border-amber-500 text-amber-500", label: "Pending" },
-      "failed": { variant: "destructive", className: "bg-red-500", label: "Failed" },
+      "failed": { variant: "destructive", className: "bg-red-500 text-white", label: "Failed" },
       "partial": { variant: "outline", className: "border-blue-500 text-blue-500", label: "Partial" },
       "refunded": { variant: "outline", className: "border-gray-500 text-gray-500", label: "Refunded" }
     };
@@ -184,18 +227,33 @@ const PaymentsPage = () => {
     const config = statusConfig[status] || { variant: "outline", className: "", label: "Unknown" };
     
     return (
-      <Badge variant={config.variant} className={config.className}>
+      <Badge variant={config.variant} className={`text-xs ${config.className}`}>
         {config.label}
       </Badge>
     );
   };
 
+  // Get payment method icon
+  const getPaymentMethodIcon = (method) => {
+    switch (method) {
+      case 'CASH':
+        return <Banknote className="h-4 w-4" />;
+      case 'UPI':
+      case 'PHONEPE':
+      case 'PAYTM':
+        return <Smartphone className="h-4 w-4" />;
+      case 'CARD':
+        return <CreditCard className="h-4 w-4" />;
+      default:
+        return <Wallet className="h-4 w-4" />;
+    }
+  };
+
   // Generate PDF receipt
   const generatePDFReceipt = async (payment) => {
     try {
-      // Get enhanced receipt data from backend
-      const receiptResponse = await paymentService.getReceipt(payment.id);
-      const receiptData = receiptResponse.data;
+      // Use the payment data directly instead of calling API
+      const receiptData = payment; // Use the payment object directly
 
       const doc = new jsPDF();
       
@@ -229,9 +287,9 @@ const PaymentsPage = () => {
       doc.setFont('helvetica', 'normal');
       
       const receiptDetails = [
-        { label: 'Receipt Number', value: receiptData.receiptNumber },
+        { label: 'Receipt Number', value: receiptData.receiptNumber || receiptData.transactionId },
         { label: 'Transaction ID', value: receiptData.transactionId },
-        { label: 'Payment Date', value: format(new Date(receiptData.paymentDate), 'dd/MM/yyyy') },
+        { label: 'Payment Date', value: format(new Date(receiptData.paymentDate || receiptData.date), 'dd/MM/yyyy') },
         { label: 'Status', value: receiptData.status.toUpperCase() }
       ];
       
@@ -253,10 +311,10 @@ const PaymentsPage = () => {
       doc.setFont('helvetica', 'normal');
       
       const propertyDetails = [
-        { label: 'Library Name', value: receiptData.propertyName },
-        { label: 'Address', value: receiptData.propertyAddress },
+        { label: 'Library Name', value: receiptData.property?.name || 'N/A' },
+        { label: 'Address', value: receiptData.property?.address || 'N/A' },
         { label: 'Seat Number', value: receiptData.seatNo },
-        { label: 'Shift', value: receiptData.shiftName }
+        { label: 'Shift', value: receiptData.shift?.name || 'N/A' }
       ];
       
       propertyDetails.forEach(detail => {
@@ -277,8 +335,8 @@ const PaymentsPage = () => {
       const studentDetails = [
         { label: 'Student Name', value: receiptData.studentName },
         { label: 'Student ID', value: receiptData.studentId },
-        { label: 'Email', value: receiptData.studentEmail },
-        { label: 'Phone', value: receiptData.studentPhone }
+        { label: 'Email', value: receiptData.studentEmail || 'N/A' },
+        { label: 'Phone', value: receiptData.studentPhone || 'N/A' }
       ];
       
       studentDetails.forEach(detail => {
@@ -302,13 +360,13 @@ const PaymentsPage = () => {
       doc.setTextColor(...textColor);
       doc.setFont('helvetica', 'bold');
       doc.text('Description', 20, yPosition + 5);
-      doc.text('Amount (₹)', 160, yPosition + 5, { align: 'right' });
+      doc.text('Amount', 160, yPosition + 5, { align: 'right' });
       
       yPosition += 12;
       
       // Payment items
       const paymentItems = [
-        { description: 'Seat Rent Fee', amount: receiptData.dueAmount },
+        { description: 'Seat Rent Fee', amount: receiptData.amount },
         { description: 'Amount Paid', amount: receiptData.collectedAmount },
         { description: 'Balance Amount', amount: receiptData.balanceAmount }
       ];
@@ -329,7 +387,7 @@ const PaymentsPage = () => {
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(...secondaryColor);
       doc.text('TOTAL PAID', 20, yPosition);
-      doc.text(`₹${receiptData.collectedAmount}`, 160, yPosition, { align: 'right' });
+      doc.text(`${receiptData.collectedAmount}`, 160, yPosition, { align: 'right' });
 
       // Payment Method
       yPosition += 15;
@@ -343,7 +401,7 @@ const PaymentsPage = () => {
       doc.setFont('helvetica', 'bold');
       doc.text('Payment Mode:', 15, yPosition);
       doc.setFont('helvetica', 'normal');
-      doc.text(receiptData.paymentMode, 50, yPosition);
+      doc.text(receiptData.paymentMode || (receiptData.paymentMethod === 'CASH' ? 'Cash' : 'Digital'), 50, yPosition);
 
       // Period
       if (receiptData.period) {
@@ -353,6 +411,12 @@ const PaymentsPage = () => {
         doc.setFont('helvetica', 'normal');
         doc.text(`${format(new Date(receiptData.period.start), 'dd/MM/yyyy')} to ${format(new Date(receiptData.period.end), 'dd/MM/yyyy')}`, 50, yPosition);
       }
+
+      // Add student name and seat number in header
+      // yPosition += 15;
+      // doc.setFont('helvetica', 'bold');
+      // doc.setTextColor(...primaryColor);
+      // doc.text(`${receiptData.studentName} - Seat ${receiptData.seatNo}`, 105, yPosition, { align: 'center' });
 
       // Footer
       yPosition = 270;
@@ -369,7 +433,7 @@ const PaymentsPage = () => {
       doc.text(`Generated on: ${format(new Date(), 'dd/MM/yyyy hh:mm a')}`, 105, yPosition, { align: 'center' });
 
       // Save the PDF
-      const fileName = `receipt_${receiptData.receiptNumber}.pdf`;
+      const fileName = `receipt_${receiptData.studentName.replace(/\s+/g, '_')}_seat_${receiptData.seatNo}.pdf`;
       doc.save(fileName);
 
       toast({
@@ -387,6 +451,60 @@ const PaymentsPage = () => {
     }
   };
 
+  // Calculate payment summary for a specific student and seat
+  const calculateStudentPaymentSummary = (studentId, seatNo) => {
+    const studentPayments = payments.filter(p => 
+      p.studentId === studentId && p.seatNo === seatNo
+    );
+    
+    if (studentPayments.length === 0) {
+      return {
+        totalCollectedSoFar: 0,
+        remainingBalance: 0,
+        monthlyRent: 0,
+        isFullyPaid: false,
+        totalPayments: 0,
+        lastPaymentDate: null
+      };
+    }
+
+    // Sort by date to ensure we get the correct chronological order
+    const sortedPayments = [...studentPayments].sort((a, b) => 
+      new Date(a.date) - new Date(b.date)
+    );
+
+    // The first payment should contain the full monthly rent amount
+    const monthlyRent = sortedPayments[0]?.amount || 0;
+    
+    // Calculate total collected from all payments
+    const totalCollectedSoFar = studentPayments.reduce((sum, payment) => 
+      sum + (payment.collectedAmount || 0), 0
+    );
+    
+    // Calculate remaining balance
+    const remainingBalance = Math.max(0, monthlyRent - totalCollectedSoFar);
+    const isFullyPaid = remainingBalance === 0;
+
+    // Get latest payment info
+    const latestPayment = sortedPayments[sortedPayments.length - 1];
+
+    return {
+      totalCollectedSoFar,
+      remainingBalance,
+      monthlyRent,
+      isFullyPaid,
+      totalPayments: studentPayments.length,
+      lastPaymentDate: latestPayment?.date,
+      lastPaymentStatus: latestPayment?.status
+    };
+  };
+
+  // Check if student has any remaining balance to pay
+  const hasRemainingBalance = (studentId, seatNo) => {
+    const summary = calculateStudentPaymentSummary(studentId, seatNo);
+    return summary.remainingBalance > 0;
+  };
+
   // Handle payment submission
   const handlePaymentSubmit = async () => {
     if (!paymentMethod) {
@@ -397,7 +515,7 @@ const PaymentsPage = () => {
       });
       return;
     }
-
+  
     if (!collectedAmount || parseFloat(collectedAmount) <= 0) {
       toast({
         title: "Error",
@@ -406,58 +524,72 @@ const PaymentsPage = () => {
       });
       return;
     }
-
-    const dueAmount = parseFloat(selectedPayment.amount);
-    const paidAmount = parseFloat(collectedAmount);
-
-    if (paidAmount > dueAmount) {
-      toast({
-        title: "Error",
-        description: "Collected amount cannot be greater than due amount",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  
     try {
       setIsProcessing(true);
 
+      // Calculate current payment summary
+      const paymentSummary = calculateStudentPaymentSummary(
+        selectedPayment.studentId, 
+        selectedPayment.seatNo
+      );
+      
+      const paidAmount = parseFloat(collectedAmount);
+
+      if (paidAmount > paymentSummary.remainingBalance) {
+        toast({
+          title: "Error",
+          description: `Collected amount (${paidAmount}) exceeds remaining balance (${paymentSummary.remainingBalance})`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Calculate new remaining balance after this payment
+      const newRemainingBalance = paymentSummary.remainingBalance - paidAmount;
+      
+      // Determine status for this payment
+      let paymentStatus = 'completed';
+      if (newRemainingBalance > 0) {
+        paymentStatus = 'partial';
+      }
+  
       const paymentData = {
         studentId: selectedPayment.studentId,
         studentName: selectedPayment.studentName,
         seatNo: selectedPayment.seatNo,
-        dueAmount: dueAmount.toString(),
+        dueAmount: paidAmount.toString(), // Current installment amount
         collectedAmount: collectedAmount,
-        balanceAmount: (dueAmount - paidAmount).toString(),
+        balanceAmount: newRemainingBalance.toString(), // Send the actual remaining balance
         paymentMethod: paymentMethod,
         paymentMode: paymentMethod === "CASH" ? "Cash" : "Digital",
         paymentDate: paymentDate,
-        description: `Seat rent payment for ${selectedPayment.studentName}`,
-        feeType: 'seat_rent'
+        description: `Seat rent installment payment for ${selectedPayment.studentName}`,
+        feeType: 'seat_rent',
+        isInstallment: true
       };
-
+  
       const result = await paymentService.createPayment(paymentData);
       
-      // Generate PDF receipt automatically after successful payment
       if (result.success) {
         await generatePDFReceipt(result.data.payment);
+        
+        toast({
+          title: "Installment Recorded",
+          description: `Installment of ₹${collectedAmount} recorded successfully. ${newRemainingBalance > 0 ? `Remaining balance: ₹${newRemainingBalance}` : 'All dues cleared!'}`,
+        });
       }
-
+  
       // Refresh payments list
       await loadPaymentsAndStats();
-
-      toast({
-        title: "Payment Successful",
-        description: `Payment of ₹${collectedAmount} recorded successfully`,
-      });
-
+  
       // Reset form
       setShowPaymentModal(false);
       setSelectedPayment(null);
       setPaymentMethod("");
       setCollectedAmount("");
       setPaymentDate(new Date().toISOString().split('T')[0]);
-
+  
     } catch (error) {
       console.error('Payment submission error:', error);
       toast({
@@ -538,7 +670,11 @@ const PaymentsPage = () => {
 
   const openPaymentModal = (payment) => {
     setSelectedPayment(payment);
-    setCollectedAmount(payment.amount?.toString() || "");
+    
+    // Calculate payment summary and set default amount to collect
+    const paymentSummary = calculateStudentPaymentSummary(payment.studentId, payment.seatNo);
+    setCollectedAmount(paymentSummary.remainingBalance > 0 ? paymentSummary.remainingBalance.toString() : "0");
+    
     setShowPaymentModal(true);
   };
 
@@ -581,8 +717,8 @@ const PaymentsPage = () => {
                     <Badge className={`${
                       payment.status === 'completed' ? 'bg-green-500' : 
                       payment.status === 'pending' ? 'bg-amber-500' : 
-                      'bg-gray-500'
-                    }`}>
+                      payment.status === 'partial' ? 'bg-blue-500' : 'bg-gray-500'
+                    } text-white`}>
                       {payment.status?.toUpperCase()}
                     </Badge>
                   </div>
@@ -648,23 +784,23 @@ const PaymentsPage = () => {
                     </thead>
                     <tbody>
                       <tr className="border-t">
-                        <td className="p-3">Seat Rent Fee</td>
-                        <td className="p-3 text-right">{payment.dueAmount || payment.amount}</td>
+                        <td className="p-3">Total Amount Due</td>
+                        <td className="p-3 text-right">{payment.amount}</td>
                       </tr>
                       <tr className="border-t">
-                        <td className="p-3">Amount Paid</td>
+                        <td className="p-3">Amount Collected</td>
                         <td className="p-3 text-right text-green-600 font-semibold">
-                          {payment.collectedAmount || payment.amount}
+                          {payment.collectedAmount}
                         </td>
                       </tr>
                       <tr className="border-t">
                         <td className="p-3">Balance Amount</td>
-                        <td className="p-3 text-right">{payment.balanceAmount || 0}</td>
+                        <td className="p-3 text-right">{payment.balanceAmount}</td>
                       </tr>
                       <tr className="border-t bg-gray-50">
                         <td className="p-3 font-semibold">TOTAL PAID</td>
                         <td className="p-3 text-right font-semibold text-green-600">
-                          ₹{payment.collectedAmount || payment.amount}
+                          ₹{payment.collectedAmount}
                         </td>
                       </tr>
                     </tbody>
@@ -765,7 +901,10 @@ const PaymentsPage = () => {
             onClick={() => handleCardClick("due")}
           >
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-red-900">Due Payments</CardTitle>
+              <CardTitle className="text-sm font-medium text-red-900 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Due Payments
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -775,7 +914,9 @@ const PaymentsPage = () => {
                 </div>
                 <Clock className="h-6 w-6 text-red-600" />
               </div>
-              <p className="text-xs text-red-700 mt-2">Total pending payments</p>
+              <p className="text-xs text-red-700 mt-2">
+                {payments.filter(p => p.status === 'pending' || p.status === 'partial').length} pending payments
+              </p>
             </CardContent>
           </Card>
 
@@ -784,7 +925,10 @@ const PaymentsPage = () => {
             onClick={() => handleCardClick("collections")}
           >
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-green-900">Collections</CardTitle>
+              <CardTitle className="text-sm font-medium text-green-900 flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Collections
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -794,7 +938,9 @@ const PaymentsPage = () => {
                 </div>
                 <TrendingUp className="h-6 w-6 text-green-600" />
               </div>
-              <p className="text-xs text-green-700 mt-2">Total collections this month</p>
+              <p className="text-xs text-green-700 mt-2">
+                {payments.filter(p => p.status === 'completed' || p.status === 'partial').length} successful payments
+              </p>
             </CardContent>
           </Card>
 
@@ -803,7 +949,10 @@ const PaymentsPage = () => {
             onClick={() => handleCardClick("expenses")}
           >
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-amber-900">Expenses</CardTitle>
+              <CardTitle className="text-sm font-medium text-amber-900 flex items-center gap-2">
+                <TrendingDown className="h-4 w-4" />
+                Expenses
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -811,9 +960,11 @@ const PaymentsPage = () => {
                   <IndianRupee className="h-5 w-5 mr-1" />
                   {formatRupee(summaryData.expenses)}
                 </div>
-                <TrendingDown className="h-6 w-6 text-amber-600" />
+                <AlertCircle className="h-6 w-6 text-amber-600" />
               </div>
-              <p className="text-xs text-amber-700 mt-2">Total expenses this month</p>
+              <p className="text-xs text-amber-700 mt-2">
+                {payments.filter(p => p.status === 'failed' || p.status === 'refunded').length} failed/refunded payments
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -898,9 +1049,9 @@ const PaymentsPage = () => {
                   <TableRow className="border-b-2 border-gray-200 hover:bg-transparent">
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Seat No</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Student</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Amount</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Amount Details</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Status</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Due Date</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Payment Date</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600 border-r border-gray-200">Payment Method</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold text-gray-600">Actions</TableHead>
                   </TableRow>
@@ -916,71 +1067,105 @@ const PaymentsPage = () => {
                       </TableCell>
                     </TableRow>
                   ) : filteredPayments.length > 0 ? (
-                    filteredPayments.map((payment) => (
-                      <TableRow key={payment.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                        <TableCell className="font-medium whitespace-nowrap text-xs border-r border-gray-100">
-                          {payment.seatNo}
-                        </TableCell>
-                        <TableCell className="border-r border-gray-100">
-                          <div>
-                            <p className="font-medium text-xs">{payment.studentName}</p>
-                            <p className="text-xs text-muted-foreground">{payment.studentId}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-green-600 font-bold text-xs border-r border-gray-100">
-                          {formatRupee(payment.amount)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
-                          {getStatusBadge(payment.status)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
-                          {payment.dueDate ? format(new Date(payment.dueDate), 'dd/MM/yyyy') : '-'}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
-                          {payment.paymentMethod}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="text-xs hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
-                              onClick={() => {
-                                setCurrentReceipt(payment);
-                                setShowReceiptPreview(true);
-                              }}
-                            >
-                              <Receipt className="h-3 w-3 mr-1" />
-                              Receipt
-                            </Button>
-                            {payment.status === 'pending' && (
-                              <Button
-                                variant="outline"
+                    filteredPayments.map((payment) => {
+                      // Check if this student has any remaining balance
+                      const hasBalance = hasRemainingBalance(payment.studentId, payment.seatNo);
+                      
+                      return (
+                        <TableRow key={payment.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <TableCell className="font-medium whitespace-nowrap text-xs border-r border-gray-100">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <span className="text-blue-600 font-bold text-sm">{payment.seatNo}</span>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="border-r border-gray-100">
+                            <div>
+                              <p className="font-medium text-xs">{payment.studentName}</p>
+                              <p className="text-xs text-muted-foreground">{payment.studentId}</p>
+                              <p className="text-xs text-gray-500">{payment.studentEmail}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="border-r border-gray-100">
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">Total:</span>
+                                <span className="font-semibold">{formatRupee(payment.amount)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">Collected:</span>
+                                <span className="text-green-600 font-semibold">{formatRupee(payment.collectedAmount)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">Balance:</span>
+                                <span className={`font-semibold ${
+                                  payment.balanceAmount > 0 ? 'text-red-600' : 'text-gray-600'
+                                }`}>
+                                  {formatRupee(payment.balanceAmount)}
+                                </span>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
+                            {getStatusBadge(payment.status)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
+                            <div>
+                              <p className="font-medium">{format(new Date(payment.paymentDate || payment.date), 'dd/MM/yyyy')}</p>
+                              <p className="text-xs text-gray-500">{format(new Date(payment.paymentDate || payment.date), 'hh:mm a')}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs border-r border-gray-100">
+                            <div className="flex items-center gap-2">
+                              {getPaymentMethodIcon(payment.paymentMethod)}
+                              <span>{payment.paymentMethod}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button 
+                                variant="outline" 
                                 size="sm"
-                                className="text-xs hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200"
-                                onClick={() => openPaymentModal(payment)}
+                                className="text-xs hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                                onClick={() => {
+                                  setCurrentReceipt(payment);
+                                  setShowReceiptPreview(true);
+                                }}
                               >
-                                <CreditCard className="h-3 w-3 mr-1" />
-                                Collect
+                                <Receipt className="h-3 w-3 mr-1" />
+                                Receipt
                               </Button>
-                            )}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
+                              {/* Only show Collect button if student has remaining balance */}
+                              {hasBalance && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200"
+                                  onClick={() => openPaymentModal(payment)}
+                                >
+                                  <CreditCard className="h-3 w-3 mr-1" />
+                                  Collect
                                 </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => generatePDFReceipt(payment)}>
-                                  <Download className="h-4 w-4 mr-2" />
-                                  Download PDF Receipt
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                              )}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => generatePDFReceipt(payment)}>
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Download PDF Receipt
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8">
@@ -1006,204 +1191,229 @@ const PaymentsPage = () => {
       </div>
 
       {/* Payment Modal */}
-      {showPaymentModal && selectedPayment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-[800px] bg-white shadow-xl">
-            <CardHeader className="border-b bg-gradient-to-r from-emerald-50 to-emerald-100">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-emerald-100 rounded-xl">
-                    <CreditCard className="h-7 w-7 text-emerald-600" />
+      {showPaymentModal && selectedPayment && (() => {
+        // Calculate payment summary for this specific student and seat
+        const paymentSummary = calculateStudentPaymentSummary(
+          selectedPayment.studentId, 
+          selectedPayment.seatNo
+        );
+        
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <Card className="w-full max-w-[800px] bg-white shadow-xl">
+              <CardHeader className="border-b bg-gradient-to-r from-emerald-50 to-emerald-100">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-emerald-100 rounded-xl">
+                      <CreditCard className="h-7 w-7 text-emerald-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl sm:text-2xl font-bold text-emerald-800">Collect Payment</CardTitle>
+                      <p className="text-sm text-emerald-600">Complete the payment details below</p>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-xl sm:text-2xl font-bold text-emerald-800">Collect Payment</CardTitle>
-                    <p className="text-sm text-emerald-600">Complete the payment details below</p>
+                  <Badge variant="outline" className="bg-white border-emerald-200 text-emerald-600 text-lg sm:text-xl px-4 py-1.5">
+                    {selectedPayment.seatNo}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 space-y-3">
+                {/* Student Details Section */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="p-1.5 bg-blue-50 rounded-md">
+                      <User className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-800">Student Details</h3>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-lg space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] text-gray-500 mb-0.5">Name</p>
+                        <p className="font-medium text-gray-800 text-sm">{selectedPayment.studentName}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-500 mb-0.5">Student ID</p>
+                        <p className="font-medium text-gray-800 text-sm">{selectedPayment.studentId}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] text-gray-500 mb-0.5">Seat No</p>
+                        <p className="font-medium text-gray-800 text-sm">{selectedPayment.seatNo}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-500 mb-0.5">Monthly Rent</p>
+                        <p className="font-medium text-gray-800 text-sm">{formatRupee(paymentSummary.monthlyRent)}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <Badge variant="outline" className="bg-white border-emerald-200 text-emerald-600 text-lg sm:text-xl px-4 py-1.5">
-                  {selectedPayment.seatNo}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 sm:p-4 space-y-3">
-              {/* Student Details Section */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <div className="p-1.5 bg-blue-50 rounded-md">
-                    <User className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-gray-800">Student Details</h3>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-lg space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-[10px] text-gray-500 mb-0.5">Name</p>
-                      <p className="font-medium text-gray-800 text-sm">{selectedPayment.studentName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray-500 mb-0.5">Student ID</p>
-                      <p className="font-medium text-gray-800 text-sm">{selectedPayment.studentId}</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-[10px] text-gray-500 mb-0.5">Seat No</p>
-                      <p className="font-medium text-gray-800 text-sm">{selectedPayment.seatNo}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray-500 mb-0.5">Due Amount</p>
-                      <p className="font-medium text-gray-800 text-sm">{formatRupee(selectedPayment.amount)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Payment Details Section */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <div className="p-1.5 bg-purple-50 rounded-md">
-                    <CreditCard className="h-4 w-4 text-purple-600" />
+                {/* Payment Details Section */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="p-1.5 bg-purple-50 rounded-md">
+                      <CreditCard className="h-4 w-4 text-purple-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-800">Payment Details</h3>
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-800">Payment Details</h3>
+                  <div className="bg-gray-50 p-3 rounded-lg space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-0.5">
+                        <p className="text-[10px] text-gray-500">Monthly Rent</p>
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg font-bold text-gray-600">₹</span>
+                          <p className="text-lg font-bold text-gray-600">{paymentSummary.monthlyRent}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[10px] text-gray-500">Already Paid</p>
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg font-bold text-green-600">₹</span>
+                          <p className="text-lg font-bold text-green-600">{paymentSummary.totalCollectedSoFar}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-0.5">
+                        <p className="text-[10px] text-gray-500">Remaining Balance</p>
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg font-bold text-red-600">₹</span>
+                          <p className="text-lg font-bold text-red-600">{paymentSummary.remainingBalance}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[10px] text-gray-500">Amount to Collect *</p>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-lg font-bold text-emerald-500">₹</span>
+                          <Input 
+                            type="number"
+                            value={collectedAmount}
+                            onChange={(e) => setCollectedAmount(e.target.value)}
+                            className="text-lg font-bold text-emerald-500 pl-6 h-8 border-emerald-200 focus:border-emerald-500"
+                            placeholder="Enter amount"
+                            max={paymentSummary.remainingBalance}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-0.5">
+                        <p className="text-[10px] text-gray-500">Payment Date *</p>
+                        <div className="relative">
+                          <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                          <Input 
+                            type="date"
+                            value={paymentDate}
+                            onChange={(e) => setPaymentDate(e.target.value)}
+                            className="text-sm font-medium pl-8 h-8 border-gray-200 focus:border-emerald-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[10px] text-gray-500">New Balance After Payment</p>
+                        <div className="flex items-center gap-1 bg-gray-100 px-2 py-1.5 rounded-md h-8">
+                          <span className="text-lg font-bold text-gray-600">₹</span>
+                          <p className="text-lg font-bold text-gray-600">
+                            {paymentSummary.remainingBalance - (parseFloat(collectedAmount) || 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-gray-50 p-3 rounded-lg space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] text-gray-500">Due Amount</p>
-                      <div className="flex items-center gap-1">
-                        <span className="text-lg font-bold text-red-500">₹</span>
-                        <p className="text-lg font-bold text-red-500">{selectedPayment.amount}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] text-gray-500">Collected Amount *</p>
-                      <div className="relative">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-lg font-bold text-emerald-500">₹</span>
-                        <Input 
-                          type="number"
-                          value={collectedAmount}
-                          onChange={(e) => setCollectedAmount(e.target.value)}
-                          className="text-lg font-bold text-emerald-500 pl-6 h-8 border-emerald-200 focus:border-emerald-500"
-                          placeholder="Enter amount"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] text-gray-500">Payment Date *</p>
-                      <div className="relative">
-                        <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                        <Input 
-                          type="date"
-                          value={paymentDate}
-                          onChange={(e) => setPaymentDate(e.target.value)}
-                          className="text-sm font-medium pl-8 h-8 border-gray-200 focus:border-emerald-500"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] text-gray-500">Balance Amount</p>
-                      <div className="flex items-center gap-1 bg-gray-100 px-2 py-1.5 rounded-md h-8">
-                        <span className="text-lg font-bold text-gray-600">₹</span>
-                        <p className="text-lg font-bold text-gray-600">
-                          {selectedPayment.amount - (parseFloat(collectedAmount) || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Payment Method Section */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <div className="p-1.5 bg-amber-50 rounded-md">
-                    <CreditCard className="h-4 w-4 text-amber-600" />
+                {/* Payment Method Section */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="p-1.5 bg-amber-50 rounded-md">
+                      <CreditCard className="h-4 w-4 text-amber-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-800">Payment Method *</h3>
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-800">Payment Method *</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <Button
+                      variant={paymentMethod === "CASH" ? "default" : "outline"}
+                      onClick={() => setPaymentMethod("CASH")}
+                      className={`h-12 flex flex-col items-center justify-center gap-0.5 ${
+                        paymentMethod === "CASH" ? "bg-emerald-600 hover:bg-emerald-700" : "hover:bg-emerald-50"
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <Banknote className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <span className="text-xs font-medium">Cash</span>
+                    </Button>
+                    <Button
+                      variant={paymentMethod === "PHONEPE" ? "default" : "outline"}
+                      onClick={() => setPaymentMethod("PHONEPE")}
+                      className={`h-12 flex flex-col items-center justify-center gap-0.5 ${
+                        paymentMethod === "PHONEPE" ? "bg-[#5F259F] hover:bg-[#5F259F]/90" : "hover:bg-[#5F259F]/5"
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-[#5F259F]/10 flex items-center justify-center">
+                        <Smartphone className="h-4 w-4 text-[#5F259F]" />
+                      </div>
+                      <span className="text-xs font-medium">PhonePe</span>
+                    </Button>
+                    <Button
+                      variant={paymentMethod === "PAYTM" ? "default" : "outline"}
+                      onClick={() => setPaymentMethod("PAYTM")}
+                      className={`h-12 flex flex-col items-center justify-center gap-0.5 ${
+                        paymentMethod === "PAYTM" ? "bg-[#00BAF2] hover:bg-[#00BAF2]/90" : "hover:bg-[#00BAF2]/5"
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-[#00BAF2]/10 flex items-center justify-center">
+                        <Smartphone className="h-4 w-4 text-[#00BAF2]" />
+                      </div>
+                      <span className="text-xs font-medium">Paytm</span>
+                    </Button>
+                    <Button
+                      variant={paymentMethod === "UPI" ? "default" : "outline"}
+                      onClick={() => setPaymentMethod("UPI")}
+                      className={`h-12 flex flex-col items-center justify-center gap-0.5 ${
+                        paymentMethod === "UPI" ? "bg-blue-600 hover:bg-blue-700" : "hover:bg-blue-50"
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+                        <QrCode className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <span className="text-xs font-medium">UPI</span>
+                    </Button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <Button
-                    variant={paymentMethod === "CASH" ? "default" : "outline"}
-                    onClick={() => setPaymentMethod("CASH")}
-                    className={`h-12 flex flex-col items-center justify-center gap-0.5 ${
-                      paymentMethod === "CASH" ? "bg-emerald-600 hover:bg-emerald-700" : "hover:bg-emerald-50"
-                    }`}
-                  >
-                    <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
-                      <Banknote className="h-4 w-4 text-emerald-600" />
-                    </div>
-                    <span className="text-xs font-medium">Cash</span>
-                  </Button>
-                  <Button
-                    variant={paymentMethod === "PHONEPE" ? "default" : "outline"}
-                    onClick={() => setPaymentMethod("PHONEPE")}
-                    className={`h-12 flex flex-col items-center justify-center gap-0.5 ${
-                      paymentMethod === "PHONEPE" ? "bg-[#5F259F] hover:bg-[#5F259F]/90" : "hover:bg-[#5F259F]/5"
-                    }`}
-                  >
-                    <div className="w-7 h-7 rounded-full bg-[#5F259F]/10 flex items-center justify-center">
-                      <Smartphone className="h-4 w-4 text-[#5F259F]" />
-                    </div>
-                    <span className="text-xs font-medium">PhonePe</span>
-                  </Button>
-                  <Button
-                    variant={paymentMethod === "PAYTM" ? "default" : "outline"}
-                    onClick={() => setPaymentMethod("PAYTM")}
-                    className={`h-12 flex flex-col items-center justify-center gap-0.5 ${
-                      paymentMethod === "PAYTM" ? "bg-[#00BAF2] hover:bg-[#00BAF2]/90" : "hover:bg-[#00BAF2]/5"
-                    }`}
-                  >
-                    <div className="w-7 h-7 rounded-full bg-[#00BAF2]/10 flex items-center justify-center">
-                      <Smartphone className="h-4 w-4 text-[#00BAF2]" />
-                    </div>
-                    <span className="text-xs font-medium">Paytm</span>
-                  </Button>
-                  <Button
-                    variant={paymentMethod === "UPI" ? "default" : "outline"}
-                    onClick={() => setPaymentMethod("UPI")}
-                    className={`h-12 flex flex-col items-center justify-center gap-0.5 ${
-                      paymentMethod === "UPI" ? "bg-blue-600 hover:bg-blue-700" : "hover:bg-blue-50"
-                    }`}
-                  >
-                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
-                      <QrCode className="h-4 w-4 text-blue-600" />
-                    </div>
-                    <span className="text-xs font-medium">UPI</span>
-                  </Button>
-                </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row justify-end gap-1.5 pt-3 border-t">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowPaymentModal(false)}
-                  className="w-full sm:w-auto hover:bg-gray-100 h-8 text-sm"
-                  disabled={isProcessing}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handlePaymentSubmit}
-                  disabled={!paymentMethod || !collectedAmount || isProcessing}
-                  className={`w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 h-8 text-sm ${
-                    (!paymentMethod || !collectedAmount || isProcessing) ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                >
-                  {isProcessing ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                  )}
-                  {isProcessing ? "Processing..." : "Confirm Payment"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row justify-end gap-1.5 pt-3 border-t">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowPaymentModal(false)}
+                    className="w-full sm:w-auto hover:bg-gray-100 h-8 text-sm"
+                    disabled={isProcessing}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handlePaymentSubmit}
+                    disabled={!paymentMethod || !collectedAmount || isProcessing}
+                    className={`w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 h-8 text-sm ${
+                      (!paymentMethod || !collectedAmount || isProcessing) ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                  >
+                    {isProcessing ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    {isProcessing ? "Processing..." : "Confirm Payment"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* Receipt Preview */}
       {showReceiptPreview && currentReceipt && (

@@ -1,4 +1,4 @@
-// controllers/studentController.js - Updated with new Payment model fields
+// controllers/studentController.js - Fixed with proper payment mapping (original response structure)
 const Student = require('../models/Student');
 const Seat = require('../models/Seat');
 const Shift = require('../models/Shift');
@@ -7,7 +7,47 @@ const ApiError = require('../utils/ApiError');
 const { asyncHandler } = require('../utils/asyncHandler');
 const mongoose = require('mongoose');
 
-// Enhanced getStudentsByProperty to include payment details
+// Helper function to get payment details for student assignments
+const getPaymentDetailsForStudentAssignments = async (assignments) => {
+  if (!assignments || assignments.length === 0) {
+    return {};
+  }
+
+  const assignmentIds = assignments.map(assignment => assignment._id);
+  
+  try {
+    const payments = await Payment.find({
+      assignment: { $in: assignmentIds }
+    })
+    .select('assignment amount collectedAmount balanceAmount status dueDate period paymentMethod transactionId paymentDate')
+    .lean();
+
+    const paymentMap = {};
+    
+    payments.forEach(payment => {
+      if (payment.assignment) {
+        paymentMap[payment.assignment.toString()] = {
+          amount: payment.amount || 0,
+          collected: payment.collectedAmount || 0,
+          balance: payment.balanceAmount || 0,
+          status: payment.status || 'pending',
+          dueDate: payment.dueDate || null,
+          period: payment.period || null,
+          paymentMethod: payment.paymentMethod || 'pending',
+          transactionId: payment.transactionId || null,
+          paymentDate: payment.paymentDate || null
+        };
+      }
+    });
+
+    return paymentMap;
+  } catch (error) {
+    console.error('Error fetching payment details for student assignments:', error);
+    return {};
+  }
+};
+
+// Enhanced getStudentsByProperty to include payment details - FIXED (original structure)
 const getStudentsByProperty = asyncHandler(async (req, res) => {
   const { propertyId } = req.params;
   if (!propertyId) throw new ApiError(400, 'Property ID is required');
@@ -22,10 +62,6 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
       path: 'currentAssignments.shift',
       select: 'name startTime endTime fee'
     })
-    .populate({
-      path: 'currentAssignments.payment',
-      select: 'amount collectedAmount balanceAmount status paymentDate transactionId dueDate period'
-    })
     .sort({ createdAt: -1 });
 
   // Filter students with assignments in this property
@@ -34,6 +70,16 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
       assignment.seat && assignment.seat.propertyId.toString() === propertyId
     )
   );
+
+  // Get all assignments across all students for payment lookup
+  const allAssignments = filteredStudents.flatMap(student => 
+    student.currentAssignments.filter(assignment => 
+      assignment.seat && assignment.seat.propertyId.toString() === propertyId
+    )
+  );
+
+  // Get payment details for all assignments
+  const paymentMap = await getPaymentDetailsForStudentAssignments(allAssignments);
 
   // Enhance response with proper payment summary
   const enhancedStudents = filteredStudents.map(student => {
@@ -47,20 +93,20 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
     let totalAssigned = 0;
 
     propertyAssignments.forEach(assignment => {
-      const payment = assignment.payment;
+      const paymentInfo = paymentMap[assignment._id.toString()];
       const shiftFee = assignment.shift?.fee || 0;
       
-      if (payment) {
+      if (paymentInfo) {
         // Use payment data if available
-        totalAssigned += payment.amount;
+        totalAssigned += paymentInfo.amount;
         
-        if (payment.status === 'pending') {
-          totalDue += payment.balanceAmount;
-        } else if (payment.status === 'partial') {
-          totalDue += payment.balanceAmount;
-          totalPaid += payment.collectedAmount;
-        } else if (payment.status === 'completed') {
-          totalPaid += payment.collectedAmount;
+        if (paymentInfo.status === 'pending') {
+          totalDue += paymentInfo.balance;
+        } else if (paymentInfo.status === 'partial') {
+          totalDue += paymentInfo.balance;
+          totalPaid += paymentInfo.collected;
+        } else if (paymentInfo.status === 'completed') {
+          totalPaid += paymentInfo.collected;
         }
       } else {
         // No payment record yet, use shift fee
@@ -79,21 +125,27 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
       },
       // Add individual assignment payment details for frontend
       currentAssignments: propertyAssignments.map(assignment => {
-        const payment = assignment.payment;
+        const paymentInfo = paymentMap[assignment._id.toString()];
         const shiftFee = assignment.shift?.fee || 0;
         
         let feeDetails = {
           amount: shiftFee,
           collected: 0,
-          balance: shiftFee
+          balance: shiftFee,
+          status: 'pending'
         };
 
-        if (payment) {
+        if (paymentInfo) {
           feeDetails = {
-            amount: payment.amount,
-            collected: payment.collectedAmount,
-            balance: payment.balanceAmount,
-            status: payment.status
+            amount: paymentInfo.amount,
+            collected: paymentInfo.collected,
+            balance: paymentInfo.balance,
+            status: paymentInfo.status,
+            dueDate: paymentInfo.dueDate,
+            period: paymentInfo.period,
+            paymentMethod: paymentInfo.paymentMethod,
+            transactionId: paymentInfo.transactionId,
+            paymentDate: paymentInfo.paymentDate
           };
         }
 
@@ -115,6 +167,7 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
     };
   }, { totalAssigned: 0, totalDue: 0, totalCollected: 0, totalBalance: 0 });
 
+  // ORIGINAL RESPONSE STRUCTURE
   res.json({ 
     students: enhancedStudents,
     paymentSummary: {
@@ -123,7 +176,8 @@ const getStudentsByProperty = asyncHandler(async (req, res) => {
     }
   });
 });
-// Enhanced getStudentById with detailed payment history
+
+// Enhanced getStudentById with detailed payment history - FIXED (original structure)
 const getStudentById = asyncHandler(async (req, res) => {
   const student = await Student.findById(req.params.id)
     .populate({
@@ -137,9 +191,6 @@ const getStudentById = asyncHandler(async (req, res) => {
       path: 'currentAssignments.shift'
     })
     .populate({
-      path: 'currentAssignments.payment'
-    })
-    .populate({
       path: 'assignmentHistory.seat',
       populate: {
         path: 'propertyId',
@@ -148,12 +199,16 @@ const getStudentById = asyncHandler(async (req, res) => {
     })
     .populate({
       path: 'assignmentHistory.shift'
-    })
-    .populate({
-      path: 'assignmentHistory.payment'
     });
 
   if (!student) throw new ApiError(404, 'Student not found');
+
+  // Get all assignments for payment lookup
+  const allAssignments = [
+    ...student.currentAssignments,
+    ...student.assignmentHistory
+  ];
+  const paymentMap = await getPaymentDetailsForStudentAssignments(allAssignments);
 
   // Get all payments for this student using new fields
   const allPayments = await Payment.find({ student: req.params.id })
@@ -169,8 +224,8 @@ const getStudentById = asyncHandler(async (req, res) => {
     pendingPayments: allPayments.filter(p => p.status === 'pending').length,
     partialPayments: allPayments.filter(p => p.status === 'partial').length,
     totalAmount: allPayments.reduce((sum, p) => sum + p.amount, 0),
-    collectedAmount: allPayments.reduce((sum, p) => sum + p.collectedAmount, 0), // Use new field
-    balanceAmount: allPayments.reduce((sum, p) => sum + p.balanceAmount, 0), // Use new field
+    collectedAmount: allPayments.reduce((sum, p) => sum + p.collectedAmount, 0),
+    balanceAmount: allPayments.reduce((sum, p) => sum + p.balanceAmount, 0),
     overduePayments: allPayments.filter(p => 
       p.status === 'pending' && p.dueDate && new Date() > new Date(p.dueDate)
     ).length
@@ -180,8 +235,8 @@ const getStudentById = asyncHandler(async (req, res) => {
   const transformedPayments = allPayments.map(payment => ({
     id: payment._id.toString(),
     amount: payment.amount,
-    collectedAmount: payment.collectedAmount, // Use new field
-    balanceAmount: payment.balanceAmount, // Use new field
+    collectedAmount: payment.collectedAmount,
+    balanceAmount: payment.balanceAmount,
     status: payment.status,
     paymentMethod: payment.paymentMethod,
     paymentDate: payment.paymentDate,
@@ -195,14 +250,66 @@ const getStudentById = asyncHandler(async (req, res) => {
     isOverdue: payment.status === 'pending' && payment.dueDate && new Date() > new Date(payment.dueDate)
   }));
 
+  // Enhance current assignments with payment info
+  const enhancedCurrentAssignments = student.currentAssignments.map(assignment => {
+    const paymentInfo = paymentMap[assignment._id.toString()];
+    const shiftFee = assignment.shift?.fee || 0;
+
+    return {
+      ...assignment.toObject(),
+      feeDetails: paymentInfo ? {
+        amount: paymentInfo.amount,
+        collected: paymentInfo.collected,
+        balance: paymentInfo.balance,
+        status: paymentInfo.status,
+        dueDate: paymentInfo.dueDate,
+        period: paymentInfo.period,
+        paymentMethod: paymentInfo.paymentMethod,
+        transactionId: paymentInfo.transactionId,
+        paymentDate: paymentInfo.paymentDate
+      } : {
+        amount: shiftFee,
+        collected: 0,
+        balance: shiftFee,
+        status: 'pending'
+      }
+    };
+  });
+
+  // Enhance assignment history with payment info
+  const enhancedAssignmentHistory = student.assignmentHistory.map(assignment => {
+    const paymentInfo = paymentMap[assignment._id.toString()];
+    const shiftFee = assignment.shift?.fee || 0;
+
+    return {
+      ...assignment.toObject(),
+      feeDetails: paymentInfo ? {
+        amount: paymentInfo.amount,
+        collected: paymentInfo.collected,
+        balance: paymentInfo.balance,
+        status: paymentInfo.status,
+        dueDate: paymentInfo.dueDate,
+        period: paymentInfo.period
+      } : {
+        amount: shiftFee,
+        collected: 0,
+        balance: shiftFee,
+        status: 'completed'
+      }
+    };
+  });
+
+  // ORIGINAL RESPONSE STRUCTURE
   res.json({
     ...student.toObject(),
+    currentAssignments: enhancedCurrentAssignments,
+    assignmentHistory: enhancedAssignmentHistory,
     paymentHistory: transformedPayments,
     paymentStats
   });
 });
 
-// Enhanced getStudentStatsByProperty with payment statistics
+// Enhanced getStudentStatsByProperty with payment statistics - FIXED (original structure)
 const getStudentStatsByProperty = asyncHandler(async (req, res) => {
   const { propertyId } = req.query;
   if (!propertyId) throw new ApiError(400, 'Property ID is required');
@@ -213,7 +320,7 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
       match: { propertyId }
     })
     .populate({
-      path: 'currentAssignments.payment'
+      path: 'currentAssignments.shift'
     });
 
   const filtered = students.filter(student => 
@@ -222,36 +329,39 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
     )
   );
 
+  // Get all assignments for payment lookup
+  const allAssignments = filtered.flatMap(student => 
+    student.currentAssignments.filter(assignment => 
+      assignment.seat && assignment.seat.propertyId.toString() === propertyId
+    )
+  );
+
+  const paymentMap = await getPaymentDetailsForStudentAssignments(allAssignments);
+
   // Calculate payment-related statistics using new fields
-  const totalDue = filtered.reduce((sum, student) => {
-    return sum + student.currentAssignments.reduce((assignmentSum, assignment) => {
-      if (assignment.seat && assignment.seat.propertyId.toString() === propertyId) {
-        if (assignment.payment && assignment.payment.status === 'pending') {
-          return assignmentSum + assignment.payment.balanceAmount;
-        }
-      }
-      return assignmentSum;
-    }, 0);
+  const totalDue = allAssignments.reduce((sum, assignment) => {
+    const paymentInfo = paymentMap[assignment._id.toString()];
+    if (paymentInfo && paymentInfo.status === 'pending') {
+      return sum + paymentInfo.balance;
+    }
+    return sum;
   }, 0);
 
-  const totalCollected = filtered.reduce((sum, student) => {
-    return sum + student.currentAssignments.reduce((assignmentSum, assignment) => {
-      if (assignment.seat && assignment.seat.propertyId.toString() === propertyId) {
-        if (assignment.payment && (assignment.payment.status === 'completed' || assignment.payment.status === 'partial')) {
-          return assignmentSum + assignment.payment.collectedAmount; // Use new field
-        }
-      }
-      return assignmentSum;
-    }, 0);
+  const totalCollected = allAssignments.reduce((sum, assignment) => {
+    const paymentInfo = paymentMap[assignment._id.toString()];
+    if (paymentInfo && (paymentInfo.status === 'completed' || paymentInfo.status === 'partial')) {
+      return sum + paymentInfo.collected;
+    }
+    return sum;
   }, 0);
 
-  const totalAssignedAmount = filtered.reduce((sum, student) => {
-    return sum + student.currentAssignments.reduce((assignmentSum, assignment) => {
-      if (assignment.seat && assignment.seat.propertyId.toString() === propertyId) {
-        return assignmentSum + (assignment.payment?.amount || 0);
-      }
-      return assignmentSum;
-    }, 0);
+  const totalAssignedAmount = allAssignments.reduce((sum, assignment) => {
+    const paymentInfo = paymentMap[assignment._id.toString()];
+    if (paymentInfo) {
+      return sum + paymentInfo.amount;
+    }
+    // If no payment record, use shift fee
+    return sum + (assignment.shift?.fee || 0);
   }, 0);
 
   const stats = {
@@ -263,14 +373,16 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
     studentsWithPendingPayments: filtered.filter(s => 
       s.currentAssignments.some(a => 
         a.seat && a.seat.propertyId.toString() === propertyId && 
-        a.payment && a.payment.status === 'pending'
+        paymentMap[a._id.toString()] && paymentMap[a._id.toString()].status === 'pending'
       )
     ).length,
     studentsWithOverduePayments: filtered.filter(s => 
       s.currentAssignments.some(a => 
         a.seat && a.seat.propertyId.toString() === propertyId && 
-        a.payment && a.payment.status === 'pending' && 
-        a.payment.dueDate && new Date() > new Date(a.payment.dueDate)
+        paymentMap[a._id.toString()] && 
+        paymentMap[a._id.toString()].status === 'pending' && 
+        paymentMap[a._id.toString()].dueDate && 
+        new Date() > new Date(paymentMap[a._id.toString()].dueDate)
       )
     ).length,
     paymentSummary: {
@@ -282,29 +394,34 @@ const getStudentStatsByProperty = asyncHandler(async (req, res) => {
     }
   };
 
+  // ORIGINAL RESPONSE STRUCTURE
   res.json(stats);
 });
 
-// Enhanced getStudentCurrentAssignments with payment details
+// Enhanced getStudentCurrentAssignments with payment details - FIXED (original structure)
 const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
   const student = await Student.findById(req.params.id)
     .populate('currentAssignments.seat')
-    .populate('currentAssignments.shift')
-    .populate('currentAssignments.payment');
+    .populate('currentAssignments.shift');
 
   if (!student) throw new ApiError(404, 'Student not found');
 
+  // Get payment details for current assignments
+  const paymentMap = await getPaymentDetailsForStudentAssignments(student.currentAssignments);
+
   // Enhance assignments with payment status using new fields
   const enhancedAssignments = student.currentAssignments.map(assignment => {
-    const payment = assignment.payment;
-    const paymentStatus = payment ? payment.status : 'no_payment';
-    const amountDue = payment ? payment.amount : (assignment.feeDetails?.amount || 0);
-    const amountPaid = payment ? payment.collectedAmount : (assignment.feeDetails?.collected || 0); // Use new field
-    const balanceDue = payment ? payment.balanceAmount : (assignment.feeDetails?.balance || amountDue); // Use new field
-    const isOverdue = payment && 
-                     payment.status === 'pending' && 
-                     payment.dueDate && 
-                     new Date() > new Date(payment.dueDate);
+    const paymentInfo = paymentMap[assignment._id.toString()];
+    const shiftFee = assignment.shift?.fee || 0;
+    
+    const amountDue = paymentInfo ? paymentInfo.amount : shiftFee;
+    const amountPaid = paymentInfo ? paymentInfo.collected : 0;
+    const balanceDue = paymentInfo ? paymentInfo.balance : shiftFee;
+    const paymentStatus = paymentInfo ? paymentInfo.status : 'pending';
+    const isOverdue = paymentInfo && 
+                     paymentInfo.status === 'pending' && 
+                     paymentInfo.dueDate && 
+                     new Date() > new Date(paymentInfo.dueDate);
 
     return {
       ...assignment.toObject(),
@@ -314,13 +431,15 @@ const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
         amountPaid,
         balanceDue,
         isOverdue,
-        dueDate: payment?.dueDate || null,
-        paymentDate: payment?.paymentDate || null,
-        transactionId: payment?.transactionId || null
+        dueDate: paymentInfo?.dueDate || null,
+        paymentDate: paymentInfo?.paymentDate || null,
+        transactionId: paymentInfo?.transactionId || null,
+        paymentMethod: paymentInfo?.paymentMethod || null
       }
     };
   });
 
+  // ORIGINAL RESPONSE STRUCTURE
   res.json({
     success: true,
     data: enhancedAssignments,
@@ -336,35 +455,40 @@ const getStudentCurrentAssignments = asyncHandler(async (req, res) => {
   });
 });
 
-// Enhanced getStudentAssignmentHistory with payment details
+// Enhanced getStudentAssignmentHistory with payment details - FIXED (original structure)
 const getStudentAssignmentHistory = asyncHandler(async (req, res) => {
   const student = await Student.findById(req.params.id)
     .populate('assignmentHistory.seat')
-    .populate('assignmentHistory.shift')
-    .populate('assignmentHistory.payment');
+    .populate('assignmentHistory.shift');
 
   if (!student) throw new ApiError(404, 'Student not found');
 
+  // Get payment details for assignment history
+  const paymentMap = await getPaymentDetailsForStudentAssignments(student.assignmentHistory);
+
   // Enhance assignment history with payment information using new fields
   const enhancedHistory = student.assignmentHistory.map(assignment => {
-    const payment = assignment.payment;
-    const amountDue = payment ? payment.amount : (assignment.feeDetails?.amount || 0);
-    const amountPaid = payment ? payment.collectedAmount : (assignment.feeDetails?.collected || 0); // Use new field
-    const balanceDue = payment ? payment.balanceAmount : (assignment.feeDetails?.balance || amountDue); // Use new field
+    const paymentInfo = paymentMap[assignment._id.toString()];
+    const shiftFee = assignment.shift?.fee || 0;
+    
+    const amountDue = paymentInfo ? paymentInfo.amount : shiftFee;
+    const amountPaid = paymentInfo ? paymentInfo.collected : 0;
+    const balanceDue = paymentInfo ? paymentInfo.balance : 0; // For history, balance should be 0 if completed
 
     return {
       ...assignment.toObject(),
       paymentSummary: {
-        status: payment ? payment.status : 'no_payment',
+        status: paymentInfo ? paymentInfo.status : 'completed',
         amountDue,
         amountPaid,
         balanceDue,
-        paymentDate: payment?.paymentDate || null,
-        transactionId: payment?.transactionId || null
+        paymentDate: paymentInfo?.paymentDate || assignment.endDate || null,
+        transactionId: paymentInfo?.transactionId || null
       }
     };
   });
 
+  // ORIGINAL RESPONSE STRUCTURE
   res.json({
     success: true,
     data: enhancedHistory,
@@ -442,8 +566,7 @@ const createStudent = asyncHandler(async (req, res) => {
     
     const populatedStudent = await Student.findById(student._id)
       .populate('currentAssignments.seat')
-      .populate('currentAssignments.shift')
-      .populate('currentAssignments.payment');
+      .populate('currentAssignments.shift');
 
     console.log('=== CREATE STUDENT REQUEST END ===');
 
@@ -469,10 +592,10 @@ const updateStudent = asyncHandler(async (req, res) => {
     { new: true, runValidators: true }
   )
   .populate('currentAssignments.seat')
-  .populate('currentAssignments.shift')
-  .populate('currentAssignments.payment');
+  .populate('currentAssignments.shift');
 
   if (!student) throw new ApiError(404, 'Student not found');
+  
   res.json(student);
 });
 
@@ -524,17 +647,45 @@ const searchStudentsForAssignment = asyncHandler(async (req, res) => {
       path: 'currentAssignments.shift',
       select: 'name startTime endTime fee'
     })
-    .populate({
-      path: 'currentAssignments.payment',
-      select: 'amount collectedAmount balanceAmount status paymentDate transactionId'
-    })
     .sort({ firstName: 1, lastName: 1 })
     .limit(50);
 
-  // Return the same structure as getStudentsByProperty
+  // Get all assignments for payment lookup
+  const allAssignments = students.flatMap(student => student.currentAssignments);
+  const paymentMap = await getPaymentDetailsForStudentAssignments(allAssignments);
+
+  // Enhance students with payment info
+  const enhancedStudents = students.map(student => {
+    const enhancedAssignments = student.currentAssignments.map(assignment => {
+      const paymentInfo = paymentMap[assignment._id.toString()];
+      const shiftFee = assignment.shift?.fee || 0;
+
+      return {
+        ...assignment.toObject(),
+        feeDetails: paymentInfo ? {
+          amount: paymentInfo.amount,
+          collected: paymentInfo.collected,
+          balance: paymentInfo.balance,
+          status: paymentInfo.status
+        } : {
+          amount: shiftFee,
+          collected: 0,
+          balance: shiftFee,
+          status: 'pending'
+        }
+      };
+    });
+
+    return {
+      ...student.toObject(),
+      currentAssignments: enhancedAssignments
+    };
+  });
+
+  // ORIGINAL RESPONSE STRUCTURE
   res.json({ 
-    students: students,
-    count: students.length 
+    students: enhancedStudents,
+    count: enhancedStudents.length 
   });
 });
 
